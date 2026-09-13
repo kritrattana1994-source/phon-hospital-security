@@ -1,0 +1,16 @@
+{
+  "name": "Smart Hospital Security & Patrol",
+  "short_name": "HospitalPatrol",
+  "description": "ระบบบริหารจัดการ รปภ. และลาดตระเวนโรงพยาบาล",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
