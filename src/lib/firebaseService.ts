@@ -113,13 +113,33 @@ export async function saveGuardToCloud(guard: Guard) {
 
 // Staff Vehicles
 export async function saveStaffVehiclesToCloud(vehicles: StaffVehicle[]) {
+  if (!vehicles || vehicles.length === 0) return;
   try {
-    for (const v of vehicles) {
-      const docId = `${v.plateNumber}_${v.province}`.replace(/[\/\s]/g, "_");
-      await setDoc(doc(db, "staffVehicles", docId), v);
+    const chunkSize = 450;
+    for (let i = 0; i < vehicles.length; i += chunkSize) {
+      const chunk = vehicles.slice(i, i + chunkSize);
+      const batch = writeBatch(db);
+      for (const v of chunk) {
+        const docId = `${v.plateNumber}_${v.province}`.replace(/[\/\s]/g, "_");
+        const docRef = doc(db, "staffVehicles", docId);
+        const cleanObj = Object.fromEntries(
+          Object.entries(v).filter(([_, val]) => val !== undefined)
+        );
+        batch.set(docRef, cleanObj, { merge: true });
+      }
+      await batch.commit();
     }
   } catch (err) {
     console.warn("Cloud save staffVehicles failed:", err);
+  }
+}
+
+export async function deleteStaffVehicleFromCloud(plateNumber: string, province: string) {
+  try {
+    const docId = `${plateNumber}_${province}`.replace(/[\/\s]/g, "_");
+    await deleteDoc(doc(db, "staffVehicles", docId));
+  } catch (err) {
+    console.warn("Cloud delete staffVehicle failed:", err);
   }
 }
 

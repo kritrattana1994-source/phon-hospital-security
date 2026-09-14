@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { db } from "./firebase";
 import { collection, onSnapshot } from "firebase/firestore";
-import { useStore, PatrolLog, ParkingScan, Incident, Checkpoint } from "./store";
+import { useStore, PatrolLog, ParkingScan, Incident, Checkpoint, StaffVehicle } from "./store";
 import { seedFirestoreIfEmpty } from "./firebaseService";
 
 export function useFirebaseSync() {
@@ -78,12 +78,23 @@ export function useFirebaseSync() {
       console.warn("Archive sync notice:", err.message);
     });
 
+    // 7. Real-time Listener: Staff Vehicles
+    const unsubVehicles = onSnapshot(collection(db, "staffVehicles"), (snapshot) => {
+      if (!snapshot.empty) {
+        const cloudVehicles = snapshot.docs.map(doc => doc.data() as StaffVehicle);
+        useStore.setState({ staffVehicles: cloudVehicles });
+      }
+    }, (err) => {
+      console.warn("Staff vehicles sync notice:", err.message);
+    });
+
     return () => {
       unsubPatrol();
       unsubParking();
       unsubIncidents();
       unsubCheckpoints();
       unsubArchive();
+      unsubVehicles();
     };
   }, []);
 

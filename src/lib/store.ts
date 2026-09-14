@@ -5,7 +5,9 @@ import {
   saveParkingScanToCloud, 
   saveIncidentToCloud, 
   saveCheckpointToCloud, 
-  deleteCheckpointFromCloud 
+  deleteCheckpointFromCloud,
+  saveStaffVehiclesToCloud,
+  deleteStaffVehicleFromCloud
 } from './firebaseService';
 
 export interface Guard {
@@ -66,6 +68,10 @@ export interface StaffVehicle {
   department: string;
   phone: string;
   zone: string;
+  brand?: string;
+  model?: string;
+  color?: string;
+  vehicleType?: 'รถยนต์' | 'รถจักรยานยนต์' | string;
 }
 
 export interface ParkingScan {
@@ -181,6 +187,7 @@ interface AppState {
   addStaffVehicle: (vehicle: StaffVehicle) => void;
   syncVehiclesFromSheet: (vehicles: StaffVehicle[]) => void;
   bulkImportVehicles: (vehicles: StaffVehicle[]) => void;
+  deleteStaffVehicle: (plateNumber: string, province: string) => void;
   purgeExpiredScans: (days?: number) => number;
 
   // Guards List
@@ -747,20 +754,38 @@ export const useStore = create<AppState>()(
         }));
       },
       addStaffVehicle: (vehicle) => {
+        saveStaffVehiclesToCloud([vehicle]);
         set((state) => ({
           staffVehicles: [...state.staffVehicles, vehicle]
         }));
       },
       syncVehiclesFromSheet: (vehicles) => {
+        saveStaffVehiclesToCloud(vehicles);
         set({ staffVehicles: vehicles });
       },
       bulkImportVehicles: (incomingVehicles) => {
         set((state) => {
           const map = new Map<string, StaffVehicle>();
-          state.staffVehicles.forEach(v => map.set(v.plateNumber.trim().toUpperCase(), v));
-          incomingVehicles.forEach(v => map.set(v.plateNumber.trim().toUpperCase(), v));
-          return { staffVehicles: Array.from(map.values()) };
+          state.staffVehicles.forEach((v) => {
+            const key = `${v.plateNumber.replace(/\s+/g, "").toUpperCase()}_${v.province || "ขอนแก่น"}`;
+            map.set(key, v);
+          });
+          incomingVehicles.forEach((v) => {
+            const key = `${v.plateNumber.replace(/\s+/g, "").toUpperCase()}_${v.province || "ขอนแก่น"}`;
+            map.set(key, v);
+          });
+          const updated = Array.from(map.values());
+          saveStaffVehiclesToCloud(updated);
+          return { staffVehicles: updated };
         });
+      },
+      deleteStaffVehicle: (plateNumber, province) => {
+        deleteStaffVehicleFromCloud(plateNumber, province);
+        set((state) => ({
+          staffVehicles: state.staffVehicles.filter(
+            (v) => !(v.plateNumber === plateNumber && v.province === province)
+          ),
+        }));
       },
       purgeExpiredScans: (days = 90) => {
         const cutoff = new Date();

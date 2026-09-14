@@ -6,6 +6,7 @@ import {
   ArrowLeft, 
   Search, 
   Car, 
+  Bike,
   User, 
   Phone, 
   ShieldAlert, 
@@ -233,10 +234,16 @@ export default function VehiclePage() {
 
     lastScannedRef.current[plate] = now;
 
+    const cleanScanPlate = plate.replace(/\s+/g, "").toUpperCase();
     // Check against offline staff cache in 0.1s
-    const staff = staffVehicles.find(
-      (v) => v.plateNumber.toUpperCase() === plate || v.plateNumber.includes(plate)
-    );
+    const staff = staffVehicles.find((v) => {
+      const vClean = v.plateNumber.replace(/\s+/g, "").toUpperCase();
+      return (
+        vClean === cleanScanPlate ||
+        vClean.includes(cleanScanPlate) ||
+        cleanScanPlate.includes(vClean)
+      );
+    });
 
     const isStaff = !!staff;
     const zone = zoneOverride || (isStaff ? staff.zone : "ลานจอดทั่วไป");
@@ -284,11 +291,18 @@ export default function VehiclePage() {
 
     setScanned(false);
 
-    const found = staffVehicles.find(
-      (v) =>
-        v.plateNumber.toLowerCase().includes(query.toLowerCase()) ||
-        v.phone.replace(/[^0-9]/g, "").includes(query)
-    );
+    const cleanQuery = query.replace(/\s+/g, "").toLowerCase();
+    const found = staffVehicles.find((v) => {
+      const vClean = v.plateNumber.replace(/\s+/g, "").toLowerCase();
+      const phoneClean = v.phone.replace(/[^0-9]/g, "");
+      const ownerClean = v.ownerName.toLowerCase();
+      return (
+        vClean.includes(cleanQuery) ||
+        cleanQuery.includes(vClean) ||
+        phoneClean.includes(query) ||
+        ownerClean.includes(query.toLowerCase())
+      );
+    });
 
     if (found) {
       setResult(found);
@@ -748,14 +762,31 @@ export default function VehiclePage() {
               <div className="p-5 bg-white border-2 border-emerald-400 rounded-3xl shadow-sm space-y-4 animate-in fade-in-50">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
-                      <Car className="w-6 h-6" />
+                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${
+                      result.vehicleType === "รถจักรยานยนต์"
+                        ? "bg-amber-100 text-amber-700"
+                        : "bg-emerald-100 text-emerald-600"
+                    }`}>
+                      {result.vehicleType === "รถจักรยานยนต์" ? (
+                        <Bike className="w-6 h-6" />
+                      ) : (
+                        <Car className="w-6 h-6" />
+                      )}
                     </div>
                     <div>
-                      <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
-                        รถบุคลากร รพ.พล
-                      </span>
-                      <h3 className="text-2xl font-black text-slate-900 mt-0.5">{result.plateNumber}</h3>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded border ${
+                          result.vehicleType === "รถจักรยานยนต์"
+                            ? "bg-amber-100 text-amber-800 border-amber-200"
+                            : "bg-emerald-100 text-emerald-800 border-emerald-200"
+                        }`}>
+                          {result.vehicleType === "รถจักรยานยนต์" ? "🏍️ รถจักรยานยนต์บุคลากร" : "🚗 รถยนต์บุคลากร รพ."}
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-medium">
+                          {result.province || "ขอนแก่น"}
+                        </span>
+                      </div>
+                      <h3 className="text-2xl font-black text-slate-900 mt-0.5 font-mono">{result.plateNumber}</h3>
                     </div>
                   </div>
                   <span className="text-xs text-emerald-700 font-bold bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
@@ -764,6 +795,21 @@ export default function VehiclePage() {
                 </div>
 
                 <div className="space-y-2.5 text-sm bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                  {(result.brand || result.model || result.color) && (
+                    <div className="flex items-center gap-3 text-slate-700 pb-2 border-b border-slate-200/60">
+                      <div className="w-4 h-4 text-emerald-600 shrink-0 flex items-center justify-center">
+                        {result.vehicleType === "รถจักรยานยนต์" ? <Bike className="w-4 h-4" /> : <Car className="w-4 h-4" />}
+                      </div>
+                      <div>
+                        <span className="text-[11px] text-slate-500 block">ยี่ห้อ / รุ่น / สีรถ</span>
+                        <span className="font-bold text-slate-900 text-sm">
+                          {[result.brand, result.model].filter(Boolean).join(" ")}
+                          {result.color ? ` (สี ${result.color})` : ""}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex items-center gap-3 text-slate-700">
                     <User className="w-4 h-4 text-emerald-600 shrink-0" />
                     <div>
@@ -780,6 +826,16 @@ export default function VehiclePage() {
                     </div>
                   </div>
 
+                  {result.zone && (
+                    <div className="flex items-center gap-3 text-slate-700">
+                      <span className="text-xs text-slate-400 w-4 text-center">🅿️</span>
+                      <div>
+                        <span className="text-xs text-slate-500 block">โซนจอดประจำ</span>
+                        <span className="font-medium text-slate-800">{result.zone}</span>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex items-center justify-between pt-2 border-t border-slate-200">
                     <div className="flex items-center gap-3 text-slate-700">
                       <Phone className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -788,12 +844,14 @@ export default function VehiclePage() {
                         <span className="font-mono text-emerald-700 font-bold">{result.phone}</span>
                       </div>
                     </div>
-                    <a
-                      href={`tel:${result.phone}`}
-                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs active:scale-95 transition-all"
-                    >
-                      <Phone className="w-3.5 h-3.5" /> โทรด่วน
-                    </a>
+                    {result.phone && result.phone !== "-" && (
+                      <a
+                        href={`tel:${result.phone}`}
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs active:scale-95 transition-all"
+                      >
+                        <Phone className="w-3.5 h-3.5" /> โทรด่วน
+                      </a>
+                    )}
                   </div>
                 </div>
 

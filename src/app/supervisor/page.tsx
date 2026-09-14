@@ -15,6 +15,8 @@ import {
   CheckSquare, 
   AlertTriangle, 
   Car, 
+  Bike,
+  Search,
   Bot, 
   Sparkles, 
   Award, 
@@ -91,6 +93,7 @@ export default function SupervisorPage() {
     staffVehicles, 
     addStaffVehicle, 
     bulkImportVehicles,
+    deleteStaffVehicle,
     purgeExpiredScans,
     guards,
     addGuard,
@@ -220,11 +223,20 @@ export default function SupervisorPage() {
 
   // Google Sheets Sync State
   const [showSheetModal, setShowSheetModal] = useState(false);
-  const [sheetUrl, setSheetUrl] = useState("");
+  const [sheetUrl, setSheetUrl] = useState(
+    "https://docs.google.com/spreadsheets/d/1SJ4yULEWaWkYEFr_8afL7Ao8razoilFhuxNPScbBEMo/edit?pli=1&gid=1048644177#gid=1048644177"
+  );
   const [sheetLoading, setSheetLoading] = useState(false);
   const [sheetError, setSheetError] = useState<string | null>(null);
   const [sheetPreview, setSheetPreview] = useState<any[] | null>(null);
+  const [sheetStats, setSheetStats] = useState<{
+    count: number;
+    carsCount: number;
+    motorcyclesCount: number;
+  } | null>(null);
   const [sheetSuccess, setSheetSuccess] = useState<string | null>(null);
+  const [vehicleSearch, setVehicleSearch] = useState("");
+  const [vehicleFilterType, setVehicleFilterType] = useState<"all" | "car" | "motorcycle">("all");
 
   // DeepSeek AI Batch State
   const [aiLoading, setAiLoading] = useState(false);
@@ -250,6 +262,7 @@ export default function SupervisorPage() {
     setSheetError(null);
     setSheetSuccess(null);
     setSheetPreview(null);
+    setSheetStats(null);
 
     try {
       const res = await fetch("/api/sync-sheets", {
@@ -267,6 +280,11 @@ export default function SupervisorPage() {
       }
 
       setSheetPreview(data.vehicles);
+      setSheetStats({
+        count: data.count || data.vehicles.length,
+        carsCount: data.carsCount ?? data.vehicles.filter((v: any) => v.vehicleType === "รถยนต์").length,
+        motorcyclesCount: data.motorcyclesCount ?? data.vehicles.filter((v: any) => v.vehicleType === "รถจักรยานยนต์").length,
+      });
     } catch (err: any) {
       setSheetError(err.message || "เกิดข้อผิดพลาดในการซิงก์ข้อมูล");
     } finally {
@@ -278,13 +296,15 @@ export default function SupervisorPage() {
   const handleCommitSheetImport = () => {
     if (!sheetPreview || sheetPreview.length === 0) return;
     bulkImportVehicles(sheetPreview);
-    setSheetSuccess(`นำเข้าข้อมูลรถบุคลากรสำเร็จ ${sheetPreview.length} คันเรียบร้อยแล้ว!`);
+    const carCount = sheetStats?.carsCount ?? sheetPreview.filter((v: any) => v.vehicleType === "รถยนต์").length;
+    const motoCount = sheetStats?.motorcyclesCount ?? sheetPreview.filter((v: any) => v.vehicleType === "รถจักรยานยนต์").length;
+    setSheetSuccess(`นำเข้าข้อมูลรถบุคลากรสำเร็จ ${sheetPreview.length} คัน (รถยนต์ ${carCount} คัน, จยย. ${motoCount} คัน) บันทึกลงฐานข้อมูลคลาวด์เรียบร้อยแล้ว!`);
     setTimeout(() => {
       setShowSheetModal(false);
       setSheetPreview(null);
+      setSheetStats(null);
       setSheetSuccess(null);
-      setSheetUrl("");
-    }, 1800);
+    }, 2200);
   };
 
   // Function to handle local CSV file upload
@@ -2077,15 +2097,21 @@ export default function SupervisorPage() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <FileSpreadsheet className="w-5 h-5 text-emerald-700" />
-                    <h3 className="font-bold text-sm text-slate-900">
-                      ซิงก์ข้อมูลรถบุคลากรจาก Google Sheets (Form Responses) หรือไฟล์ CSV
-                    </h3>
+                    <div>
+                      <h3 className="font-bold text-sm text-slate-900">
+                        ซิงก์ข้อมูลรถบุคลากรจาก Google Sheets (Form Responses) หรือไฟล์ CSV
+                      </h3>
+                      <p className="text-[11px] text-emerald-700">
+                        รองรับแบบฟอร์มลงทะเบียน รพ.พล (รถยนต์ & รถจักรยานยนต์ แยกทะเบียนและจังหวัดอัตโนมัติ)
+                      </p>
+                    </div>
                   </div>
                   <button
                     type="button"
                     onClick={() => {
                       setShowSheetModal(false);
                       setSheetPreview(null);
+                      setSheetStats(null);
                       setSheetError(null);
                     }}
                     className="p-1 rounded-lg hover:bg-slate-200 text-slate-400"
@@ -2094,14 +2120,22 @@ export default function SupervisorPage() {
                   </button>
                 </div>
 
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  นำเข้าข้อมูลทะเบียนรถเจ้าหน้าที่และแพทย์จาก Google Form Responses โดยวาง URL Google Sheets หรืออัปโหลดไฟล์ <code>.csv</code> ที่ดาวน์โหลดจากชีตมาได้ทันที
-                </p>
-
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                   {/* Option 1: URL */}
-                  <div className="p-4 bg-white border border-emerald-200 rounded-2xl space-y-2">
-                    <span className="font-bold text-slate-800 block">วิธีที่ 1: วางลิงก์ Google Sheets</span>
+                  <div className="p-4 bg-white border border-emerald-200 rounded-2xl space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-800">วิธีที่ 1: ลิงก์ Google Sheets รพ.พล</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const defaultUrl = "https://docs.google.com/spreadsheets/d/1SJ4yULEWaWkYEFr_8afL7Ao8razoilFhuxNPScbBEMo/edit?pli=1&gid=1048644177#gid=1048644177";
+                          setSheetUrl(defaultUrl);
+                        }}
+                        className="text-[11px] text-emerald-700 font-bold hover:underline"
+                      >
+                        รีเซ็ตเป็นลิงก์ รพ.พล
+                      </button>
+                    </div>
                     <input
                       type="url"
                       value={sheetUrl}
@@ -2109,17 +2143,19 @@ export default function SupervisorPage() {
                       placeholder="https://docs.google.com/spreadsheets/d/.../edit"
                       className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 font-mono text-[11px]"
                     />
-                    <button
-                      type="button"
-                      disabled={sheetLoading || !sheetUrl.trim()}
-                      onClick={() => handleFetchSheet()}
-                      className="w-full py-2 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 text-white font-bold rounded-xl active:scale-95 transition-all flex items-center justify-center gap-1.5"
-                    >
-                      {sheetLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                      <span>{sheetLoading ? "กำลังดึงข้อมูล..." : "ดึงข้อมูลจากชีต (Preview)"}</span>
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={sheetLoading}
+                        onClick={() => handleFetchSheet()}
+                        className="flex-1 py-2.5 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 text-white font-bold rounded-xl active:scale-95 transition-all flex items-center justify-center gap-1.5 shadow-sm"
+                      >
+                        {sheetLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                        <span>{sheetLoading ? "กำลังดึงข้อมูล..." : "ดึงข้อมูลจากชีต (Preview)"}</span>
+                      </button>
+                    </div>
                     <span className="text-[10px] text-slate-400 block">
-                      * ต้องตั้งค่าการแชร์ชีตเป็น &quot;ทุกคนที่มีลิงก์มีสิทธิ์อ่าน&quot;
+                      * ปลายทางชีตต้องเปิดสิทธิ์แชร์เป็น &quot;ทุกคนที่มีลิงก์มีสิทธิ์อ่าน&quot;
                     </span>
                   </div>
 
@@ -2131,7 +2167,7 @@ export default function SupervisorPage() {
                         ใน Google Sheets ไปที่: ไฟล์ &gt; ดาวน์โหลด &gt; ค่าที่คั่นด้วยเครื่องหมายจุลภาค (.csv)
                       </p>
                     </div>
-                    <label className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl border border-slate-300 cursor-pointer flex items-center justify-center gap-2 active:scale-95 transition-all text-xs">
+                    <label className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl border border-slate-300 cursor-pointer flex items-center justify-center gap-2 active:scale-95 transition-all text-xs">
                       <UploadCloud className="w-4 h-4 text-emerald-600" />
                       <span>เลือกไฟล์ .csv จากคอมพิวเตอร์</span>
                       <input type="file" accept=".csv" onChange={handleFileUpload} className="hidden" />
@@ -2158,48 +2194,78 @@ export default function SupervisorPage() {
                 {/* Preview Table */}
                 {sheetPreview && sheetPreview.length > 0 && (
                   <div className="space-y-3 pt-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-emerald-900">
-                        📋 ตรวจพบข้อมูลรถบุคลากรทั้งหมด {sheetPreview.length} คัน (พร้อมนำเข้า):
-                      </span>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-emerald-100/70 p-3 rounded-2xl border border-emerald-200">
+                      <div>
+                        <span className="text-xs font-bold text-emerald-950 block">
+                          📋 ตรวจพบยานพาหนะทั้งหมด {sheetPreview.length} คัน:
+                        </span>
+                        <div className="flex items-center gap-3 text-[11px] text-emerald-800 mt-0.5 font-medium">
+                          <span>🚗 รถยนต์: <b>{sheetStats?.carsCount ?? sheetPreview.filter((v: any) => v.vehicleType === "รถยนต์").length}</b> คัน</span>
+                          <span>•</span>
+                          <span>🏍️ รถจักรยานยนต์: <b>{sheetStats?.motorcyclesCount ?? sheetPreview.filter((v: any) => v.vehicleType === "รถจักรยานยนต์").length}</b> คัน</span>
+                        </div>
+                      </div>
                       <button
                         type="button"
                         onClick={handleCommitSheetImport}
-                        className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md shadow-emerald-600/20 active:scale-95 transition-all flex items-center gap-1.5"
+                        className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md shadow-emerald-600/20 active:scale-95 transition-all flex items-center justify-center gap-1.5 shrink-0"
                       >
-                        <Check className="w-4 h-4" /> บันทึกข้อมูล {sheetPreview.length} คันนี้เข้าระบบทันที
+                        <Check className="w-4 h-4" /> บันทึก {sheetPreview.length} คันนี้ขึ้น Cloud ทันที
                       </button>
                     </div>
 
-                    <div className="max-h-48 overflow-y-auto border border-emerald-200 rounded-2xl bg-white">
+                    <div className="max-h-56 overflow-y-auto border border-emerald-200 rounded-2xl bg-white shadow-inner">
                       <table className="w-full text-left text-xs">
                         <thead className="sticky top-0 bg-slate-50 border-b border-slate-200 text-slate-500">
                           <tr>
-                            <th className="py-2 px-3">ทะเบียน</th>
-                            <th className="py-2 px-3">จังหวัด</th>
-                            <th className="py-2 px-3">เจ้าของรถ</th>
-                            <th className="py-2 px-3">แผนก</th>
-                            <th className="py-2 px-3">เบอร์โทร</th>
-                            <th className="py-2 px-3">โซน</th>
+                            <th className="py-2.5 px-3">ประเภท</th>
+                            <th className="py-2.5 px-3">ทะเบียน</th>
+                            <th className="py-2.5 px-3">จังหวัด</th>
+                            <th className="py-2.5 px-3">ยี่ห้อ / รุ่น / สี</th>
+                            <th className="py-2.5 px-3">เจ้าของรถ</th>
+                            <th className="py-2.5 px-3">แผนก</th>
+                            <th className="py-2.5 px-3">โซนจอด</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {sheetPreview.slice(0, 10).map((v, i) => (
+                          {sheetPreview.slice(0, 15).map((v, i) => (
                             <tr key={i} className="hover:bg-slate-50">
+                              <td className="py-2 px-3">
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  v.vehicleType === "รถจักรยานยนต์"
+                                    ? "bg-amber-100 text-amber-800"
+                                    : "bg-sky-100 text-sky-800"
+                                }`}>
+                                  {v.vehicleType === "รถจักรยานยนต์" ? "🏍️ จยย." : "🚗 รถยนต์"}
+                                </span>
+                              </td>
                               <td className="py-2 px-3 font-mono font-bold text-slate-900">{v.plateNumber}</td>
                               <td className="py-2 px-3 text-slate-600">{v.province}</td>
+                              <td className="py-2 px-3 text-slate-700">
+                                {v.brand || v.model || v.color ? (
+                                  <span>
+                                    {[v.brand, v.model].filter(Boolean).join(" ")}
+                                    {v.color ? ` (${v.color})` : ""}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400">-</span>
+                                )}
+                              </td>
                               <td className="py-2 px-3 font-medium text-slate-800">{v.ownerName}</td>
                               <td className="py-2 px-3 text-slate-600">{v.department}</td>
-                              <td className="py-2 px-3 font-mono text-emerald-700">{v.phone}</td>
-                              <td className="py-2 px-3 text-slate-500">{v.zone}</td>
+                              <td className="py-2 px-3 text-slate-500">
+                                <span className="px-2 py-0.5 rounded-md bg-slate-100 text-[10px] text-slate-700">
+                                  {v.zone}
+                                </span>
+                              </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
-                    {sheetPreview.length > 10 && (
-                      <p className="text-[10px] text-slate-400 text-right">
-                        ...และอีก {sheetPreview.length - 10} รายการ
+                    {sheetPreview.length > 15 && (
+                      <p className="text-[11px] text-slate-400 text-right">
+                        ...และรายการอื่นๆ อีก {sheetPreview.length - 15} คัน
                       </p>
                     )}
                   </div>
@@ -2207,31 +2273,239 @@ export default function SupervisorPage() {
               </div>
             )}
 
-            <div className="overflow-x-auto">
+            {/* STATS OVERVIEW CARDS */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between">
+                <div>
+                  <span className="text-xs text-slate-500 font-bold block">ยานพาหนะบุคลากรทั้งหมด</span>
+                  <span className="text-2xl font-black text-slate-900 font-mono mt-0.5 block">
+                    {staffVehicles.length} <span className="text-xs font-normal text-slate-500">คัน</span>
+                  </span>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-slate-200 text-slate-700 flex items-center justify-center font-bold">
+                  👥
+                </div>
+              </div>
+
+              <div className="p-4 bg-sky-50 border border-sky-200 rounded-2xl flex items-center justify-between">
+                <div>
+                  <span className="text-xs text-sky-700 font-bold block">รถยนต์บุคลากร</span>
+                  <span className="text-2xl font-black text-sky-950 font-mono mt-0.5 block">
+                    {staffVehicles.filter(v => v.vehicleType === "รถยนต์" || !v.vehicleType).length}{" "}
+                    <span className="text-xs font-normal text-sky-600">คัน</span>
+                  </span>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-sky-200 text-sky-800 flex items-center justify-center">
+                  <Car className="w-5 h-5" />
+                </div>
+              </div>
+
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-between">
+                <div>
+                  <span className="text-xs text-amber-700 font-bold block">รถจักรยานยนต์บุคลากร</span>
+                  <span className="text-2xl font-black text-amber-950 font-mono mt-0.5 block">
+                    {staffVehicles.filter(v => v.vehicleType === "รถจักรยานยนต์").length}{" "}
+                    <span className="text-xs font-normal text-amber-600">คัน</span>
+                  </span>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-amber-200 text-amber-800 flex items-center justify-center">
+                  <Bike className="w-5 h-5" />
+                </div>
+              </div>
+            </div>
+
+            {/* SEARCH & FILTER CONTROLS */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+              <div className="relative w-full sm:w-80">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={vehicleSearch}
+                  onChange={(e) => setVehicleSearch(e.target.value)}
+                  placeholder="ค้นหาเลขทะเบียน, ชื่อ, แผนก, ยี่ห้อ..."
+                  className="w-full pl-9 pr-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-sky-500 transition-all"
+                />
+                {vehicleSearch && (
+                  <button
+                    onClick={() => setVehicleSearch("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1.5 self-start sm:self-auto bg-slate-100 p-1 rounded-xl text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setVehicleFilterType("all")}
+                  className={`px-3 py-1.5 rounded-lg transition-all ${
+                    vehicleFilterType === "all"
+                      ? "bg-white text-slate-900 shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  ทั้งหมด ({staffVehicles.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setVehicleFilterType("car")}
+                  className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 ${
+                    vehicleFilterType === "car"
+                      ? "bg-white text-sky-800 shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <Car className="w-3.5 h-3.5" /> รถยนต์ ({staffVehicles.filter(v => v.vehicleType === "รถยนต์" || !v.vehicleType).length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setVehicleFilterType("motorcycle")}
+                  className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 ${
+                    vehicleFilterType === "motorcycle"
+                      ? "bg-white text-amber-800 shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <Bike className="w-3.5 h-3.5" /> จยย. ({staffVehicles.filter(v => v.vehicleType === "รถจักรยานยนต์").length})
+                </button>
+              </div>
+            </div>
+
+            {/* VEHICLES TABLE */}
+            <div className="overflow-x-auto border border-slate-100 rounded-2xl">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="border-b border-slate-200 text-slate-500 font-semibold uppercase">
-                    <th className="py-3 px-4">ทะเบียนรถ</th>
-                    <th className="py-3 px-4">เจ้าของรถ</th>
-                    <th className="py-3 px-4">แผนก</th>
-                    <th className="py-3 px-4">เบอร์โทร</th>
-                    <th className="py-3 px-4">โซนจอด</th>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-slate-500 font-semibold uppercase">
+                    <th className="py-3 px-3">ประเภท</th>
+                    <th className="py-3 px-3">ทะเบียนรถ & จังหวัด</th>
+                    <th className="py-3 px-3">ยี่ห้อ / รุ่น / สี</th>
+                    <th className="py-3 px-3">เจ้าของรถ</th>
+                    <th className="py-3 px-3">แผนก / สังกัด</th>
+                    <th className="py-3 px-3">เบอร์โทร</th>
+                    <th className="py-3 px-3">โซนจอด</th>
+                    <th className="py-3 px-3 text-center">จัดการ</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {staffVehicles.map((car, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                      <td className="py-3.5 px-4 font-mono font-bold text-slate-900">{car.plateNumber}</td>
-                      <td className="py-3.5 px-4 font-medium text-slate-800">{car.ownerName}</td>
-                      <td className="py-3.5 px-4 text-slate-600">{car.department}</td>
-                      <td className="py-3.5 px-4 font-mono text-sky-700 font-bold">{car.phone}</td>
-                      <td className="py-3.5 px-4">
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] bg-sky-100 text-sky-800 border border-sky-200">
-                          {car.zone}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                  {(() => {
+                    const filtered = staffVehicles.filter((car) => {
+                      if (vehicleFilterType === "car" && car.vehicleType === "รถจักรยานยนต์") return false;
+                      if (vehicleFilterType === "motorcycle" && car.vehicleType !== "รถจักรยานยนต์") return false;
+
+                      if (vehicleSearch.trim()) {
+                        const q = vehicleSearch.trim().toLowerCase().replace(/\s+/g, "");
+                        const p = car.plateNumber.toLowerCase().replace(/\s+/g, "");
+                        const prov = (car.province || "").toLowerCase();
+                        const owner = car.ownerName.toLowerCase();
+                        const dept = car.department.toLowerCase();
+                        const phone = car.phone.replace(/[^0-9]/g, "");
+                        const brand = (car.brand || "").toLowerCase();
+                        const model = (car.model || "").toLowerCase();
+
+                        return (
+                          p.includes(q) ||
+                          prov.includes(q) ||
+                          owner.includes(q) ||
+                          dept.includes(q) ||
+                          phone.includes(q) ||
+                          brand.includes(q) ||
+                          model.includes(q)
+                        );
+                      }
+                      return true;
+                    });
+
+                    if (filtered.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={8} className="py-10 text-center text-slate-400">
+                            ไม่พบข้อมูลรถที่ตรงกับเงื่อนไขการค้นหา
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    return filtered.map((car, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-3 px-3">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center gap-1 ${
+                            car.vehicleType === "รถจักรยานยนต์"
+                              ? "bg-amber-100 text-amber-800 border border-amber-200"
+                              : "bg-sky-100 text-sky-800 border border-sky-200"
+                          }`}>
+                            {car.vehicleType === "รถจักรยานยนต์" ? (
+                              <>
+                                <Bike className="w-3 h-3" /> จยย.
+                              </>
+                            ) : (
+                              <>
+                                <Car className="w-3 h-3" /> รถยนต์
+                              </>
+                            )}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3">
+                          <span className="font-mono font-bold text-slate-900 text-sm block">
+                            {car.plateNumber}
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-medium">
+                            {car.province || "ขอนแก่น"}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-slate-700">
+                          {car.brand || car.model || car.color ? (
+                            <div>
+                              <span className="font-medium text-slate-900 block">
+                                {[car.brand, car.model].filter(Boolean).join(" ")}
+                              </span>
+                              {car.color && (
+                                <span className="text-[10px] text-slate-500">
+                                  สี: {car.color}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 text-[11px]">-</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 font-medium text-slate-800">{car.ownerName}</td>
+                        <td className="py-3 px-3 text-slate-600">{car.department}</td>
+                        <td className="py-3 px-3 font-mono font-bold">
+                          {car.phone && car.phone !== "-" ? (
+                            <a
+                              href={`tel:${car.phone}`}
+                              className="text-emerald-700 hover:underline inline-flex items-center gap-1"
+                            >
+                              <Phone className="w-3 h-3 text-emerald-600" />
+                              <span>{car.phone}</span>
+                            </a>
+                          ) : (
+                            <span className="text-slate-400 font-normal">-</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3">
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] bg-slate-100 text-slate-700 border border-slate-200">
+                            {car.zone}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`ยืนยันการลบรถทะเบียน ${car.plateNumber} (${car.ownerName}) หรือไม่?`)) {
+                                deleteStaffVehicle(car.plateNumber, car.province);
+                              }
+                            }}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all"
+                            title="ลบข้อมูลรถคันนี้"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ));
+                  })()}
                 </tbody>
               </table>
             </div>
