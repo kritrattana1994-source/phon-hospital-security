@@ -456,6 +456,30 @@ export default function SupervisorPage() {
     }
   };
 
+  // Trigger / Test Vercel Daily Cron Archival (07:00 น.)
+  const handleTriggerDailyCron = async () => {
+    setArchiveLoading(true);
+    setArchiveError(null);
+    setArchiveSuccess(null);
+    try {
+      const res = await fetch("/api/archive/cron");
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "เกิดข้อผิดพลาดในการรัน Cron");
+      }
+      if (data.archivedCounts?.total > 0) {
+        setArchiveSuccess(`รันคำสั่งอัตโนมัติสำเร็จ: จัดเก็บข้อมูลเกิน 365 วัน จำนวน ${data.archivedCounts.total} รายการ เรียบร้อยแล้ว`);
+      } else {
+        setArchiveSuccess(`รันคำสั่งอัตโนมัติสำเร็จ: ตรวจสอบแล้วไม่พบข้อมูลอายุเกิน 365 วัน (ระบบสะอาดปกติ 100%)`);
+      }
+      fetchArchiveStats();
+    } catch (err: any) {
+      setArchiveError(`เกิดข้อผิดพลาด: ${err.message}`);
+    } finally {
+      setArchiveLoading(false);
+    }
+  };
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (loginSupervisor(pin)) {
@@ -2711,6 +2735,41 @@ export default function SupervisorPage() {
                     ราชการไทย (ต.ค. - ก.ย.)
                   </span>
                 </div>
+              </div>
+            </div>
+
+            {/* Daily Cron Automation Card */}
+            <div className="bg-white border border-emerald-200 rounded-3xl p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-start sm:items-center gap-3.5">
+                <div className="p-3 bg-emerald-500/10 text-emerald-600 rounded-2xl border border-emerald-200 shrink-0">
+                  <Clock className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-extrabold text-slate-900">
+                      ระบบทำงานอัตโนมัติประจำวัน (Vercel Daily Cron Job)
+                    </h3>
+                    <span className="flex items-center gap-1 text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      เปิดใช้งานอัตโนมัติ 07:00 น. ทุกวัน
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    ทุกวันเวลา 07:00 น. (ช่วงส่งมอบเวรเช้า) ระบบจะตรวจสอบบันทึกที่อายุเกิน 365 วัน ➔ อัปโหลดเข้า Google Drive ➔ ล้าง Cloud Firestore เพื่อรักษาโควตาฟรีตลอดชีพ
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  disabled={archiveLoading}
+                  onClick={handleTriggerDailyCron}
+                  className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-xs active:scale-95 disabled:bg-slate-200 disabled:text-slate-400"
+                >
+                  <Zap className="w-4 h-4" />
+                  <span>{archiveLoading ? "กำลังประมวลผล..." : "⚡ ทดสอบรันรอบประจำวันเดี๋ยวนี้"}</span>
+                </button>
               </div>
             </div>
 
