@@ -103,9 +103,11 @@ export default function PrintQRModal({ checkpoints, onClose }: PrintQRModalProps
                 {/* Hospital Header on Badge */}
                 <div className="flex items-center justify-between border-b-2 border-slate-100 pb-3 mb-3">
                   <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-emerald-600 flex items-center justify-center text-white font-black text-xs">
-                      P
-                    </div>
+                    <img
+                      src="/phon_hospital_logo.png"
+                      alt="โรงพยาบาลพล"
+                      className="w-7 h-7 object-contain shrink-0"
+                    />
                     <div>
                       <div className="font-extrabold text-slate-900 text-xs tracking-tight">
                         โรงพยาบาลพล

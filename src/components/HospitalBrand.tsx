@@ -12,16 +12,13 @@ export default function HospitalBrand({ subtitle, badgeText = "Smart Hospital", 
   return (
     <div className="flex items-center gap-2 select-none">
       {/* Hospital Logo Pill (as per reference image) */}
-      <div className="bg-white px-3 py-1.5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-2.5">
-        {/* Green Cross with P logo */}
-        <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center text-white font-black text-lg shadow-sm shrink-0 relative">
-          {/* Subtle cross accent */}
-          <div className="absolute inset-0 flex items-center justify-center opacity-30">
-            <div className="w-2 h-7 bg-white rounded-full absolute" />
-            <div className="h-2 w-7 bg-white rounded-full absolute" />
-          </div>
-          <span className="relative z-10 font-bold font-sans">P</span>
-        </div>
+      <div className="bg-white px-2.5 py-1 rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-2.5">
+        {/* Real Official Hospital Logo */}
+        <img
+          src="/phon_hospital_logo.png"
+          alt="โลโก้โรงพยาบาลพล"
+          className="h-8 w-auto object-contain shrink-0"
+        />
 
         {/* Hospital Thai and English Name */}
         <div className="leading-tight">
