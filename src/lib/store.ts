@@ -349,145 +349,9 @@ export const initialChecklistTemplates: ChecklistTemplate[] = [
   }
 ];
 
-export const mockStaffVehicles: StaffVehicle[] = [
-  { plateNumber: '1234', province: 'ขอนแก่น', ownerName: 'นพ. วิทยา รักษาดี', department: 'ศัลยกรรมอุบัติเหตุ', phone: '081-111-1111', zone: 'ลานแพทย์ A' },
-  { plateNumber: '5678', province: 'ขอนแก่น', ownerName: 'พญ. สมศรี จิตเมตตา', department: 'กุมารเวชศาสตร์', phone: '082-222-2222', zone: 'ลานแพทย์ A' },
-  { plateNumber: '7890', province: 'ขอนแก่น', ownerName: 'นพ. ธนกฤต เชี่ยวชาญ', department: 'อายุรกรรมหัวใจ', phone: '083-333-3333', zone: 'ลานแพทย์ B' },
-  { plateNumber: '4321', province: 'ขอนแก่น', ownerName: 'นางกาญจนา ดูแลดี', department: 'หัวหน้าพยาบาล ER', phone: '084-444-4444', zone: 'โซนบุคลากร B1' },
-];
+export const mockStaffVehicles: StaffVehicle[] = [];
 
-const initialParkingScans: ParkingScan[] = [
-  // สแกนรอบดึก 22:00 น. วันนี้
-  {
-    id: 'scan-init-1',
-    plateNumber: '1234',
-    province: 'ขอนแก่น',
-    round: '22:00',
-    timestamp: '2026-09-10T22:05:00.000Z',
-    isStaff: true,
-    ownerName: 'นพ. วิทยา รักษาดี',
-    department: 'ศัลยกรรมอุบัติเหตุ',
-    zone: 'ลานแพทย์ A',
-    guardName: 'นายสมศักดิ์ ปลอดภัย',
-    synced: true,
-    expireAt: '2026-12-09T22:05:00.000Z',
-  },
-  {
-    id: 'scan-init-2',
-    plateNumber: '5678',
-    province: 'ขอนแก่น',
-    round: '22:00',
-    timestamp: '2026-09-10T22:12:00.000Z',
-    isStaff: true,
-    ownerName: 'พญ. สมศรี จิตเมตตา',
-    department: 'กุมารเวชศาสตร์',
-    zone: 'ลานแพทย์ A',
-    guardName: 'นายสมศักดิ์ ปลอดภัย',
-    synced: true,
-    expireAt: '2026-12-09T22:12:00.000Z',
-  },
-  {
-    id: 'scan-init-3',
-    plateNumber: '9999',
-    province: 'ขอนแก่น',
-    round: '22:00',
-    timestamp: '2026-09-10T22:20:00.000Z',
-    isStaff: false,
-    zone: 'ชั้นใต้ดิน B2 (เสา 14)',
-    guardName: 'นายสมศักดิ์ ปลอดภัย',
-    synced: true,
-    expireAt: '2026-12-09T22:20:00.000Z',
-  },
-  {
-    id: 'scan-init-4',
-    plateNumber: 'กข-4455',
-    province: 'กรุงเทพฯ',
-    round: '22:00',
-    timestamp: '2026-09-10T22:35:00.000Z',
-    isStaff: false,
-    zone: 'ช่องแพทย์ฉุกเฉิน (ER)',
-    guardName: 'นายสมศักดิ์ ปลอดภัย',
-    synced: true,
-    expireAt: '2026-12-09T22:35:00.000Z',
-  },
-  // สแกนรอบเช้า 06:00 น. วันนี้
-  {
-    id: 'scan-init-5',
-    plateNumber: '1234',
-    province: 'ขอนแก่น',
-    round: '06:00',
-    timestamp: '2026-09-11T06:05:00.000Z',
-    isStaff: true,
-    ownerName: 'นพ. วิทยา รักษาดี',
-    department: 'ศัลยกรรมอุบัติเหตุ',
-    zone: 'ลานแพทย์ A',
-    guardName: 'นายสุรชัย มั่นคง',
-    synced: true,
-    expireAt: '2026-12-10T06:05:00.000Z',
-  },
-  {
-    id: 'scan-init-6',
-    plateNumber: '9999',
-    province: 'ขอนแก่น',
-    round: '06:00',
-    timestamp: '2026-09-11T06:15:00.000Z',
-    isStaff: false,
-    zone: 'ชั้นใต้ดิน B2 (เสา 14)',
-    guardName: 'นายสุรชัย มั่นคง',
-    synced: true,
-    expireAt: '2026-12-10T06:15:00.000Z',
-  },
-  {
-    id: 'scan-init-7',
-    plateNumber: 'กข-4455',
-    province: 'กรุงเทพฯ',
-    round: '06:00',
-    timestamp: '2026-09-11T06:22:00.000Z',
-    isStaff: false,
-    zone: 'ช่องแพทย์ฉุกเฉิน (ER)',
-    guardName: 'นายสุรชัย มั่นคง',
-    synced: true,
-    expireAt: '2026-12-10T06:22:00.000Z',
-  },
-  // ประวัติย้อนหลัง 3 วันก่อนของ 9999 (พิสูจน์การจอดแช่เกิน 3 วัน)
-  {
-    id: 'scan-init-8',
-    plateNumber: '9999',
-    province: 'ขอนแก่น',
-    round: '22:00',
-    timestamp: '2026-09-08T22:10:00.000Z',
-    isStaff: false,
-    zone: 'ชั้นใต้ดิน B2',
-    guardName: 'นายสมศักดิ์ ปลอดภัย',
-    synced: true,
-    expireAt: '2026-12-07T22:10:00.000Z',
-  },
-  {
-    id: 'scan-init-9',
-    plateNumber: '9999',
-    province: 'ขอนแก่น',
-    round: '22:00',
-    timestamp: '2026-09-09T22:15:00.000Z',
-    isStaff: false,
-    zone: 'ชั้นใต้ดิน B2',
-    guardName: 'นายสมศักดิ์ ปลอดภัย',
-    synced: true,
-    expireAt: '2026-12-08T22:15:00.000Z',
-  },
-  // 1 ข้อมูลจำลองที่เกิน 90 วัน (120 วันก่อน) เพื่อทดสอบฟังก์ชัน Purge 90 วัน
-  {
-    id: 'scan-expired-demo',
-    plateNumber: 'ฮฮ-0001',
-    province: 'ขอนแก่น',
-    round: '22:00',
-    timestamp: '2026-05-10T22:00:00.000Z',
-    isStaff: false,
-    zone: 'ลานจอดด้านหลัง',
-    guardName: 'นายสมชาย รักษา',
-    synced: true,
-    expireAt: '2026-08-08T22:00:00.000Z',
-  }
-];
+const initialParkingScans: ParkingScan[] = [];
 
 export const initialIncidents: Incident[] = [
   {
@@ -1096,7 +960,7 @@ export const useStore = create<AppState>()(
       },
     }),
     {
-      name: 'smart-hospital-security-v4',
+      name: 'smart-hospital-security-v5',
     }
   )
 );

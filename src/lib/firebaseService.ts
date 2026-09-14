@@ -227,15 +227,6 @@ export async function seedFirestoreIfEmpty() {
         await setDoc(doc(db, "checklistTemplates", t.id), t);
       }
     }
-
-    const vehSnap = await getDocs(collection(db, "staffVehicles"));
-    if (vehSnap.empty) {
-      console.log("Seeding staff vehicles to Firestore...");
-      for (const v of mockStaffVehicles) {
-        const docId = `${v.plateNumber}_${v.province}`.replace(/[\/\s]/g, "_");
-        await setDoc(doc(db, "staffVehicles", docId), v);
-      }
-    }
   } catch (err) {
     console.warn("Firestore seed notice:", err);
   }
