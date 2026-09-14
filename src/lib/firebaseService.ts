@@ -1,11 +1,15 @@
-﻿import { db, storage } from "./firebase";
+import { db, storage } from "./firebase";
 import { 
   collection, 
   doc, 
   setDoc, 
   getDocs, 
   onSnapshot, 
-  deleteDoc
+  deleteDoc,
+  writeBatch,
+  query,
+  orderBy,
+  limit
 } from "firebase/firestore";
 import { ref, uploadString, getDownloadURL } from "firebase/storage";
 import { 
@@ -16,6 +20,7 @@ import {
   Guard, 
   StaffVehicle,
   ChecklistTemplate,
+  ArchiveAuditLog,
   initialCheckpoints,
   initialChecklistTemplates,
   initialGuards,
@@ -115,6 +120,62 @@ export async function saveStaffVehiclesToCloud(vehicles: StaffVehicle[]) {
     }
   } catch (err) {
     console.warn("Cloud save staffVehicles failed:", err);
+  }
+}
+
+// Batch Delete for Archival Purge (Firestore limits 500 writes per batch, we chunk by 450)
+export async function batchDeleteRecordsFromCloud(
+  collectionName: "patrolLogs" | "parkingScans" | "incidents",
+  docIds: string[]
+): Promise<number> {
+  if (!docIds || docIds.length === 0) return 0;
+
+  let totalDeleted = 0;
+  const chunkSize = 450;
+
+  for (let i = 0; i < docIds.length; i += chunkSize) {
+    const chunk = docIds.slice(i, i + chunkSize);
+    const batch = writeBatch(db);
+
+    for (const id of chunk) {
+      const docRef = doc(db, collectionName, id);
+      batch.delete(docRef);
+    }
+
+    try {
+      await batch.commit();
+      totalDeleted += chunk.length;
+    } catch (err) {
+      console.error(`Error deleting batch from ${collectionName}:`, err);
+      break;
+    }
+  }
+
+  return totalDeleted;
+}
+
+// Archive Audit Logs
+export async function saveArchiveAuditLogToCloud(log: ArchiveAuditLog) {
+  try {
+    const docRef = doc(db, "archiveAuditLogs", log.id);
+    await setDoc(docRef, log);
+  } catch (err) {
+    console.warn("Cloud save archiveAuditLog failed:", err);
+  }
+}
+
+export async function fetchArchiveAuditLogsFromCloud(): Promise<ArchiveAuditLog[]> {
+  try {
+    const q = query(
+      collection(db, "archiveAuditLogs"),
+      orderBy("timestamp", "desc"),
+      limit(50)
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => d.data() as ArchiveAuditLog);
+  } catch (err) {
+    console.warn("Fetch archiveAuditLogs notice:", err);
+    return [];
   }
 }
 

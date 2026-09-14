@@ -54,12 +54,20 @@ import {
   ArrowDown,
   Layers,
   FolderPlus,
-  ShieldAlert
+  ShieldAlert,
+  Archive,
+  FolderArchive,
+  HardDrive,
+  ExternalLink,
+  FileText,
+  CloudDownload,
+  Database
 } from "lucide-react";
 import Link from "next/link";
 import { useFirebaseSync } from "@/lib/useFirebaseSync";
 import HospitalBrand from "@/components/HospitalBrand";
 import PrintQRModal from "@/components/PrintQRModal";
+import { getThaiFiscalYear, isOlderThanDays, formatThaiDateTime } from "@/lib/fiscalYear";
 
 export default function SupervisorPage() {
   const { 
@@ -103,17 +111,31 @@ export default function SupervisorPage() {
     rosterSchedule,
     autoGenerateSchedule,
     autoGenerateMonthSchedule,
-    manualUpdateRoster
+    manualUpdateRoster,
+    archiveAuditLogs,
+    addArchiveAuditLog,
+    purgeArchivedRecords
   } = useStore();
 
   const { isConnected: isCloudConnected } = useFirebaseSync();
 
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState<"overview" | "roster" | "leaves" | "checkpoints" | "staff" | "vehicles" | "incidents" | "ai">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "roster" | "leaves" | "checkpoints" | "staff" | "vehicles" | "incidents" | "ai" | "archive">("overview");
   const [lineSent, setLineSent] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [autoScheduledAlert, setAutoScheduledAlert] = useState(false);
+
+  // 365-Day Archival State
+  const [archiveCutoffDays, setArchiveCutoffDays] = useState<number>(365);
+  const [archiveSelectedFiscalYear, setArchiveSelectedFiscalYear] = useState<string>("ALL");
+  const [archiveLoading, setArchiveLoading] = useState(false);
+  const [archiveError, setArchiveError] = useState<string | null>(null);
+  const [archiveSuccess, setArchiveSuccess] = useState<string | null>(null);
+  const [archiveStats, setArchiveStats] = useState<any | null>(null);
+  const [showPurgeConfirmModal, setShowPurgeConfirmModal] = useState(false);
+  const [purgeConfirmText, setPurgeConfirmText] = useState("");
+  const [downloadingFormat, setDownloadingFormat] = useState<string | null>(null);
 
   // Monthly Roster & Staff Days Off State
   const [selectedYear, setSelectedYear] = useState(2026);
@@ -313,6 +335,125 @@ export default function SupervisorPage() {
     const count = purgeExpiredScans(90);
     setPurgedCountAlert(count);
     setTimeout(() => setPurgedCountAlert(null), 4000);
+  };
+
+  // Fetch Archive Stats & Google Drive Status
+  const fetchArchiveStats = async () => {
+    try {
+      const res = await fetch("/api/archive");
+      if (res.ok) {
+        const data = await res.json();
+        setArchiveStats(data);
+      }
+    } catch (err) {
+      console.warn("fetchArchiveStats notice:", err);
+    }
+  };
+
+  // Run Archival (Upload to Google Drive + Purge Cloud)
+  const handleExecuteArchival = async (purge: boolean = false) => {
+    setArchiveLoading(true);
+    setArchiveError(null);
+    setArchiveSuccess(null);
+
+    try {
+      const res = await fetch("/api/archive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cutoffDays: archiveCutoffDays,
+          targetFiscalYear: archiveSelectedFiscalYear,
+          purgeFromFirestore: purge,
+          operator: supervisorUser?.name || "พ.ต.ท. ประพันธ์ (หัวหน้างาน)",
+          clientPatrolLogs: patrolLogs,
+          clientParkingScans: parkingScans,
+          clientIncidents: incidents,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "เกิดข้อผิดพลาดในการสำรองข้อมูล");
+      }
+
+      if (data.auditLog) {
+        addArchiveAuditLog(data.auditLog);
+      }
+
+      if (purge && data.purgedIds) {
+        if (data.purgedIds.patrolLogs?.length > 0) {
+          purgeArchivedRecords("patrolLogs", data.purgedIds.patrolLogs);
+        }
+        if (data.purgedIds.parkingScans?.length > 0) {
+          purgeArchivedRecords("parkingScans", data.purgedIds.parkingScans);
+        }
+        if (data.purgedIds.incidents?.length > 0) {
+          purgeArchivedRecords("incidents", data.purgedIds.incidents);
+        }
+      }
+
+      const totalArchived = data.archivedCounts?.total ?? 0;
+      const uploadedMsg = data.isDriveConnected
+        ? `อัปโหลดไฟล์เข้า Google Drive สำเร็จ ${data.uploadedFiles?.length || 0} ไฟล์`
+        : `จัดกลุ่มข้อมูล ${totalArchived} รายการเรียบร้อย (ยังไม่ได้ตั้งค่า Google Drive)`;
+
+      setArchiveSuccess(
+        `${uploadedMsg}${purge ? " และล้างข้อมูลเก่าออกจาก Firestore เรียบร้อยแล้ว!" : " (ยังไม่ได้ลบข้อมูลจาก Cloud)"}`
+      );
+      setShowPurgeConfirmModal(false);
+      setPurgeConfirmText("");
+      fetchArchiveStats();
+    } catch (err: any) {
+      setArchiveError(err.message || "เกิดข้อผิดพลาดในการประมวลผล Archive");
+    } finally {
+      setArchiveLoading(false);
+    }
+  };
+
+  // Download Archive File directly to Computer
+  const handleDownloadArchiveFile = async (format: "csv" | "json", type: "patrol" | "parking" | "incident" | "all" = "all") => {
+    setDownloadingFormat(`${format}-${type}`);
+    try {
+      const res = await fetch("/api/archive/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          format,
+          type,
+          cutoffDays: archiveCutoffDays,
+          targetFiscalYear: archiveSelectedFiscalYear,
+          operator: supervisorUser?.name || "พ.ต.ท. ประพันธ์",
+          clientPatrolLogs: patrolLogs,
+          clientParkingScans: parkingScans,
+          clientIncidents: incidents,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error("ไม่สามารถสร้างไฟล์สำรองสำหรับดาวน์โหลดได้");
+      }
+
+      const blob = await res.blob();
+      const contentDisposition = res.headers.get("content-disposition");
+      let filename = `PHON_Archive_${archiveSelectedFiscalYear}_${new Date().toISOString().split("T")[0]}.${format}`;
+      if (contentDisposition && contentDisposition.includes("filename=")) {
+        const match = contentDisposition.match(/filename="?([^"]+)"?/);
+        if (match && match[1]) filename = decodeURIComponent(match[1]);
+      }
+
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert(`ดาวน์โหลดไฟล์ไม่สำเร็จ: ${err.message}`);
+    } finally {
+      setDownloadingFormat(null);
+    }
   };
 
   const handleLogin = (e: React.FormEvent) => {
@@ -613,6 +754,37 @@ export default function SupervisorPage() {
   // Backward compatibility
   const rosterDates = monthDates;
 
+  // 365-Day Archival Calculations
+  const currentFiscalYear = getThaiFiscalYear(new Date());
+  const filterByArchiveCriteria = (item: { timestamp: string }) => {
+    if (!item.timestamp) return false;
+    if (!isOlderThanDays(item.timestamp, archiveCutoffDays)) return false;
+    if (archiveSelectedFiscalYear !== "ALL") {
+      const fy = getThaiFiscalYear(item.timestamp);
+      if (fy.code !== archiveSelectedFiscalYear) return false;
+    }
+    return true;
+  };
+
+  const previewEligiblePatrol = patrolLogs.filter(filterByArchiveCriteria);
+  const previewEligibleParking = parkingScans.filter(filterByArchiveCriteria);
+  const previewEligibleIncidents = incidents.filter(filterByArchiveCriteria);
+  const previewTotal = previewEligiblePatrol.length + previewEligibleParking.length + previewEligibleIncidents.length;
+
+  const totalCloudRecords = patrolLogs.length + parkingScans.length + incidents.length;
+  const expired365Total =
+    patrolLogs.filter((p) => isOlderThanDays(p.timestamp, 365)).length +
+    parkingScans.filter((s) => isOlderThanDays(s.timestamp, 365)).length +
+    incidents.filter((i) => isOlderThanDays(i.timestamp, 365)).length;
+
+  const availableFiscalYears = Array.from(
+    new Set([
+      ...patrolLogs.map((p) => getThaiFiscalYear(p.timestamp).code),
+      ...parkingScans.map((s) => getThaiFiscalYear(s.timestamp).code),
+      ...incidents.map((i) => getThaiFiscalYear(i.timestamp).code),
+    ])
+  ).sort().reverse();
+
   // 1. LOGIN SCREEN
   if (!supervisorUser) {
     return (
@@ -732,13 +904,19 @@ export default function SupervisorPage() {
             { id: "vehicles", label: `รถบุคลากร (${staffVehicles.length})`, icon: Car },
             { id: "incidents", label: `แจ้งเหตุด่วน (${incidents.length})`, icon: AlertTriangle },
             { id: "ai", label: "DeepSeek AI (07:00 น.)", icon: Bot },
+            { id: "archive", label: "📦 คลังสำรองข้อมูล (365 วัน)", icon: FolderArchive, highlight: true },
           ].map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
+                onClick={() => {
+                  setActiveTab(tab.id as any);
+                  if (tab.id === "archive") {
+                    fetchArchiveStats();
+                  }
+                }}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
                   isActive
                     ? "bg-sky-600 text-white shadow-xs"
@@ -2370,6 +2548,473 @@ export default function SupervisorPage() {
             </div>
           </div>
         )}
+
+        {/* TAB 9: 365-DAY ARCHIVAL & CLOUD RETENTION */}
+        {activeTab === "archive" && (
+          <div className="space-y-6">
+            {/* Header / Banner */}
+            <div className="bg-white border border-sky-100 rounded-3xl p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2.5">
+                  <span className="p-2.5 rounded-2xl bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                    <FolderArchive className="w-6 h-6" />
+                  </span>
+                  <div>
+                    <h2 className="text-xl font-black text-slate-900">
+                      ระบบสำรองข้อมูลประวัติเกิน 1 ปี (Rolling 365-Day Archival)
+                    </h2>
+                    <p className="text-xs text-slate-500">
+                      โรงพยาบาลพล — จัดระเบียบแยกโฟลเดอร์ตามปีงบประมาณไทย (ต.ค. - ก.ย.) และควบคุมขนาด Cloud Firestore ให้อยู่ในโควตาฟรีตลอดชีพ
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={fetchArchiveStats}
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all active:scale-95"
+                  title="รีเฟรชข้อมูลสถานะล่าสุด"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> รีเฟรชสถานะ
+                </button>
+                <a
+                  href={`https://drive.google.com/drive/folders/1ED0LnFxfSwHVU60fI8LShWiXBDmxFFXT`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-4 py-2.5 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-xs active:scale-95"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" /> เปิด Google Drive รพ.
+                </a>
+              </div>
+            </div>
+
+            {/* Alert Messages */}
+            {archiveSuccess && (
+              <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-2xl text-emerald-900 text-xs font-bold flex items-center justify-between gap-3 animate-in fade-in-50">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                  <span>{archiveSuccess}</span>
+                </div>
+                <button
+                  onClick={() => setArchiveSuccess(null)}
+                  className="p-1 hover:bg-emerald-100 rounded-lg text-emerald-700"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {archiveError && (
+              <div className="p-4 bg-rose-50 border border-rose-300 rounded-2xl text-rose-900 text-xs font-bold flex items-center justify-between gap-3 animate-in fade-in-50">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+                  <span>{archiveError}</span>
+                </div>
+                <button
+                  onClick={() => setArchiveError(null)}
+                  className="p-1 hover:bg-rose-100 rounded-lg text-rose-700"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {/* 4 Storage & Quota Health Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Card 1: Total Docs in Cloud */}
+              <div className="bg-white border border-sky-100 rounded-3xl p-5 shadow-xs space-y-2">
+                <div className="flex justify-between items-start text-slate-500">
+                  <span className="text-xs font-semibold">ข้อมูลทั้งหมดในระบบ</span>
+                  <Database className="w-5 h-5 text-sky-600" />
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-3xl font-black text-slate-900">{totalCloudRecords}</span>
+                  <span className="text-xs text-slate-500">รายการ</span>
+                </div>
+                <div className="text-[11px] text-slate-500 flex flex-wrap gap-x-2 gap-y-0.5">
+                  <span>เดินตรวจ {patrolLogs.length}</span>
+                  <span>•</span>
+                  <span>สแกนรถ {parkingScans.length}</span>
+                  <span>•</span>
+                  <span>เหตุด่วน {incidents.length}</span>
+                </div>
+                <div className="pt-2 border-t border-slate-100">
+                  <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    🟢 Spark Free Tier (ปลอดภัย)
+                  </span>
+                </div>
+              </div>
+
+              {/* Card 2: Eligible for Archive */}
+              <div className="bg-white border border-sky-100 rounded-3xl p-5 shadow-xs space-y-2">
+                <div className="flex justify-between items-start text-slate-500">
+                  <span className="text-xs font-semibold">ครบเกณฑ์สำรอง ({archiveCutoffDays} วัน)</span>
+                  <Clock className="w-5 h-5 text-amber-600" />
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-3xl font-black text-amber-600">{previewTotal}</span>
+                  <span className="text-xs text-slate-500">รายการ</span>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  {previewTotal > 0
+                    ? `มีข้อมูลอายุเกิน ${archiveCutoffDays} วัน พร้อมจัดเก็บเข้าคลัง`
+                    : "ข้อมูลทั้งหมดอยู่ในเกณฑ์สดใหม่"}
+                </p>
+                <div className="pt-2 border-t border-slate-100">
+                  <span className="text-[10px] text-slate-500">
+                    เกิน 365 วัน (1 ปี): <strong className="text-slate-800">{expired365Total}</strong> รายการ
+                  </span>
+                </div>
+              </div>
+
+              {/* Card 3: Google Drive Destination */}
+              <div className="bg-white border border-sky-100 rounded-3xl p-5 shadow-xs space-y-2">
+                <div className="flex justify-between items-start text-slate-500">
+                  <span className="text-xs font-semibold">โฟลเดอร์ Google Drive</span>
+                  <UploadCloud className="w-5 h-5 text-blue-600" />
+                </div>
+                <div className="truncate text-xs font-mono font-bold text-slate-800 bg-slate-50 p-1.5 rounded-lg border border-slate-200">
+                  1ED0Ln...mxFFXT
+                </div>
+                <p className="text-[11px] text-slate-500 truncate">
+                  {archiveStats?.driveStatus?.connected
+                    ? `เชื่อมต่อ Service Account แล้ว`
+                    : `โฟลเดอร์สำรองข้อมูลหลัก รพ.พล`}
+                </p>
+                <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                    archiveStats?.driveStatus?.connected
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                      : "bg-blue-50 text-blue-700 border-blue-200"
+                  }`}>
+                    {archiveStats?.driveStatus?.connected ? "🟢 พร้อมอัปโหลดอัตโนมัติ" : "📁 ตั้งค่าโฟลเดอร์แล้ว"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Card 4: Current Fiscal Year */}
+              <div className="bg-white border border-sky-100 rounded-3xl p-5 shadow-xs space-y-2">
+                <div className="flex justify-between items-start text-slate-500">
+                  <span className="text-xs font-semibold">ปีงบประมาณปัจจุบัน</span>
+                  <Calendar className="w-5 h-5 text-indigo-600" />
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl font-black text-indigo-900">{currentFiscalYear.label}</span>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  รอบ 1 ต.ค. {currentFiscalYear.yearCE - 1} – 30 ก.ย. {currentFiscalYear.yearCE}
+                </p>
+                <div className="pt-2 border-t border-slate-100">
+                  <span className="text-[10px] text-indigo-700 font-bold bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200">
+                    ราชการไทย (ต.ค. - ก.ย.)
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Google Drive Status & Quick Setup Guide */}
+            <div className="bg-gradient-to-br from-white to-sky-50/50 border border-sky-200 rounded-3xl p-6 shadow-xs space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-sky-100 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-white border border-sky-200 rounded-2xl shadow-2xs">
+                    <HardDrive className="w-6 h-6 text-sky-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                      โฟลเดอร์คลังข้อมูลใน Google Drive
+                      <span className="text-[11px] font-normal text-slate-500">
+                        (Folder ID: 1ED0LnFxfSwHVU60fI8LShWiXBDmxFFXT)
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-600">
+                      เมื่อทำการสำรองข้อมูล ระบบจะสร้างโฟลเดอร์ย่อยแยกตามปีงบประมาณ เช่น <code className="bg-white px-1.5 py-0.5 rounded text-sky-700 font-mono font-bold text-[11px] border border-sky-100">ปีงบประมาณ_2567_FY2567</code> ให้โดยอัตโนมัติ
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <a
+                    href="https://drive.google.com/drive/folders/1ED0LnFxfSwHVU60fI8LShWiXBDmxFFXT"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-2xs"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 text-slate-500" /> ตรวจสอบโฟลเดอร์ใน Drive
+                  </a>
+                </div>
+              </div>
+
+              {/* Service Account Setup Guide Alert */}
+              <div className="bg-white p-4 rounded-2xl border border-sky-100 text-xs text-slate-700 space-y-2.5">
+                <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                  <HelpCircle className="w-4 h-4 text-sky-600" />
+                  คำแนะนำในการให้สิทธิ์ Service Account เขียนไฟล์ลง Google Drive ของโรงพยาบาล:
+                </div>
+                <ol className="list-decimal list-inside space-y-1 text-slate-600 leading-relaxed text-[11px] pl-1">
+                  <li>เปิดโฟลเดอร์ Google Drive ปลายทาง (<a href="https://drive.google.com/drive/folders/1ED0LnFxfSwHVU60fI8LShWiXBDmxFFXT" target="_blank" rel="noreferrer" className="text-sky-600 underline font-semibold">คลิกเปิดโฟลเดอร์</a>)</li>
+                  <li>คลิกปุ่ม <strong>"แชร์" (Share)</strong> มุมขวาบน ➔ ใส่อีเมล Service Account จาก Google Cloud Console</li>
+                  <li>ตั้งสิทธิ์ให้เป็น <strong>"ผู้แก้ไข" (Editor)</strong> เพื่อให้บอทสร้างโฟลเดอร์และอัปโหลดไฟล์ได้</li>
+                  <li>นำ Private Key มาบันทึกในไฟล์ <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-slate-800">.env.local</code> หรือ Vercel Environment Variables</li>
+                </ol>
+                <div className="text-[11px] text-amber-700 bg-amber-50 p-2.5 rounded-xl border border-amber-200">
+                  💡 <strong>ทำงานได้ทันทีโดยไม่ต้องรอต่อ Service Account:</strong> คุณสามารถกดปุ่ม <strong>"ดาวน์โหลดไฟล์สำรอง (.JSON / .CSV)"</strong> ด้านล่างนี้เพื่อเก็บไฟล์เข้าคอมพิวเตอร์และนำไปเปิดใช้งานได้ทันที 100%
+                </div>
+              </div>
+            </div>
+
+            {/* Archival Operation Wizard Panel */}
+            <div className="bg-white border border-sky-100 rounded-3xl p-6 shadow-xs space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                <div>
+                  <h3 className="font-extrabold text-base text-slate-900 flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-amber-500" /> แผงตัดยอดและดำเนินการสำรองข้อมูล
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    เลือกเงื่อนไขอายุข้อมูล ตรวจสอบยอดพรีวิวก่อนทำรายการ และเลือกว่าจะดาวน์โหลดหรือสำรองขึ้น Google Drive
+                  </p>
+                </div>
+              </div>
+
+              {/* Filter Controls */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    เกณฑ์ตัดยอดอายุข้อมูล (Cutoff Threshold):
+                  </label>
+                  <select
+                    value={archiveCutoffDays}
+                    onChange={(e) => setArchiveCutoffDays(Number(e.target.value))}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:ring-1 focus:ring-sky-500"
+                  >
+                    <option value={365}>อายุเกิน 365 วัน (1 ปี - มาตรฐานแนะนำ)</option>
+                    <option value={180}>อายุเกิน 180 วัน (6 เดือน)</option>
+                    <option value={90}>อายุเกิน 90 วัน (3 เดือน)</option>
+                    <option value={0}>ทั้งหมดในระบบ (ไม่จำกัดอายุวัน)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    กรองเฉพาะปีงบประมาณ (Fiscal Year):
+                  </label>
+                  <select
+                    value={archiveSelectedFiscalYear}
+                    onChange={(e) => setArchiveSelectedFiscalYear(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:ring-1 focus:ring-sky-500"
+                  >
+                    <option value="ALL">ทุกปีงบประมาณที่พบ (All Fiscal Years)</option>
+                    {availableFiscalYears.map((fy) => (
+                      <option key={fy} value={fy}>
+                        {fy}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Simulated Preview Box */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <ListChecks className="w-4 h-4 text-sky-600" />
+                    จำลองผลลัพธ์รายการที่จะถูกจัดเก็บ (Simulated Preview):
+                  </span>
+                  <span className="text-xs font-extrabold text-amber-700 bg-amber-100/80 px-2.5 py-0.5 rounded-full">
+                    รวม {previewTotal} รายการ
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="bg-white p-3 rounded-xl border border-slate-200">
+                    <div className="text-[11px] text-slate-500 font-semibold">บันทึกเดินตรวจ (Patrol Logs)</div>
+                    <div className="text-xl font-black text-slate-900 mt-1">
+                      {previewEligiblePatrol.length} <span className="text-xs font-normal text-slate-400">รายการ</span>
+                    </div>
+                  </div>
+                  <div className="bg-white p-3 rounded-xl border border-slate-200">
+                    <div className="text-[11px] text-slate-500 font-semibold">บันทึกสแกนรถ (Parking Scans)</div>
+                    <div className="text-xl font-black text-slate-900 mt-1">
+                      {previewEligibleParking.length} <span className="text-xs font-normal text-slate-400">รายการ</span>
+                    </div>
+                  </div>
+                  <div className="bg-white p-3 rounded-xl border border-slate-200">
+                    <div className="text-[11px] text-slate-500 font-semibold">บันทึกเหตุการณ์ (Incidents)</div>
+                    <div className="text-xl font-black text-slate-900 mt-1">
+                      {previewEligibleIncidents.length} <span className="text-xs font-normal text-slate-400">รายการ</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons Grid */}
+              <div className="space-y-3">
+                <div className="flex flex-col lg:flex-row gap-3">
+                  {/* Primary Action 1: Upload to Google Drive + Purge */}
+                  <button
+                    type="button"
+                    disabled={previewTotal === 0 || archiveLoading}
+                    onClick={() => {
+                      setPurgeConfirmText("");
+                      setShowPurgeConfirmModal(true);
+                    }}
+                    className={`flex-1 py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-xs active:scale-95 ${
+                      previewTotal === 0
+                        ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                        : "bg-rose-600 hover:bg-rose-500 text-white shadow-rose-600/20"
+                    }`}
+                  >
+                    <Archive className="w-4 h-4" />
+                    <span>สำรองเข้า Google Drive + ล้างข้อมูล Cloud ({previewTotal} รายการ)</span>
+                  </button>
+
+                  {/* Primary Action 2: Upload to Google Drive without Purge */}
+                  <button
+                    type="button"
+                    disabled={previewTotal === 0 || archiveLoading}
+                    onClick={() => handleExecuteArchival(false)}
+                    className={`flex-1 py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-xs active:scale-95 ${
+                      previewTotal === 0
+                        ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                        : "bg-sky-600 hover:bg-sky-500 text-white shadow-sky-600/20"
+                    }`}
+                  >
+                    {archiveLoading ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" /> กำลังประมวลผล...
+                      </>
+                    ) : (
+                      <>
+                        <UploadCloud className="w-4 h-4" />
+                        <span>สำรองเข้า Google Drive เท่านั้น (ไม่ลบ Cloud)</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Direct Download Action Row (Fallback) */}
+                <div className="p-4 bg-sky-50/50 border border-sky-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div className="text-xs space-y-0.5">
+                    <span className="font-bold text-slate-900 flex items-center gap-1.5">
+                      <Download className="w-4 h-4 text-sky-600" />
+                      ดาวน์โหลดไฟล์สำรองลงเครื่องคอมพิวเตอร์โดยตรง (Direct Export):
+                    </span>
+                    <p className="text-slate-500 text-[11px]">
+                      ส่งออกไฟล์สำรองเก็บไว้ในเครื่องทันที รองรับภาษาไทยใน Microsoft Excel และไฟล์ JSON ก้อนเต็ม
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      disabled={downloadingFormat !== null}
+                      onClick={() => handleDownloadArchiveFile("json", "all")}
+                      className="px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-2xs active:scale-95"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>{downloadingFormat === "json-all" ? "กำลังสร้าง..." : "ดาวน์โหลด .JSON"}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={downloadingFormat !== null}
+                      onClick={() => handleDownloadArchiveFile("csv", "all")}
+                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-2xs active:scale-95"
+                    >
+                      <FileSpreadsheet className="w-3.5 h-3.5 text-white" />
+                      <span>{downloadingFormat === "csv-all" ? "กำลังสร้าง..." : "ดาวน์โหลด Excel .CSV"}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Audit Trail History */}
+            <div className="bg-white border border-sky-100 rounded-3xl p-6 shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-emerald-600" />
+                  <h3 className="font-extrabold text-base text-slate-900">
+                    ประวัติการสำรองข้อมูลย้อนหลัง (Archive Audit Trail)
+                  </h3>
+                </div>
+                <span className="text-xs text-slate-400">
+                  {archiveAuditLogs.length} รายการ
+                </span>
+              </div>
+
+              {archiveAuditLogs.length === 0 ? (
+                <div className="text-center py-10 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                  <Archive className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                  <p className="text-xs font-bold text-slate-500">ยังไม่มีประวัติการสำรองข้อมูล</p>
+                  <p className="text-[11px] text-slate-400">เมื่อมีการสำรองข้อมูล ระบบจะบันทึกประวัติและลิงก์ Google Drive ไว้ที่นี่</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs text-left">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+                        <th className="p-3">วันเวลาที่สำรอง</th>
+                        <th className="p-3">ปีงบประมาณ</th>
+                        <th className="p-3">ผู้ดำเนินการ</th>
+                        <th className="p-3">จำนวนที่จัดเก็บ</th>
+                        <th className="p-3">ล้าง Cloud</th>
+                        <th className="p-3">สถานะ & ลิงก์ Drive</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-medium">
+                      {archiveAuditLogs.map((log) => (
+                        <tr key={log.id} className="hover:bg-sky-50/40 transition-colors">
+                          <td className="p-3 whitespace-nowrap font-mono text-slate-600">
+                            {formatThaiDateTime(log.timestamp)}
+                          </td>
+                          <td className="p-3 whitespace-nowrap">
+                            <span className="font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-200">
+                              {log.fiscalYear || "FY"}
+                            </span>
+                          </td>
+                          <td className="p-3 text-slate-700">{log.operator}</td>
+                          <td className="p-3">
+                            <span className="font-bold text-slate-900">{log.totalRecords}</span> รายการ
+                            <span className="text-[10px] text-slate-400 block">
+                              (เดินตรวจ {log.patrolLogsCount} | รถ {log.parkingScansCount} | เหตุ {log.incidentsCount})
+                            </span>
+                          </td>
+                          <td className="p-3 whitespace-nowrap">
+                            {log.purgedFromFirestore ? (
+                              <span className="text-[10px] bg-rose-50 text-rose-700 px-2 py-0.5 rounded-md border border-rose-200 font-bold">
+                                🧹 ล้าง Cloud แล้ว
+                              </span>
+                            ) : (
+                              <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md font-bold">
+                                ☁️ เก็บไว้ใน Cloud
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3 whitespace-nowrap">
+                            {log.driveFolderLink ? (
+                              <a
+                                href={log.driveFolderLink}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-sky-600 hover:text-sky-800 font-bold flex items-center gap-1"
+                              >
+                                <FolderArchive className="w-3.5 h-3.5" /> เปิดโฟลเดอร์ Drive
+                              </a>
+                            ) : (
+                              <span className="text-slate-400">-</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </main>
 
       {/* MODAL 1: ADD/EDIT CHECKPOINT */}
@@ -3586,6 +4231,94 @@ export default function SupervisorPage() {
                 className="px-5 py-2.5 bg-slate-100 text-slate-700 hover:bg-slate-200 font-bold text-xs rounded-xl active:scale-95 transition-all"
               >
                 ปิดหน้าต่าง
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 7: PURGE & ARCHIVE CONFIRMATION MODAL */}
+      {showPurgeConfirmModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 border border-rose-200">
+            <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+              <div className="p-3 bg-rose-100 text-rose-600 rounded-2xl">
+                <ShieldAlert className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-base text-slate-900">
+                  ยืนยันการสำรองและล้างข้อมูล
+                </h3>
+                <p className="text-xs text-rose-600 font-semibold">
+                  ล้างข้อมูลออกจาก Cloud Firestore อย่างถาวร
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-rose-50 p-4 rounded-2xl border border-rose-200 text-xs text-rose-900 space-y-2">
+              <p className="font-bold">
+                ⚠️ คุณกำลังจะทำการสำรองข้อมูล {previewTotal} รายการ เข้า Google Drive และลบออกจาก Cloud Firestore
+              </p>
+              <ul className="list-disc list-inside text-[11px] text-rose-800 space-y-0.5">
+                <li>บันทึกเดินตรวจ: {previewEligiblePatrol.length} รายการ</li>
+                <li>บันทึกสแกนรถ: {previewEligibleParking.length} รายการ</li>
+                <li>บันทึกเหตุด่วน: {previewEligibleIncidents.length} รายการ</li>
+                <li>เกณฑ์อายุ: เกิน {archiveCutoffDays} วัน ({archiveSelectedFiscalYear === "ALL" ? "ทุกปีงบประมาณ" : archiveSelectedFiscalYear})</li>
+              </ul>
+              <p className="text-[10px] text-rose-700 pt-1">
+                * ข้อมูลที่ถูกลบจะไม่สามารถกู้คืนผ่าน Firestore ได้ แต่จะมีไฟล์สำรองจัดเก็บใน Google Drive และบันทึกในประวัติ Audit Trail
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-slate-700">
+                เพื่อความปลอดภัย พิมพ์คำว่า <span className="font-mono text-rose-600 font-black">CONFIRM</span> หรือกรอก PIN หัวหน้างาน (9999):
+              </label>
+              <input
+                type="text"
+                value={purgeConfirmText}
+                onChange={(e) => setPurgeConfirmText(e.target.value)}
+                placeholder="พิมพ์ CONFIRM หรือ 9999"
+                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-center font-bold tracking-wider text-slate-900 focus:bg-white focus:ring-2 focus:ring-rose-500"
+              />
+            </div>
+
+            <div className="pt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPurgeConfirmModal(false);
+                  setPurgeConfirmText("");
+                }}
+                className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                disabled={
+                  archiveLoading ||
+                  (purgeConfirmText.trim().toUpperCase() !== "CONFIRM" &&
+                    purgeConfirmText.trim() !== "9999")
+                }
+                onClick={() => handleExecuteArchival(true)}
+                className={`flex-1 py-3 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-xs active:scale-95 ${
+                  archiveLoading ||
+                  (purgeConfirmText.trim().toUpperCase() !== "CONFIRM" &&
+                    purgeConfirmText.trim() !== "9999")
+                    ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                    : "bg-rose-600 hover:bg-rose-500 text-white shadow-rose-600/20"
+                }`}
+              >
+                {archiveLoading ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" /> กำลังล้างข้อมูล...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" /> ยืนยันล้างข้อมูล
+                  </>
+                )}
               </button>
             </div>
           </div>

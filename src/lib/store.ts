@@ -124,6 +124,24 @@ export interface StaffDayOff {
   reason?: string;
 }
 
+export interface ArchiveAuditLog {
+  id: string;
+  timestamp: string;
+  fiscalYear: string;
+  operator: string;
+  cutoffDays: number;
+  patrolLogsCount: number;
+  parkingScansCount: number;
+  incidentsCount: number;
+  totalRecords: number;
+  driveFolderId?: string;
+  driveFolderLink?: string;
+  filesUploaded: Array<{ name: string; link?: string }>;
+  purgedFromFirestore: boolean;
+  status: 'success' | 'failed' | 'partial';
+  notes?: string;
+}
+
 interface AppState {
   // Authentication
   currentUser: Guard | null;
@@ -194,6 +212,11 @@ interface AppState {
   autoGenerateSchedule: (startDateStr: string, daysCount?: number) => void;
   autoGenerateMonthSchedule: (year: number, month: number) => void;
   manualUpdateRoster: (date: string, shift: 'morning' | 'night' | 'off', guardIds: string[]) => void;
+
+  // 365-Day Archival & Data Retention
+  archiveAuditLogs: ArchiveAuditLog[];
+  addArchiveAuditLog: (log: ArchiveAuditLog) => void;
+  purgeArchivedRecords: (type: 'patrolLogs' | 'parkingScans' | 'incidents', ids: string[]) => void;
 }
 
 export const initialGuards: Guard[] = [
@@ -1022,7 +1045,30 @@ export const useStore = create<AppState>()(
             }
           };
         });
-      }
+      },
+
+      // 365-Day Archival & Data Retention
+      archiveAuditLogs: [],
+      addArchiveAuditLog: (log) =>
+        set((state) => ({
+          archiveAuditLogs: [log, ...state.archiveAuditLogs],
+        })),
+      purgeArchivedRecords: (type, ids) => {
+        const idSet = new Set(ids);
+        if (type === "patrolLogs") {
+          set((state) => ({
+            patrolLogs: state.patrolLogs.filter((l) => !idSet.has(l.id)),
+          }));
+        } else if (type === "parkingScans") {
+          set((state) => ({
+            parkingScans: state.parkingScans.filter((s) => !idSet.has(s.id)),
+          }));
+        } else if (type === "incidents") {
+          set((state) => ({
+            incidents: state.incidents.filter((i) => !idSet.has(i.id)),
+          }));
+        }
+      },
     }),
     {
       name: 'smart-hospital-security-v4',
