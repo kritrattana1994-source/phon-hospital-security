@@ -39,13 +39,20 @@ export async function uploadIncidentImage(dataUrl: string, incidentId?: string):
     const filename = `incident_${incidentId || Date.now()}_${Math.random().toString(36).substring(2, 7)}.jpg`;
     const storageRef = ref(storage, `incidents/${filename}`);
     
-    // Upload base64 data url directly
-    await uploadString(storageRef, dataUrl, "data_url");
-    const downloadUrl = await getDownloadURL(storageRef);
-    return downloadUrl;
+    // Upload with strict 2.5s timeout to prevent hanging on slow network or missing storage rules
+    const uploadTask = (async () => {
+      await uploadString(storageRef, dataUrl, "data_url");
+      return await getDownloadURL(storageRef);
+    })();
+
+    const timeoutTask = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Storage timeout")), 2500)
+    );
+
+    return await Promise.race([uploadTask, timeoutTask]);
   } catch (error) {
-    console.warn("Firebase Storage upload fallback (offline/unavailable):", error);
-    return dataUrl; // fallback to local dataUrl
+    console.warn("Firebase Storage upload fallback to local dataUrl:", error);
+    return dataUrl; // fallback to compressed dataUrl immediately
   }
 }
 

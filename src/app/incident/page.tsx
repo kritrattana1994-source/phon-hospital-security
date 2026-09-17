@@ -40,20 +40,20 @@ export default function IncidentPage() {
   const handleImageCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // On-device canvas image compression
+      // On-device canvas image compression (Optimized for mobile: max 800px, 0.65 quality ~60-80KB)
       const reader = new FileReader();
       reader.onload = (event) => {
         const img = new Image();
         img.src = event.target?.result as string;
         img.onload = () => {
           const canvas = document.createElement("canvas");
-          const MAX_WIDTH = 1000;
-          const scaleSize = MAX_WIDTH / img.width;
-          canvas.width = MAX_WIDTH;
+          const MAX_WIDTH = 800;
+          const scaleSize = img.width > MAX_WIDTH ? MAX_WIDTH / img.width : 1;
+          canvas.width = img.width * scaleSize;
           canvas.height = img.height * scaleSize;
           const ctx = canvas.getContext("2d");
           ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
-          const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.75);
+          const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.65);
           setImage(compressedDataUrl);
         };
       };
@@ -69,8 +69,35 @@ export default function IncidentPage() {
     try {
       let finalImageUrl = image;
       if (image && image.startsWith("data:image")) {
-        finalImageUrl = await uploadIncidentImage(image);
+        try {
+          // Send to API endpoint (with Google Drive support and 3.5s timeout)
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 3500);
+          const res = await fetch("/api/upload-incident", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              image,
+              title,
+            }),
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.url) finalImageUrl = data.url;
+          }
+        } catch (uploadErr) {
+          console.warn("Upload endpoint fallback:", uploadErr);
+          // Fallback to uploadIncidentImage with 2.5s timeout
+          try {
+            finalImageUrl = await uploadIncidentImage(image);
+          } catch {
+            finalImageUrl = image;
+          }
+        }
       }
+
       addIncident({
         type,
         severity,
@@ -88,7 +115,7 @@ export default function IncidentPage() {
     } finally {
       setSubmitting(false);
       setSubmitted(true);
-      setTimeout(() => router.push("/guard"), 2000);
+      setTimeout(() => router.push("/guard"), 1800);
     }
   };
 
@@ -100,7 +127,7 @@ export default function IncidentPage() {
         </div>
         <h1 className="text-2xl font-black text-slate-900 mb-2">แจ้งเหตุสำเร็จ!</h1>
         <p className="text-xs text-slate-600 leading-relaxed max-w-xs mb-6">
-          รูปภาพถูกบีบอัดและอัปโหลดขึ้น Firebase Storage เรียบร้อยแล้ว พร้อมส่งสัญญาณแจ้งเตือนไปยังหัวหน้างานทันที
+          บันทึกรายงานเหตุการณ์และรูปภาพหลักฐานเรียบร้อยแล้ว พร้อมส่งสัญญาณแจ้งเตือนไปยังหัวหน้างานทันที
         </p>
         <span className="text-[11px] text-sky-600 font-medium">กำลังกลับสู่หน้าหลัก รปภ...</span>
       </div>
@@ -254,7 +281,7 @@ export default function IncidentPage() {
           >
             {submitting ? (
               <>
-                <RotateCcw className="w-5 h-5 animate-spin" /> กำลังส่งรูปขึ้น Google Drive...
+                <RotateCcw className="w-5 h-5 animate-spin" /> กำลังบันทึกและส่งรายงาน...
               </>
             ) : (
               <>
