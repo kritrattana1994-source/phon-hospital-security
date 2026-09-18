@@ -26,7 +26,8 @@ import {
   X,
   Sparkles,
   Coffee,
-  Check
+  Check,
+  Search
 } from "lucide-react";
 import Link from "next/link";
 import HospitalBrand from "@/components/HospitalBrand";
@@ -744,26 +745,52 @@ export default function GuardPage() {
             </div>
           </Link>
 
+          {/* DEDICATED FEATURE: VEHICLE OWNER LOOKUP (ดูว่ารถใคร 24 ชม.) */}
           <Link
-            href="/vehicle"
-            className="group block p-4 bg-white hover:bg-emerald-50/40 border border-emerald-100 hover:border-emerald-300 rounded-2xl transition-all shadow-xs active:scale-[0.98]"
+            href="/vehicle?mode=lookup"
+            className="group block p-4 bg-gradient-to-r from-emerald-500/15 via-teal-50/80 to-sky-50/70 hover:from-emerald-500/25 border-2 border-emerald-400 hover:border-emerald-500 rounded-2xl transition-all shadow-sm hover:shadow-md active:scale-[0.98]"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3.5">
-                <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-600/30 group-hover:scale-105 transition-transform">
+                  <Search className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-black text-slate-900 text-base">🔍 ตรวจสอบเจ้าของรถ (ดูว่ารถใคร)</h3>
+                    <span className="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded-full font-bold">
+                      24 ชม.
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    สแกนป้าย / กด 4 ตัวท้าย • รู้ชื่อ แผนก โทรหาเจ้าของรถได้ทันที
+                  </p>
+                </div>
+              </div>
+              <ChevronRight className="w-5 h-5 text-emerald-600 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </Link>
+
+          <Link
+            href="/vehicle?mode=patrol"
+            className="group block p-4 bg-white hover:bg-sky-50/40 border border-sky-100 hover:border-sky-300 rounded-2xl transition-all shadow-xs active:scale-[0.98]"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-sky-100 text-sky-600 flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
                   <Car className="w-6 h-6" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-slate-900 text-base">โมดูล 3: สแกนรถยนต์ & ลานจอด</h3>
-                    <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-md font-semibold">
-                      ค้นหาด่วน 0.1s
+                    <h3 className="font-bold text-slate-900 text-base">โมดูล 3: เดินตรวจรอบเวรลานจอด</h3>
+                    <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-md font-semibold">
+                      รอบ 22:00 / 06:00 น.
                     </span>
                   </div>
-                  <p className="text-xs text-slate-500 mt-0.5">เช็กทะเบียนรถบุคลากร / ดักจับรถแอบจอด + ปุ่มไฟฉาย</p>
+                  <p className="text-xs text-slate-500 mt-0.5">เดินตรวจนับยอดรถกะดึก/กะเช้า • บันทึกส่ง AI วิเคราะห์รถแอบจอด</p>
                 </div>
               </div>
-              <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-emerald-600 transition-colors" />
+              <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-sky-600 transition-colors" />
             </div>
           </Link>
         </div>
