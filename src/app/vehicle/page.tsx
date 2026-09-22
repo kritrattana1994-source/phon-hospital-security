@@ -15,18 +15,13 @@ import {
   Building, 
   AlertOctagon, 
   Clock,
-  Camera,
   RotateCcw,
-  Sparkles,
   Zap,
   Volume2,
   VolumeX,
   Info,
-  QrCode,
   Check,
   X,
-  AlertTriangle,
-  Send,
   Delete
 } from "lucide-react";
 import Link from "next/link";
@@ -64,24 +59,14 @@ function VehicleContent() {
   }, []);
 
   // --- TAB 1: VEHICLE OWNER LOOKUP (ดูว่ารถใคร) STATES ---
-  const [searchQuery, setSearchQuery] = useState("");
+  const [dialQuery, setDialQuery] = useState("");
+  const [submittedQuery, setSubmittedQuery] = useState("");
+  const [hasSearched, setHasSearched] = useState(false);
+  const [matchedVehicles, setMatchedVehicles] = useState<StaffVehicle[]>([]);
   const [selectedVehicle, setSelectedVehicle] = useState<StaffVehicle | null>(null);
-  const [isSearched, setIsSearched] = useState(false);
-  const [lookupMode, setLookupMode] = useState<"dialpad" | "camera">("dialpad");
-  
-  // OCR & Camera states for lookup
-  const [ocrLoading, setOcrLoading] = useState(false);
-  const [ocrError, setOcrError] = useState<string | null>(null);
-  const [ocrMatches, setOcrMatches] = useState<string[]>([]);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  // Live QR Scanner state for lookup
-  const [qrScanning, setQrScanning] = useState(false);
-  const html5QrScannerRef = useRef<any>(null);
 
   // Quick issue tag state
   const [reportedIssue, setReportedIssue] = useState<string | null>(null);
-  const [customNote, setCustomNote] = useState("");
 
   // --- TAB 2: PATROL ROUND (เดินตรวจรอบเวร) STATES ---
   const currentHour = new Date().getHours();
@@ -110,11 +95,9 @@ function VehicleContent() {
       startPatrolCamera();
     } else {
       stopPatrolCamera();
-      stopQrScanner();
     }
     return () => {
       stopPatrolCamera();
-      stopQrScanner();
     };
   }, [mainTab]);
 
@@ -224,189 +207,59 @@ function VehicleContent() {
     }, 3200);
   };
 
-  // --- LOOKUP FILTERING LOGIC ---
-  const cleanQuery = searchQuery.trim().replace(/\s+/g, "").toLowerCase();
-
-  const matchingVehicles = cleanQuery
-    ? staffVehicles.filter((v) => {
-        const vPlateClean = v.plateNumber.replace(/\s+/g, "").toLowerCase();
-        const phoneClean = (v.phone || "").replace(/[^0-9]/g, "");
-        const ownerClean = (v.ownerName || "").toLowerCase();
-        const deptClean = (v.department || "").toLowerCase();
-
-        return (
-          vPlateClean.includes(cleanQuery) ||
-          cleanQuery.includes(vPlateClean) ||
-          phoneClean.includes(cleanQuery) ||
-          ownerClean.includes(cleanQuery) ||
-          deptClean.includes(cleanQuery)
-        );
-      })
-    : [];
-
-  // Active Vehicle displayed (either exact match or picked from list)
-  const activeVehicle = selectedVehicle || (matchingVehicles.length === 1 ? matchingVehicles[0] : null);
-
-  // Handle Quick Dialpad Input
+  // --- LOOKUP DIALPAD HANDLERS ---
   const handleDialPress = (digit: string) => {
-    setSelectedVehicle(null);
-    setIsSearched(true);
-    setSearchQuery((prev) => prev + digit);
+    setDialQuery((prev) => prev + digit);
   };
 
   const handleDialDelete = () => {
-    setSelectedVehicle(null);
-    setSearchQuery((prev) => prev.slice(0, -1));
+    setDialQuery((prev) => prev.slice(0, -1));
   };
 
   const handleDialClear = () => {
+    setDialQuery("");
+    setSubmittedQuery("");
+    setHasSearched(false);
+    setMatchedVehicles([]);
     setSelectedVehicle(null);
-    setSearchQuery("");
-    setIsSearched(false);
-    setOcrMatches([]);
+    setReportedIssue(null);
   };
 
-  // --- LIVE QR CODE SCANNER FOR LOOKUP ---
-  const startQrScanner = async () => {
-    setQrScanning(true);
-    setOcrError(null);
-    try {
-      const { Html5Qrcode } = await import("html5-qrcode");
-      if (!html5QrScannerRef.current) {
-        html5QrScannerRef.current = new Html5Qrcode("lookup-qr-stream");
-      }
-      await html5QrScannerRef.current.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        (decodedText: string) => {
-          handleQrResult(decodedText);
-          stopQrScanner();
-        },
-        () => {}
+  // Core Search Action (Executed ONLY when pressing "ค้นหา")
+  const handlePerformSearch = (queryOverride?: string) => {
+    const query = (queryOverride !== undefined ? queryOverride : dialQuery).trim();
+    if (!query) return;
+
+    const clean = query.replace(/\s+/g, "").toLowerCase();
+    const results = staffVehicles.filter((v) => {
+      const vPlateClean = v.plateNumber.replace(/\s+/g, "").toLowerCase();
+      const phoneClean = (v.phone || "").replace(/[^0-9]/g, "");
+      const ownerClean = (v.ownerName || "").toLowerCase();
+      const deptClean = (v.department || "").toLowerCase();
+
+      return (
+        vPlateClean.includes(clean) ||
+        clean.includes(vPlateClean) ||
+        phoneClean.includes(clean) ||
+        ownerClean.includes(clean) ||
+        deptClean.includes(clean)
       );
-    } catch (err: any) {
-      console.warn("QR scanner start error:", err);
-      setOcrError("ไม่สามารถเปิดกล้องสแกน QR Code ได้ กรุณาใช้การพิมพ์ 4 ตัวท้ายแทน");
-      setQrScanning(false);
-    }
-  };
-
-  const stopQrScanner = async () => {
-    if (html5QrScannerRef.current) {
-      try {
-        if (html5QrScannerRef.current.isScanning) {
-          await html5QrScannerRef.current.stop();
-        }
-      } catch {}
-    }
-    setQrScanning(false);
-  };
-
-  const handleQrResult = (rawDecoded: string) => {
-    playBeep("staff");
-    const cleanText = rawDecoded.trim();
-    setSearchQuery(cleanText);
-    setIsSearched(true);
-    setLookupMode("dialpad");
-    
-    // Find matching vehicle
-    const found = staffVehicles.find(v => {
-      const p = v.plateNumber.replace(/\s+/g, "").toLowerCase();
-      const q = cleanText.replace(/\s+/g, "").toLowerCase();
-      return p.includes(q) || q.includes(p);
     });
-    if (found) {
-      setSelectedVehicle(found);
-    }
-  };
 
-  // --- AI OCR LICENSE PLATE PHOTO RECOGNITION ---
-  const handleOcrPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    setSubmittedQuery(query);
+    setHasSearched(true);
+    setMatchedVehicles(results);
+    setReportedIssue(null);
 
-    setOcrLoading(true);
-    setOcrError(null);
-    setOcrMatches([]);
-
-    try {
-      // 1. Read & resize image using offscreen canvas to ~800px width (JPEG 70%)
-      const reader = new FileReader();
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        reader.onload = (event) => resolve(event.target?.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-
-      const img = new Image();
-      await new Promise((resolve, reject) => {
-        img.onload = resolve;
-        img.onerror = reject;
-        img.src = dataUrl;
-      });
-
-      const maxDim = 800;
-      let width = img.width;
-      let height = img.height;
-      if (width > maxDim || height > maxDim) {
-        if (width > height) {
-          height = Math.round((height * maxDim) / width);
-          width = maxDim;
-        } else {
-          width = Math.round((width * maxDim) / height);
-          height = maxDim;
-        }
-      }
-
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.drawImage(img, 0, 0, width, height);
-      }
-      const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.7);
-
-      // 2. Call /api/ocr-plate with 4-second timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4500);
-
-      const res = await fetch("/api/ocr-plate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: compressedDataUrl }),
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-
-      const data = await res.json();
-
-      if (data.success && data.plateNumber) {
-        playBeep("staff");
-        setSearchQuery(data.plateNumber);
-        setIsSearched(true);
-        if (data.matches && data.matches.length > 1) {
-          setOcrMatches(data.matches);
-        }
-
-        // Auto select if unique match
-        const found = staffVehicles.find(v => {
-          const vPlate = v.plateNumber.replace(/\s+/g, "");
-          return vPlate.includes(data.plateNumber) || data.plateNumber.includes(vPlate);
-        });
-        if (found) {
-          setSelectedVehicle(found);
-        }
-      } else {
-        setOcrError("ไม่สามารถอ่านตัวเลขได้ชัดเจน กรุณากดตัวเลข 4 ตัวท้ายบนแป้นด้านล่าง");
-      }
-    } catch (err: any) {
-      console.warn("OCR client error:", err);
-      setOcrError("การเชื่อมต่อสแกนป้ายทะเบียนล่าช้า กรุณากดตัวเลข 4 ตัวท้ายบนแป้นด้านล่าง");
-    } finally {
-      setOcrLoading(false);
-      // reset file input
-      if (fileInputRef.current) fileInputRef.current.value = "";
+    if (results.length === 1) {
+      setSelectedVehicle(results[0]);
+      playBeep("staff");
+    } else if (results.length > 1) {
+      setSelectedVehicle(null); // Show selection list for user to choose!
+      playBeep("staff");
+    } else {
+      setSelectedVehicle(null);
+      playBeep("outside");
     }
   };
 
@@ -528,7 +381,6 @@ function VehicleContent() {
             type="button"
             onClick={() => {
               setMainTab("patrol");
-              stopQrScanner();
             }}
             className={`py-2 px-2.5 rounded-xl transition-all flex items-center justify-center gap-1.5 ${
               mainTab === "patrol"
@@ -584,7 +436,7 @@ function VehicleContent() {
         </div>
 
         {/* ========================================================================= */}
-        {/* MAIN TAB 1: VEHICLE OWNER LOOKUP (ดูว่ารถใคร - 24 ชม. ไม่จำกัดรอบเวลา) */}
+        {/* MAIN TAB 1: VEHICLE OWNER LOOKUP (แป้นตัวเลข -> ใส่เสร็จค่อยกดค้นหา) */}
         {/* ========================================================================= */}
         {mainTab === "lookup" && (
           <div className="space-y-4 animate-in fade-in-50 duration-200">
@@ -604,204 +456,59 @@ function VehicleContent() {
               </span>
             </div>
 
-            {/* Method Tabs: Dialpad (แป้นตัวเลขด่วน) vs Camera (สแกนผ่านกล้อง) */}
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setLookupMode("dialpad");
-                  stopQrScanner();
-                }}
-                className={`flex-1 py-2.5 px-3 rounded-2xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
-                  lookupMode === "dialpad"
-                    ? "bg-white border-emerald-500 text-emerald-800 shadow-sm ring-2 ring-emerald-200"
-                    : "bg-slate-100 border-slate-200 text-slate-600 hover:bg-white"
-                }`}
-              >
-                <span>🔢 แป้นตัวเลขด่วน 4 ตัว</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setLookupMode("camera");
-                }}
-                className={`flex-1 py-2.5 px-3 rounded-2xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
-                  lookupMode === "camera"
-                    ? "bg-white border-emerald-500 text-emerald-800 shadow-sm ring-2 ring-emerald-200"
-                    : "bg-slate-100 border-slate-200 text-slate-600 hover:bg-white"
-                }`}
-              >
-                <Camera className="w-4 h-4" />
-                <span>สแกนป้าย / QR กล้อง</span>
-              </button>
-            </div>
-
-            {/* MODE A: CAMERA / OCR LOOKUP */}
-            {lookupMode === "camera" && (
-              <div className="p-4 bg-white border border-emerald-200 rounded-3xl shadow-sm space-y-3.5">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                  <div>
-                    <h3 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                      <Camera className="w-4 h-4 text-emerald-600" /> สแกนผ่านกล้องมือถือ
-                    </h3>
-                    <p className="text-[11px] text-slate-500">เลือกสแกน QR สติกเกอร์ หรือถ่ายรูปป้ายทะเบียน (AI OCR)</p>
-                  </div>
-                </div>
-
-                {/* Sub-option 1: AI OCR Photo Capture */}
-                <div className="space-y-2">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={handleOcrPhotoUpload}
-                    className="hidden"
-                    id="ocr-camera-file"
-                  />
-
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={ocrLoading}
-                    className="w-full py-3.5 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-2xl font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-emerald-600/25 active:scale-98 transition-all disabled:opacity-50"
-                  >
-                    {ocrLoading ? (
-                      <>
-                        <RotateCcw className="w-4 h-4 animate-spin" />
-                        <span>กำลังอ่านตัวเลขป้ายทะเบียนด้วย AI...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Camera className="w-4 h-4" />
-                        <span>ถ่ายรูปป้ายทะเบียน (AI อ่านตัวเลขอัตโนมัติ)</span>
-                      </>
-                    )}
-                  </button>
-
-                  {ocrError && (
-                    <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-[11px] flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                      <span>{ocrError}</span>
-                    </div>
-                  )}
-
-                  {ocrMatches.length > 1 && (
-                    <div className="p-2.5 bg-sky-50 border border-sky-200 rounded-xl space-y-1">
-                      <span className="text-[10px] font-bold text-sky-800 block">ตัวเลขที่ AI ตรวจพบในรูป:</span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {ocrMatches.map((m, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            onClick={() => {
-                              setSearchQuery(m);
-                              setIsSearched(true);
-                            }}
-                            className="px-2.5 py-1 bg-white border border-sky-300 rounded-lg text-xs font-mono font-bold text-sky-800 hover:bg-sky-100"
-                          >
-                            {m}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Sub-option 2: Live QR Scanner */}
-                <div className="pt-2 border-t border-slate-100">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                      <QrCode className="w-4 h-4 text-sky-600" /> สแกนสติกเกอร์ QR หน้ารถ
-                    </span>
-                    {qrScanning && (
-                      <button
-                        type="button"
-                        onClick={stopQrScanner}
-                        className="text-[11px] text-rose-600 hover:underline font-bold"
-                      >
-                        ปิดกล้อง QR
-                      </button>
-                    )}
-                  </div>
-
-                  {!qrScanning ? (
-                    <button
-                      type="button"
-                      onClick={startQrScanner}
-                      className="w-full py-3 px-4 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 active:scale-98 transition-all"
-                    >
-                      <QrCode className="w-4 h-4 text-sky-600" />
-                      <span>เปิดกล้องสแกน QR Code สติกเกอร์จอดรถ</span>
-                    </button>
-                  ) : (
-                    <div className="space-y-2">
-                      <div
-                        id="lookup-qr-stream"
-                        className="w-full aspect-square max-h-64 bg-slate-900 rounded-2xl overflow-hidden border-2 border-sky-400 shadow-inner"
-                      />
-                      <p className="text-[10px] text-center text-slate-500">
-                        เล็ง QR Code หน้ารถให้อยู่ในกรอบ กล้องจะส่งเสียงบี๊บเมื่ออ่านสำเร็จ
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* SEARCH INPUT BAR */}
-            <div className="p-4 bg-white border border-sky-100 rounded-3xl shadow-sm space-y-2">
+            {/* INPUT & DISPLAY BOX */}
+            <div className="p-4 bg-white border border-sky-100 rounded-3xl shadow-sm space-y-3">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-slate-700">
-                  ค้นหาด้วยเลขทะเบียน / ชื่อ / แผนก / เบอร์โทร
+                  ใส่เลขทะเบียน 4 ตัวท้าย (หรือพิมพ์ค้นหา)
                 </label>
-                {searchQuery && (
+                {dialQuery && (
                   <button
                     type="button"
                     onClick={handleDialClear}
                     className="text-[11px] text-rose-600 hover:underline font-bold"
                   >
-                    ล้างการค้นหา
+                    ล้างตัวเลข
                   </button>
                 )}
               </div>
 
-              <div className="relative">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSelectedVehicle(null);
-                    setSearchQuery(e.target.value);
-                    setIsSearched(true);
-                  }}
-                  placeholder="เช่น 1234, กข 1234, หรือชื่อเจ้าของ"
-                  className="w-full pl-11 pr-10 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 placeholder-slate-400 font-mono text-base font-bold focus:outline-none focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-200 transition-all"
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={handleDialClear}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handlePerformSearch();
+                }}
+                className="space-y-2.5"
+              >
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={dialQuery}
+                    onChange={(e) => setDialQuery(e.target.value)}
+                    placeholder="กดเลขบนแป้นด้านล่าง..."
+                    className="w-full pl-4 pr-10 py-3.5 bg-slate-50 border-2 border-slate-200 rounded-2xl text-slate-900 placeholder-slate-400 font-mono text-xl font-bold tracking-widest text-center focus:outline-none focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-200 transition-all"
+                  />
+                  {dialQuery && (
+                    <button
+                      type="button"
+                      onClick={handleDialClear}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  )}
+                </div>
 
-              {/* Quick sample chips */}
-              {!searchQuery && (
-                <div className="flex items-center gap-1.5 pt-1 overflow-x-auto text-[11px] text-slate-500 no-scrollbar">
+                {/* Quick sample chips */}
+                <div className="flex items-center gap-1.5 pt-0.5 overflow-x-auto text-[11px] text-slate-500 no-scrollbar justify-center">
                   <span className="shrink-0 text-slate-400">ตัวอย่าง:</span>
                   {["1234", "5678", "3333", "8888"].map((sample) => (
                     <button
                       key={sample}
                       type="button"
                       onClick={() => {
-                        setSearchQuery(sample);
-                        setIsSearched(true);
+                        setDialQuery(sample);
+                        handlePerformSearch(sample);
                       }}
                       className="px-2.5 py-0.5 rounded-lg bg-slate-100 hover:bg-slate-200 font-mono text-slate-700 transition-colors"
                     >
@@ -809,277 +516,334 @@ function VehicleContent() {
                     </button>
                   ))}
                 </div>
-              )}
+              </form>
             </div>
 
-            {/* QUICK NUMERIC DIALPAD (LARGE TOUCH BUTTONS) */}
-            {lookupMode === "dialpad" && (
-              <div className="p-3 bg-white border border-slate-200 rounded-3xl shadow-xs space-y-2">
-                <div className="flex items-center justify-between px-1">
-                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                    แป้นกด 4 ตัวท้าย (เหมือนตู้ ATM)
-                  </span>
-                  <span className="text-[10px] text-emerald-700 font-medium">กดได้ทันทีไม่ต้องสลับแป้น</span>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2">
-                  {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((num) => (
-                    <button
-                      key={num}
-                      type="button"
-                      onClick={() => handleDialPress(num)}
-                      className="h-12 bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 rounded-2xl text-xl font-bold font-mono text-slate-800 active:scale-95 active:bg-emerald-600 active:text-white transition-all shadow-2xs"
-                    >
-                      {num}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={handleDialClear}
-                    className="h-12 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 rounded-2xl text-xs font-bold active:scale-95 transition-all"
-                  >
-                    ล้าง
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDialPress("0")}
-                    className="h-12 bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 rounded-2xl text-xl font-bold font-mono text-slate-800 active:scale-95 active:bg-emerald-600 active:text-white transition-all shadow-2xs"
-                  >
-                    0
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleDialDelete}
-                    className="h-12 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl flex items-center justify-center active:scale-95 transition-all"
-                    title="ลบตัวเลข"
-                  >
-                    <Delete className="w-5 h-5" />
-                  </button>
-                </div>
+            {/* QUICK NUMERIC DIALPAD */}
+            <div className="p-3 bg-white border border-slate-200 rounded-3xl shadow-xs space-y-2.5">
+              <div className="flex items-center justify-between px-1">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  แป้นกดตัวเลข (เหมือนตู้ ATM)
+                </span>
+                <span className="text-[10px] text-emerald-700 font-medium">กดเลขเสร็จแล้วแตะปุ่มค้นหา</span>
               </div>
-            )}
 
-            {/* MULTIPLE MATCHES LIST (IF MORE THAN 1) */}
-            {searchQuery && matchingVehicles.length > 1 && !selectedVehicle && (
-              <div className="p-4 bg-white border border-sky-100 rounded-3xl shadow-sm space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-700">
-                    พบรถที่ตรงกัน {matchingVehicles.length} คัน (แตะเพื่อดูรายละเอียด):
-                  </span>
+              <div className="grid grid-cols-3 gap-2">
+                {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((num) => (
+                  <button
+                    key={num}
+                    type="button"
+                    onClick={() => handleDialPress(num)}
+                    className="h-13 bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 rounded-2xl text-2xl font-bold font-mono text-slate-800 active:scale-95 active:bg-emerald-600 active:text-white transition-all shadow-2xs flex items-center justify-center"
+                  >
+                    {num}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={handleDialClear}
+                  className="h-13 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 rounded-2xl text-sm font-bold active:scale-95 transition-all flex items-center justify-center"
+                >
+                  ล้าง
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDialPress("0")}
+                  className="h-13 bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 rounded-2xl text-2xl font-bold font-mono text-slate-800 active:scale-95 active:bg-emerald-600 active:text-white transition-all shadow-2xs flex items-center justify-center"
+                >
+                  0
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDialDelete}
+                  className="h-13 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl flex items-center justify-center active:scale-95 transition-all"
+                  title="ลบตัวเลข"
+                >
+                  <Delete className="w-6 h-6" />
+                </button>
+              </div>
+
+              {/* PRIMARY SEARCH BUTTON (แตะเมื่อใส่เลขเสร็จ) */}
+              <button
+                type="button"
+                onClick={() => handlePerformSearch()}
+                disabled={!dialQuery.trim()}
+                className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-2xl font-bold text-base shadow-md shadow-emerald-600/30 active:scale-98 transition-all flex items-center justify-center gap-2 mt-2 cursor-pointer"
+              >
+                <Search className="w-5 h-5" />
+                <span>ค้นหาเจ้าของรถ</span>
+              </button>
+            </div>
+
+            {/* ================================================================= */}
+            {/* SEARCH RESULTS DISPLAY (โชว์เมื่อกดค้นหา) */}
+            {/* ================================================================= */}
+
+            {/* CASE A: FOUND MULTIPLE CARS (เช่น เจอ 2 คันขึ้นไป -> ให้จิ้มเลือกว่าจะเอาคันไหน) */}
+            {hasSearched && matchedVehicles.length > 1 && !selectedVehicle && (
+              <div className="p-5 bg-white border-2 border-emerald-400 rounded-3xl shadow-lg space-y-3.5 animate-in zoom-in-95 duration-200">
+                <div className="border-b border-slate-100 pb-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                      พบรถตรงกัน {matchedVehicles.length} คัน
+                    </span>
+                    <span className="text-xs font-mono font-bold text-slate-600">
+                      เลขที่ค้นหา: {submittedQuery}
+                    </span>
+                  </div>
+                  <h3 className="text-base font-black text-slate-900 mt-1">
+                    พบรถ {matchedVehicles.length} คันที่มีเลขนี้
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    กรุณาแตะเลือกคันที่ต้องการดูข้อมูลเจ้าของรถและเบอร์โทร:
+                  </p>
                 </div>
-                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                  {matchingVehicles.slice(0, 8).map((v, i) => (
+
+                <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+                  {matchedVehicles.map((v, i) => (
                     <button
                       key={i}
                       type="button"
                       onClick={() => setSelectedVehicle(v)}
-                      className="w-full p-3 rounded-2xl border border-slate-200 hover:border-emerald-400 bg-slate-50 hover:bg-emerald-50/50 text-left flex items-center justify-between transition-all active:scale-98"
+                      className="w-full p-3.5 rounded-2xl border-2 border-slate-200 hover:border-emerald-500 bg-slate-50 hover:bg-emerald-50/50 text-left flex items-center justify-between transition-all active:scale-98 shadow-2xs group"
                     >
-                      <div className="flex items-center gap-2.5">
-                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs ${
+                      <div className="flex items-center gap-3">
+                        <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-sm shrink-0 shadow-xs ${
                           v.vehicleType === "รถจักรยานยนต์" ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"
                         }`}>
-                          {v.vehicleType === "รถจักรยานยนต์" ? <Bike className="w-4 h-4" /> : <Car className="w-4 h-4" />}
+                          {v.vehicleType === "รถจักรยานยนต์" ? <Bike className="w-6 h-6" /> : <Car className="w-6 h-6" />}
                         </div>
                         <div>
-                          <span className="font-mono font-bold text-slate-900 text-sm block">
-                            {v.plateNumber} <span className="text-xs text-slate-500 font-normal">{v.province}</span>
-                          </span>
-                          <span className="text-xs text-slate-600 block">
-                            {v.ownerName} • <span className="text-slate-500">{v.department}</span>
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono font-black text-slate-900 text-base group-hover:text-emerald-800 transition-colors">
+                              {v.plateNumber}
+                            </span>
+                            <span className="text-[11px] text-slate-500 font-medium">{v.province}</span>
+                          </div>
+                          <p className="text-xs font-bold text-slate-700 mt-0.5">
+                            {v.ownerName}
+                          </p>
+                          <p className="text-[11px] text-slate-500">
+                            {v.department} {[v.brand, v.model].filter(Boolean).join(" ")}
+                          </p>
                         </div>
                       </div>
-                      <span className="text-xs font-bold text-emerald-700 bg-white px-2.5 py-1 rounded-xl border border-emerald-200">
-                        ดูข้อมูล &gt;
-                      </span>
+
+                      <div className="px-3 py-1.5 bg-emerald-600 text-white rounded-xl text-xs font-bold shrink-0 shadow-xs group-hover:scale-105 transition-transform flex items-center gap-1">
+                        <span>เลือกคันนี้</span>
+                        <span>&gt;</span>
+                      </div>
                     </button>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* DETAILED RESULT CARD: STAFF VEHICLE FOUND */}
-            {activeVehicle && (
-              <div className="p-5 bg-white border-2 border-emerald-500 rounded-3xl shadow-lg space-y-4 animate-in zoom-in-95 duration-200">
-                {/* Header */}
-                <div className="flex items-start justify-between border-b border-slate-100 pb-3">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-xs ${
-                      activeVehicle.vehicleType === "รถจักรยานยนต์"
-                        ? "bg-amber-100 text-amber-700 ring-2 ring-amber-200"
-                        : "bg-emerald-100 text-emerald-700 ring-2 ring-emerald-200"
-                    }`}>
-                      {activeVehicle.vehicleType === "รถจักรยานยนต์" ? (
-                        <Bike className="w-7 h-7" />
-                      ) : (
-                        <Car className="w-7 h-7" />
+            {/* CASE B: SINGLE CAR SELECTED OR FOUND (แสดงการ์ดข้อมูลเจ้าของรถเต็มรูปแบบ) */}
+            {hasSearched && selectedVehicle && (
+              <div className="space-y-3 animate-in zoom-in-95 duration-200">
+                {/* Back to multiple list button if there were 2+ cars */}
+                {matchedVehicles.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedVehicle(null)}
+                    className="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-98"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                    <span>กลับไปหน้ารายการ (พบทั้งหมด {matchedVehicles.length} คัน)</span>
+                  </button>
+                )}
+
+                <div className="p-5 bg-white border-2 border-emerald-500 rounded-3xl shadow-lg space-y-4">
+                  {/* Header */}
+                  <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-xs ${
+                        selectedVehicle.vehicleType === "รถจักรยานยนต์"
+                          ? "bg-amber-100 text-amber-700 ring-2 ring-amber-200"
+                          : "bg-emerald-100 text-emerald-700 ring-2 ring-emerald-200"
+                      }`}>
+                        {selectedVehicle.vehicleType === "รถจักรยานยนต์" ? (
+                          <Bike className="w-7 h-7" />
+                        ) : (
+                          <Car className="w-7 h-7" />
+                        )}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            {selectedVehicle.vehicleType === "รถจักรยานยนต์" ? "🏍️ รถจักรยานยนต์บุคลากร" : "🚗 รถยนต์บุคลากร รพ.พล"}
+                          </span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-medium">
+                            {selectedVehicle.province || "ขอนแก่น"}
+                          </span>
+                        </div>
+                        <h3 className="text-2xl font-black text-slate-900 mt-0.5 font-mono tracking-tight">
+                          {selectedVehicle.plateNumber}
+                        </h3>
+                      </div>
+                    </div>
+
+                    <span className="text-xs text-emerald-700 font-extrabold bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-200 flex items-center gap-1 shrink-0">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      มีสิทธิ์จอด
+                    </span>
+                  </div>
+
+                  {/* Details list */}
+                  <div className="space-y-3 text-sm bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                    {/* Brand / Model / Color */}
+                    {(selectedVehicle.brand || selectedVehicle.model || selectedVehicle.color) && (
+                      <div className="flex items-center gap-3 text-slate-700 pb-2.5 border-b border-slate-200/60">
+                        <div className="w-5 h-5 text-emerald-600 shrink-0 flex items-center justify-center">
+                          <Car className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <span className="text-[11px] text-slate-500 block font-medium">ยี่ห้อ / รุ่น / สีรถ</span>
+                          <span className="font-bold text-slate-900 text-sm">
+                            {[selectedVehicle.brand, selectedVehicle.model].filter(Boolean).join(" ")}
+                            {selectedVehicle.color ? ` (สี ${selectedVehicle.color})` : ""}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Owner */}
+                    <div className="flex items-center gap-3 text-slate-700 pb-2.5 border-b border-slate-200/60">
+                      <div className="w-5 h-5 text-emerald-600 shrink-0 flex items-center justify-center">
+                        <User className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-[11px] text-slate-500 block font-medium">เจ้าของรถ</span>
+                        <span className="font-bold text-slate-900 text-base">{selectedVehicle.ownerName}</span>
+                      </div>
+                    </div>
+
+                    {/* Department */}
+                    <div className="flex items-center gap-3 text-slate-700 pb-2.5 border-b border-slate-200/60">
+                      <div className="w-5 h-5 text-emerald-600 shrink-0 flex items-center justify-center">
+                        <Building className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-[11px] text-slate-500 block font-medium">แผนก / หน่วยงาน / ตึก</span>
+                        <span className="font-semibold text-slate-800 text-sm">{selectedVehicle.department}</span>
+                      </div>
+                    </div>
+
+                    {/* Parking Zone */}
+                    {selectedVehicle.zone && (
+                      <div className="flex items-center gap-3 text-slate-700 pb-2.5 border-b border-slate-200/60">
+                        <span className="text-xs text-slate-500 w-5 text-center">🅿️</span>
+                        <div>
+                          <span className="text-[11px] text-slate-500 block font-medium">โซนจอดประจำ</span>
+                          <span className="font-semibold text-slate-800 text-sm">{selectedVehicle.zone}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Phone number & 1-Tap Call */}
+                    <div className="flex items-center justify-between pt-1">
+                      <div className="flex items-center gap-3 text-slate-700">
+                        <div className="w-5 h-5 text-emerald-600 shrink-0 flex items-center justify-center">
+                          <Phone className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <span className="text-[11px] text-slate-500 block font-medium">เบอร์โทรศัพท์</span>
+                          <span className="font-mono text-emerald-800 font-extrabold text-base">
+                            {selectedVehicle.phone || "ไม่ระบุ"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {selectedVehicle.phone && selectedVehicle.phone !== "-" && (
+                        <a
+                          href={`tel:${selectedVehicle.phone}`}
+                          className="px-5 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-xs font-bold flex items-center gap-2 shadow-md shadow-emerald-600/30 active:scale-95 transition-all"
+                        >
+                          <Phone className="w-4 h-4 fill-current" />
+                          <span>โทรหาทันที</span>
+                        </a>
                       )}
                     </div>
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200">
-                          {activeVehicle.vehicleType === "รถจักรยานยนต์" ? "🏍️ รถจักรยานยนต์บุคลากร" : "🚗 รถยนต์บุคลากร รพ.พล"}
-                        </span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-medium">
-                          {activeVehicle.province || "ขอนแก่น"}
-                        </span>
-                      </div>
-                      <h3 className="text-2xl font-black text-slate-900 mt-0.5 font-mono tracking-tight">
-                        {activeVehicle.plateNumber}
-                      </h3>
-                    </div>
                   </div>
 
-                  <span className="text-xs text-emerald-700 font-extrabold bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-200 flex items-center gap-1 shrink-0">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                    มีสิทธิ์จอด
-                  </span>
-                </div>
-
-                {/* Details list */}
-                <div className="space-y-3 text-sm bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                  {/* Brand / Model / Color */}
-                  {(activeVehicle.brand || activeVehicle.model || activeVehicle.color) && (
-                    <div className="flex items-center gap-3 text-slate-700 pb-2.5 border-b border-slate-200/60">
-                      <div className="w-5 h-5 text-emerald-600 shrink-0 flex items-center justify-center">
-                        <Car className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <span className="text-[11px] text-slate-500 block font-medium">ยี่ห้อ / รุ่น / สีรถ</span>
-                        <span className="font-bold text-slate-900 text-sm">
-                          {[activeVehicle.brand, activeVehicle.model].filter(Boolean).join(" ")}
-                          {activeVehicle.color ? ` (สี ${activeVehicle.color})` : ""}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Owner */}
-                  <div className="flex items-center gap-3 text-slate-700 pb-2.5 border-b border-slate-200/60">
-                    <div className="w-5 h-5 text-emerald-600 shrink-0 flex items-center justify-center">
-                      <User className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <span className="text-[11px] text-slate-500 block font-medium">เจ้าของรถ</span>
-                      <span className="font-bold text-slate-900 text-base">{activeVehicle.ownerName}</span>
-                    </div>
-                  </div>
-
-                  {/* Department */}
-                  <div className="flex items-center gap-3 text-slate-700 pb-2.5 border-b border-slate-200/60">
-                    <div className="w-5 h-5 text-emerald-600 shrink-0 flex items-center justify-center">
-                      <Building className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <span className="text-[11px] text-slate-500 block font-medium">แผนก / หน่วยงาน / ตึก</span>
-                      <span className="font-semibold text-slate-800 text-sm">{activeVehicle.department}</span>
-                    </div>
-                  </div>
-
-                  {/* Parking Zone */}
-                  {activeVehicle.zone && (
-                    <div className="flex items-center gap-3 text-slate-700 pb-2.5 border-b border-slate-200/60">
-                      <span className="text-xs text-slate-500 w-5 text-center">🅿️</span>
-                      <div>
-                        <span className="text-[11px] text-slate-500 block font-medium">โซนจอดประจำ</span>
-                        <span className="font-semibold text-slate-800 text-sm">{activeVehicle.zone}</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Phone number */}
-                  <div className="flex items-center justify-between pt-1">
-                    <div className="flex items-center gap-3 text-slate-700">
-                      <div className="w-5 h-5 text-emerald-600 shrink-0 flex items-center justify-center">
-                        <Phone className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <span className="text-[11px] text-slate-500 block font-medium">เบอร์โทรศัพท์</span>
-                        <span className="font-mono text-emerald-800 font-extrabold text-base">
-                          {activeVehicle.phone || "ไม่ระบุ"}
-                        </span>
-                      </div>
-                    </div>
-
-                    {activeVehicle.phone && activeVehicle.phone !== "-" && (
-                      <a
-                        href={`tel:${activeVehicle.phone}`}
-                        className="px-5 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-xs font-bold flex items-center gap-2 shadow-md shadow-emerald-600/30 active:scale-95 transition-all"
+                  {/* Quick Security Actions for Guards */}
+                  <div className="space-y-2 pt-1 border-t border-slate-100">
+                    <span className="text-xs font-bold text-slate-700 block">
+                      บันทึกการแจ้งเตือนเจ้าหน้าที่ รปภ. (หากมีเหตุ):
+                    </span>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setReportedIssue(reportedIssue === "ขวางทาง" ? null : "ขวางทาง")}
+                        className={`py-2 px-2 rounded-xl text-xs font-bold border transition-all text-center ${
+                          reportedIssue === "ขวางทาง"
+                            ? "bg-rose-100 border-rose-400 text-rose-800"
+                            : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                        }`}
                       >
-                        <Phone className="w-4 h-4 fill-current" />
-                        <span>โทรหาทันที</span>
-                      </a>
+                        🚗 จอดขวางทาง
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setReportedIssue(reportedIssue === "ลืมปิดไฟ" ? null : "ลืมปิดไฟ")}
+                        className={`py-2 px-2 rounded-xl text-xs font-bold border transition-all text-center ${
+                          reportedIssue === "ลืมปิดไฟ"
+                            ? "bg-amber-100 border-amber-400 text-amber-800"
+                            : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                        }`}
+                      >
+                        💡 ลืมปิดไฟหน้า
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setReportedIssue(reportedIssue === "ขวางทางฉุกเฉิน" ? null : "ขวางทางฉุกเฉิน")}
+                        className={`py-2 px-2 rounded-xl text-xs font-bold border transition-all text-center ${
+                          reportedIssue === "ขวางทางฉุกเฉิน"
+                            ? "bg-rose-100 border-rose-400 text-rose-800"
+                            : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                        }`}
+                      >
+                        🚨 ขวางจุด ER
+                      </button>
+                    </div>
+
+                    {reportedIssue && (
+                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-2 animate-in fade-in-50 text-xs">
+                        <p className="font-bold text-amber-900">
+                          คุณระบุเหตุ: &ldquo;{reportedIssue}&rdquo;
+                        </p>
+                        {selectedVehicle.phone && selectedVehicle.phone !== "-" ? (
+                          <a
+                            href={`tel:${selectedVehicle.phone}`}
+                            className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold flex items-center justify-center gap-2"
+                          >
+                            <Phone className="w-3.5 h-3.5" /> โทรแจ้งเจ้าของรถ ({selectedVehicle.ownerName})
+                          </a>
+                        ) : (
+                          <p className="text-amber-800 text-[11px]">
+                            ไม่มีเบอร์โทรในระบบ กรุณาประสานงานหัวหน้า รปภ. หรือประชาสัมพันธ์โรงพยาบาล
+                          </p>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
 
-                {/* Quick Security Actions for Guards */}
-                <div className="space-y-2 pt-1 border-t border-slate-100">
-                  <span className="text-xs font-bold text-slate-700 block">
-                    บันทึกการแจ้งเตือนเจ้าหน้าที่ รปภ. (หากมีเหตุ):
-                  </span>
-                  <div className="grid grid-cols-3 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setReportedIssue(reportedIssue === "ขวางทาง" ? null : "ขวางทาง")}
-                      className={`py-2 px-2 rounded-xl text-xs font-bold border transition-all text-center ${
-                        reportedIssue === "ขวางทาง"
-                          ? "bg-rose-100 border-rose-400 text-rose-800"
-                          : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                      }`}
-                    >
-                      🚗 จอดขวางทาง
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setReportedIssue(reportedIssue === "ลืมปิดไฟ" ? null : "ลืมปิดไฟ")}
-                      className={`py-2 px-2 rounded-xl text-xs font-bold border transition-all text-center ${
-                        reportedIssue === "ลืมปิดไฟ"
-                          ? "bg-amber-100 border-amber-400 text-amber-800"
-                          : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                      }`}
-                    >
-                      💡 ลืมปิดไฟหน้า
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setReportedIssue(reportedIssue === "ขวางทางฉุกเฉิน" ? null : "ขวางทางฉุกเฉิน")}
-                      className={`py-2 px-2 rounded-xl text-xs font-bold border transition-all text-center ${
-                        reportedIssue === "ขวางทางฉุกเฉิน"
-                          ? "bg-rose-100 border-rose-400 text-rose-800"
-                          : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                      }`}
-                    >
-                      🚨 ขวางจุด ER
-                    </button>
-                  </div>
-
-                  {reportedIssue && (
-                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-2 animate-in fade-in-50 text-xs">
-                      <p className="font-bold text-amber-900">
-                        คุณระบุเหตุ: &ldquo;{reportedIssue}&rdquo;
-                      </p>
-                      {activeVehicle.phone && activeVehicle.phone !== "-" ? (
-                        <a
-                          href={`tel:${activeVehicle.phone}`}
-                          className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold flex items-center justify-center gap-2"
-                        >
-                          <Phone className="w-3.5 h-3.5" /> โทรแจ้งเจ้าของรถ ({activeVehicle.ownerName})
-                        </a>
-                      ) : (
-                        <p className="text-amber-800 text-[11px]">
-                          ไม่มีเบอร์โทรในระบบ กรุณาประสานงานหัวหน้า รปภ. หรือประชาสัมพันธ์โรงพยาบาล
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
+                {/* Button to search new vehicle */}
+                <button
+                  type="button"
+                  onClick={handleDialClear}
+                  className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-98"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span>ค้นหาเลขทะเบียนคันใหม่</span>
+                </button>
               </div>
             )}
 
-            {/* NOT FOUND RESULT: OUTSIDE VEHICLE */}
-            {searchQuery && isSearched && matchingVehicles.length === 0 && (
+            {/* CASE C: NOT FOUND RESULT: OUTSIDE VEHICLE */}
+            {hasSearched && matchedVehicles.length === 0 && (
               <div className="p-5 bg-rose-50 border-2 border-rose-400 rounded-3xl shadow-md space-y-4 animate-in fade-in-50 duration-200">
                 <div className="flex items-center gap-3.5">
                   <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
@@ -1089,7 +853,7 @@ function VehicleContent() {
                     <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-200">
                       รถภายนอก / ผู้มารับบริการ
                     </span>
-                    <h3 className="text-xl font-black text-slate-900 mt-0.5 font-mono">{searchQuery}</h3>
+                    <h3 className="text-xl font-black text-slate-900 mt-0.5 font-mono">{submittedQuery}</h3>
                   </div>
                 </div>
 
@@ -1104,22 +868,33 @@ function VehicleContent() {
                   </p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleContinuousScan(searchQuery, "ลานจอดรถภายนอก");
-                    addToast({
-                      plate: searchQuery,
-                      isStaff: false,
-                      type: "warning",
-                      message: `บันทึกหมายเลข ${searchQuery} เป็นรถภายนอกเรียบร้อย`,
-                    });
-                  }}
-                  className="w-full py-3 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md active:scale-95 transition-all flex items-center justify-center gap-2"
-                >
-                  <Check className="w-4 h-4" />
-                  <span>บันทึกประวัติพบรถคันนี้ (เฝ้าระวัง/สังเกตการณ์)</span>
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleContinuousScan(submittedQuery, "ลานจอดรถภายนอก");
+                      addToast({
+                        plate: submittedQuery,
+                        isStaff: false,
+                        type: "warning",
+                        message: `บันทึกหมายเลข ${submittedQuery} เป็นรถภายนอกเรียบร้อย`,
+                      });
+                    }}
+                    className="flex-1 py-3 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>บันทึกเฝ้าระวัง</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleDialClear}
+                    className="py-3 px-4 rounded-2xl bg-white border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 active:scale-95 transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    <span>ค้นหาใหม่</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>
