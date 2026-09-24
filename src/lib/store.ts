@@ -163,6 +163,7 @@ interface AppState {
   updateCheckpoint: (id: string, cp: Partial<Checkpoint>) => void;
   deleteCheckpoint: (id: string) => void;
   reorderCheckpoints: (newCheckpoints: Checkpoint[]) => void;
+  autoRenumberCheckpoints: () => void;
   updateCheckpointItems: (checkpointId: string, items: string[]) => void;
   copyCheckpointItems: (targetCheckpointId: string, sourceCheckpointId: string) => void;
 
@@ -241,7 +242,7 @@ export const initialGuards: Guard[] = [
 export const initialCheckpoints: Checkpoint[] = [
   { 
     id: 'cp01', 
-    code: 'A1-01', 
+    code: '01', 
     name: 'โถงทางเข้าหลัก & จุดคัดกรอง', 
     building: 'อาคารเฉลิมพระเกียรติ A', 
     floor: 'ชั้น 1', 
@@ -256,7 +257,7 @@ export const initialCheckpoints: Checkpoint[] = [
   },
   { 
     id: 'cp02', 
-    code: 'A1-02', 
+    code: '02', 
     name: 'ห้องฉุกเฉิน (ER) & ทางลาดรับส่งผู้ป่วย', 
     building: 'อาคารเฉลิมพระเกียรติ A', 
     floor: 'ชั้น 1', 
@@ -271,7 +272,7 @@ export const initialCheckpoints: Checkpoint[] = [
   },
   { 
     id: 'cp03', 
-    code: 'A2-01', 
+    code: '03', 
     name: 'ห้องคลังยาหลัก & สารเสพติดทางการแพทย์', 
     building: 'อาคารเฉลิมพระเกียรติ A', 
     floor: 'ชั้น 2', 
@@ -484,8 +485,12 @@ export const useStore = create<AppState>()(
       // Checkpoints & Checklist Management
       checkpoints: initialCheckpoints,
       addCheckpoint: (cp) => {
+        const nextOrder = cp.order || (get().checkpoints.length + 1);
+        const nextCode = cp.code && cp.code.trim() ? cp.code.trim() : String(nextOrder).padStart(2, '0');
         const newCp: Checkpoint = {
           ...cp,
+          order: nextOrder,
+          code: nextCode,
           id: 'cp-' + Date.now(),
           items: cp.items && cp.items.length > 0 ? cp.items : [
             'ประตูทางเข้า-ออก และหน้าต่างล็อกแน่นหนา',
@@ -497,6 +502,19 @@ export const useStore = create<AppState>()(
         set((state) => ({
           checkpoints: [...state.checkpoints, newCp]
         }));
+      },
+      autoRenumberCheckpoints: () => {
+        set((state) => {
+          const sorted = [...state.checkpoints].sort((a, b) => (a.order || 0) - (b.order || 0));
+          const renumbered = sorted.map((cp, idx) => {
+            const newOrder = idx + 1;
+            const newCode = String(newOrder).padStart(2, '0');
+            const updated = { ...cp, order: newOrder, code: newCode };
+            saveCheckpointToCloud(updated);
+            return updated;
+          });
+          return { checkpoints: renumbered };
+        });
       },
       updateCheckpoint: (id, updated) => {
         set((state) => {
@@ -961,6 +979,16 @@ export const useStore = create<AppState>()(
     }),
     {
       name: 'smart-hospital-security-v5',
+      onRehydrateStorage: () => (state) => {
+        if (state && Array.isArray(state.checkpoints)) {
+          const hasLegacyCodes = state.checkpoints.some(
+            (cp) => !/^\d{2,}$/.test(cp.code?.trim() || "")
+          );
+          if (hasLegacyCodes) {
+            state.autoRenumberCheckpoints();
+          }
+        }
+      },
     }
   )
 );

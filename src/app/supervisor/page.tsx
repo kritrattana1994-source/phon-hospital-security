@@ -83,6 +83,7 @@ export default function SupervisorPage() {
     updateCheckpoint,
     deleteCheckpoint,
     reorderCheckpoints,
+    autoRenumberCheckpoints,
     updateCheckpointItems,
     copyCheckpointItems,
     checklistTemplates,
@@ -1601,6 +1602,19 @@ export default function SupervisorPage() {
                   <BookmarkCheck className="w-4 h-4 text-amber-600" /> คลังแม่แบบ ({checklistTemplates.length})
                 </button>
                 <button
+                  onClick={() => {
+                    if (confirm("ต้องการปรับรหัสจุดตรวจทั้งหมดให้เป็นเลขรันต่อเนื่อง (01, 02, 03...) ตามลำดับ ใช่หรือไม่?")) {
+                      autoRenumberCheckpoints();
+                      setChecklistAlert("🔢 ปรับรหัสจุดตรวจทั้งหมดเป็นเลขรันต่อเนื่อง (01, 02, 03...) เรียบร้อยแล้ว!");
+                      setTimeout(() => setChecklistAlert(null), 4000);
+                    }
+                  }}
+                  className="px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-900 font-bold text-xs rounded-xl flex items-center gap-2 active:scale-95 transition-all shadow-2xs"
+                  title="จัดเรียงและรันเลขรหัสจุดตรวจอัตโนมัติ (01, 02, 03...)"
+                >
+                  <RefreshCw className="w-4 h-4 text-indigo-600" /> รันเลขจุดตรวจ (01, 02, 03...)
+                </button>
+                <button
                   onClick={() => setShowPrintModal(true)}
                   className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl flex items-center gap-2 active:scale-95 transition-all shadow-xs"
                 >
@@ -1608,9 +1622,10 @@ export default function SupervisorPage() {
                 </button>
                 <button
                   onClick={() => {
+                    const nextCode = String(checkpoints.length + 1).padStart(2, "0");
                     setEditingCp(null);
                     setCpForm({
-                      code: `A1-0${checkpoints.length + 1}`,
+                      code: nextCode,
                       name: "",
                       building: "อาคารเฉลิมพระเกียรติ A",
                       floor: "ชั้น 1",
@@ -3372,13 +3387,15 @@ export default function SupervisorPage() {
             <form onSubmit={handleSaveCp} className="space-y-4 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-slate-600 font-bold mb-1">รหัสจุดตรวจ *</label>
+                  <label className="block text-slate-600 font-bold mb-1">
+                    รหัสจุดตรวจ * <span className="text-[10px] font-normal text-slate-400">(เช่น 01, 02, 03...)</span>
+                  </label>
                   <input
                     type="text"
                     required
                     value={cpForm.code}
                     onChange={(e) => setCpForm({ ...cpForm, code: e.target.value })}
-                    placeholder="A1-04"
+                    placeholder={String(checkpoints.length + 1).padStart(2, "0")}
                     className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 font-mono focus:bg-white"
                   />
                 </div>

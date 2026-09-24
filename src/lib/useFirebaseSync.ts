@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { db } from "./firebase";
 import { collection, onSnapshot } from "firebase/firestore";
 import { useStore, PatrolLog, ParkingScan, Incident, Checkpoint, StaffVehicle } from "./store";
-import { seedFirestoreIfEmpty } from "./firebaseService";
+import { seedFirestoreIfEmpty, saveCheckpointToCloud } from "./firebaseService";
 
 export function useFirebaseSync() {
   const [isConnected, setIsConnected] = useState(false);
@@ -59,8 +59,20 @@ export function useFirebaseSync() {
     const unsubCheckpoints = onSnapshot(collection(db, "checkpoints"), (snapshot) => {
       setIsConnected(true);
       if (!snapshot.empty) {
-        const cloudCps = snapshot.docs.map(doc => doc.data() as Checkpoint);
+        let cloudCps = snapshot.docs.map(doc => doc.data() as Checkpoint);
         cloudCps.sort((a, b) => (a.order || 0) - (b.order || 0));
+
+        // Auto-migrate legacy checkpoint codes (e.g. A1-01, A2-01) to simple sequential numbers (01, 02, 03...)
+        const hasLegacyCodes = cloudCps.some(cp => !/^\d{2,}$/.test(cp.code?.trim() || ""));
+        if (hasLegacyCodes) {
+          cloudCps = cloudCps.map((cp, idx) => {
+            const sequentialCode = String(cp.order || idx + 1).padStart(2, '0');
+            const updatedCp = { ...cp, code: sequentialCode, order: cp.order || idx + 1 };
+            saveCheckpointToCloud(updatedCp);
+            return updatedCp;
+          });
+        }
+
         useStore.setState({ checkpoints: cloudCps });
       }
     }, (err) => {
