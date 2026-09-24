@@ -235,7 +235,7 @@ export default function PatrolPage() {
           >
             <ArrowLeft className="w-5 h-5" />
           </Link>
-          <HospitalBrand badgeText="จุดตรวจ 20 จุด" />
+          <HospitalBrand badgeText={`จุดตรวจ ${checkpoints.length} จุด`} />
           <span className="px-2.5 py-1 rounded-full bg-sky-100 text-sky-800 text-xs font-bold font-mono border border-sky-200">
             {completedIds.size}/{checkpoints.length}
           </span>

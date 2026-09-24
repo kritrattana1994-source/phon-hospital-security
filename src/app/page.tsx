@@ -76,7 +76,7 @@ export default function Home() {
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-sky-500 shrink-0" />
-                    <span>สแกน QR Code <strong>จุดตรวจ 20 จุด</strong> ทั่วโรงพยาบาล</span>
+                    <span>สแกน QR Code <strong>จุดตรวจความปลอดภัย</strong> ทั่วโรงพยาบาล</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-sky-500 shrink-0" />
@@ -123,7 +123,7 @@ export default function Home() {
                 <ul className="text-xs text-slate-600 mt-3 space-y-2">
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-blue-500 shrink-0" />
-                    <span>มอนิเตอร์สถานะ <strong>20 จุดตรวจแบบ Real-time</strong></span>
+                    <span>มอนิเตอร์สถานะ <strong>จุดตรวจทั้งหมดแบบ Real-time</strong></span>
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-blue-500 shrink-0" />

@@ -657,7 +657,7 @@ export default function GuardPage() {
           <div className="flex justify-between items-start">
             <div>
               <span className="text-xs font-semibold uppercase tracking-wider text-sky-600">ความคืบหน้ารอบเวร</span>
-              <h2 className="text-lg font-black text-slate-900 mt-0.5">เดินตรวจ 20 จุดตรวจความปลอดภัย</h2>
+              <h2 className="text-lg font-black text-slate-900 mt-0.5">เดินตรวจ {checkpoints.length} จุดตรวจความปลอดภัย</h2>
             </div>
             <div className="text-right">
               <span className="text-2xl font-black text-sky-600">{progressPercent}%</span>
@@ -710,7 +710,7 @@ export default function GuardPage() {
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-slate-900 text-base">โมดูล 1: เดินตรวจ 20 จุด</h3>
+                    <h3 className="font-bold text-slate-900 text-base">โมดูล 1: เดินตรวจ {checkpoints.length} จุด</h3>
                     <span className="text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-md font-semibold">
                       สแกน QR
                     </span>
