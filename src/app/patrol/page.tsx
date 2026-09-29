@@ -30,7 +30,8 @@ import {
   getCurrentRound, 
   isScanOnTime,
   getCurrentShift,
-  defaultPatrolRounds
+  defaultPatrolRounds,
+  getLogsForRound
 } from "@/lib/patrolSchedule";
 import { uploadImageToDrive } from "@/lib/uploadToDrive";
 
@@ -205,8 +206,14 @@ export default function PatrolPage() {
 
   if (!currentUser) return null;
 
-  const completedIds = new Set(patrolLogs.map((log) => log.checkpointId));
-  const progress = Math.round((completedIds.size / checkpoints.length) * 100);
+  const rounds = (patrolRounds && patrolRounds.length > 0) ? patrolRounds : defaultPatrolRounds;
+  const now = new Date();
+  const activeRound = getCurrentRound(rounds, now);
+  const activeShift = getCurrentShift(now);
+
+  const roundLogs = getLogsForRound(activeRound, patrolLogs);
+  const completedIds = new Set(roundLogs.map((log) => log.checkpointId));
+  const progress = checkpoints.length > 0 ? Math.round((completedIds.size / checkpoints.length) * 100) : 0;
 
   // Start Real Camera QR Scanner
   const startCameraScanner = async () => {
@@ -260,24 +267,6 @@ export default function PatrolPage() {
       alert(`⚠️ ป้าย QR Code ที่สแกน ("${text}") ไม่ตรงกับจุดตรวจใดในระบบโรงพยาบาลพล กรุณาลองใหม่อีกครั้ง`);
     }
   };
-
-  const handleMockScan = (cp?: Checkpoint) => {
-    setScanning(true);
-    setTimeout(() => {
-      if (cp) {
-        setSelectedCheckpoint(cp);
-      } else {
-        const remaining = checkpoints.filter((item) => !completedIds.has(item.id));
-        setSelectedCheckpoint(remaining.length > 0 ? remaining[0] : checkpoints[0]);
-      }
-      setScanning(false);
-    }, 600);
-  };
-
-  const rounds = (patrolRounds && patrolRounds.length > 0) ? patrolRounds : defaultPatrolRounds;
-  const now = new Date();
-  const activeRound = getCurrentRound(rounds, now);
-  const activeShift = getCurrentShift(now);
 
   const handleSubmit = async () => {
     if (!selectedCheckpoint) return;
@@ -751,30 +740,44 @@ export default function PatrolPage() {
         <div className="space-y-2 pt-2">
           <div className="flex justify-between items-center px-1">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              รายการจุดตรวจทั้งหมด ({checkpoints.length} จุด)
+              สถานะจุดตรวจรอบ {activeRound.id} ({completedIds.size}/{checkpoints.length} จุด)
             </h3>
-            <span className="text-[11px] text-slate-400">แตะเพื่อทดสอบสแกน</span>
+            <span className="text-[11px] text-sky-700 font-bold flex items-center gap-1">
+              <QrCode className="w-3.5 h-3.5 text-sky-600" /> สแกน QR หน้างานเท่านั้น
+            </span>
           </div>
           <div className="space-y-2">
             {checkpoints.map((cp) => {
-              const isDone = completedIds.has(cp.id);
+              const checkpointLog = roundLogs.find((l) => l.checkpointId === cp.id);
+              const isDone = !!checkpointLog;
+              const scanTimeStr = checkpointLog?.timestamp
+                ? new Date(checkpointLog.timestamp).toLocaleTimeString("th-TH", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : null;
+
               return (
                 <div
                   key={cp.id}
-                  onClick={() => handleMockScan(cp)}
-                  className={`p-3.5 rounded-2xl border flex items-center justify-between cursor-pointer transition-all active:scale-[0.99] ${
+                  onClick={() => {
+                    if (!isDone) {
+                      alert(`⚠️ จุดตรวจ "${cp.name}" ยังไม่ได้รับการตรวจในรอบนี้\n\nระบบกำหนดให้เดินไปยังจุดตรวจแล้วกดปุ่ม "เปิดกล้องมือถือสแกนป้ายจริง" ด้านบนเพื่อสแกน QR Code หน้างานเท่านั้น (ไม่สามารถกดตรวจจากรายการได้)`);
+                    }
+                  }}
+                  className={`p-3.5 rounded-2xl border flex items-center justify-between transition-all select-none ${
                     isDone
-                      ? "bg-emerald-50/70 border-emerald-200 text-emerald-900"
-                      : "bg-white border-slate-200 text-slate-700 hover:border-sky-300"
+                      ? "bg-emerald-50/80 border-emerald-300 text-emerald-950 shadow-2xs"
+                      : "bg-white border-slate-200 text-slate-700 hover:border-slate-300 cursor-not-allowed opacity-90"
                   }`}
                 >
                   <div className="flex items-center gap-3">
                     <div
-                      className={`w-8 h-8 rounded-xl flex items-center justify-center ${
-                        isDone ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-400"
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                        isDone ? "bg-emerald-500 text-white shadow-xs" : "bg-slate-100 text-slate-400"
                       }`}
                     >
-                      {isDone ? <CheckCircle2 className="w-5 h-5" /> : <MapPin className="w-4 h-4" />}
+                      {isDone ? <CheckCircle2 className="w-5 h-5 stroke-[2.5]" /> : <MapPin className="w-4 h-4" />}
                     </div>
                     <div>
                       <p className={`text-sm font-bold ${isDone ? "text-emerald-950" : "text-slate-800"}`}>
@@ -782,18 +785,25 @@ export default function PatrolPage() {
                       </p>
                       <p className="text-[11px] text-slate-500">
                         รหัส {cp.code} • {cp.building}
+                        {scanTimeStr && (
+                          <span className="text-emerald-700 font-bold ml-1.5 font-mono">
+                            (สแกนเมื่อ {scanTimeStr} น.)
+                          </span>
+                        )}
                       </p>
                     </div>
                   </div>
-                  <span
-                    className={`text-[11px] px-2.5 py-1 rounded-full font-semibold border ${
-                      isDone
-                        ? "bg-emerald-100 text-emerald-800 border-emerald-200"
-                        : "bg-slate-100 text-slate-500 border-slate-200"
-                    }`}
-                  >
-                    {isDone ? "ตรวจแล้ว" : "ยังไม่ตรวจ"}
-                  </span>
+                  <div>
+                    {isDone ? (
+                      <span className="text-[11px] px-2.5 py-1 rounded-full font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1 shadow-2xs">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" /> ตรวจแล้ว
+                      </span>
+                    ) : (
+                      <span className="text-[10px] px-2 py-1 rounded-full font-semibold bg-slate-100 text-slate-500 border border-slate-200">
+                        รอสแกน QR
+                      </span>
+                    )}
+                  </div>
                 </div>
               );
             })}
