@@ -7,8 +7,19 @@ import {
   saveCheckpointToCloud, 
   deleteCheckpointFromCloud,
   saveStaffVehiclesToCloud,
-  deleteStaffVehicleFromCloud
+  deleteStaffVehicleFromCloud,
+  saveShiftReportToCloud
 } from './firebaseService';
+import { 
+  PatrolRound, 
+  ShiftReportLog, 
+  defaultPatrolRounds, 
+  getCurrentRound, 
+  isScanOnTime,
+  getCurrentShift
+} from './patrolSchedule';
+
+export type { PatrolRound, ShiftReportLog };
 
 export interface Guard {
   id: string;
@@ -48,6 +59,12 @@ export interface PatrolLog {
   notes?: string;
   coords?: { lat: number; lng: number; accuracy?: number };
   synced: boolean;
+  roundId?: string;
+  roundName?: string;
+  shift?: 'morning' | 'afternoon' | 'night';
+  imageUrl?: string;
+  distanceMeters?: number;
+  isOnTime?: boolean;
 }
 
 export interface Incident {
@@ -138,9 +155,16 @@ interface AppState {
   addChecklistTemplate: (tmpl: Omit<ChecklistTemplate, 'id'>) => void;
   deleteChecklistTemplate: (id: string) => void;
 
-  // Patrols
+  // Patrols & Rounds
   patrolLogs: PatrolLog[];
   addPatrolLog: (log: Omit<PatrolLog, 'id' | 'synced' | 'guardId' | 'guardName'>) => void;
+  patrolRounds: PatrolRound[];
+  updatePatrolRounds: (rounds: PatrolRound[]) => void;
+  resetPatrolRoundsToDefault: () => void;
+
+  // Shift Reports (ส่งรายงานประจำกะช่วงต่อกะ)
+  shiftReports: ShiftReportLog[];
+  addShiftReportLog: (report: ShiftReportLog) => void;
 
   // Incidents
   incidents: Incident[];
@@ -464,20 +488,43 @@ export const useStore = create<AppState>()(
         }));
       },
 
-      // Patrols
+      // Patrols & Rounds
+      patrolRounds: defaultPatrolRounds,
+      updatePatrolRounds: (rounds) => set({ patrolRounds: rounds }),
+      resetPatrolRoundsToDefault: () => set({ patrolRounds: defaultPatrolRounds }),
+
       patrolLogs: [],
       addPatrolLog: (log) => {
         const user = get().currentUser;
+        const currentRounds = get().patrolRounds || defaultPatrolRounds;
+        const now = log.timestamp ? new Date(log.timestamp) : new Date();
+        const activeRound = getCurrentRound(currentRounds, now);
+        const activeShift = getCurrentShift(now);
+        const onTime = isScanOnTime(now.toISOString(), activeRound);
+
         const newLog: PatrolLog = {
           ...log,
           id: 'patrol-' + Date.now(),
           guardId: user?.id || 'unknown',
           guardName: user?.name || 'รปภ. เวร',
+          roundId: log.roundId || activeRound.id,
+          roundName: log.roundName || activeRound.name,
+          shift: log.shift || activeShift.id,
+          isOnTime: log.isOnTime !== undefined ? log.isOnTime : onTime,
           synced: true
         };
         savePatrolLogToCloud(newLog);
         set((state) => ({
           patrolLogs: [newLog, ...state.patrolLogs]
+        }));
+      },
+
+      // Shift Reports
+      shiftReports: [],
+      addShiftReportLog: (report) => {
+        saveShiftReportToCloud(report);
+        set((state) => ({
+          shiftReports: [report, ...state.shiftReports.filter((r) => r.id !== report.id)]
         }));
       },
 

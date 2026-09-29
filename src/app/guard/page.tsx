@@ -14,10 +14,19 @@ import {
   ChevronRight, 
   Radio, 
   CheckCircle2, 
-  Search
+  Search,
+  Send,
+  FileText
 } from "lucide-react";
 import Link from "next/link";
 import HospitalBrand from "@/components/HospitalBrand";
+import ShiftReportModal from "@/components/ShiftReportModal";
+import { 
+  getCurrentRound, 
+  getRoundProgress, 
+  getCurrentShift, 
+  defaultPatrolRounds 
+} from "@/lib/patrolSchedule";
 
 export default function GuardPage() {
   const { 
@@ -26,12 +35,14 @@ export default function GuardPage() {
     logoutGuard, 
     patrolLogs, 
     checkpoints, 
-    parkingScans
+    parkingScans,
+    patrolRounds
   } = useStore();
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [isOnline, setIsOnline] = useState(true);
   const [currentTime, setCurrentTime] = useState("");
+  const [showShiftReportModal, setShowShiftReportModal] = useState(false);
 
   useEffect(() => {
     setIsOnline(navigator.onLine);
@@ -87,8 +98,13 @@ export default function GuardPage() {
     }
   };
 
-  const completedIds = new Set(patrolLogs.map((log) => log.checkpointId));
-  const progressPercent = Math.round((completedIds.size / Math.max(checkpoints.length, 1)) * 100);
+  const rounds = (patrolRounds && patrolRounds.length > 0) ? patrolRounds : defaultPatrolRounds;
+  const now = new Date();
+  const activeRound = getCurrentRound(rounds, now);
+  const activeShift = getCurrentShift(now);
+  const roundProgress = getRoundProgress(activeRound, checkpoints, patrolLogs, now);
+  const progressPercent = roundProgress.percent;
+  const completedInRound = roundProgress.completedCount;
 
   // 1. PIN LOGIN SCREEN FOR GUARDS (LIGHT MEDICAL THEME)
   if (!currentUser) {
@@ -239,28 +255,82 @@ export default function GuardPage() {
           </div>
         )}
 
-        {/* Patrol Progress Quick Widget */}
+        {/* Patrol Progress Quick Widget (เฉพาะรอบปัจจุบัน ไม่ทะลุ 100%) */}
         <div className="p-5 bg-white border border-sky-100 rounded-3xl shadow-sm space-y-3">
           <div className="flex justify-between items-start">
             <div>
-              <span className="text-xs font-semibold uppercase tracking-wider text-sky-600">ความคืบหน้ารอบเวร</span>
-              <h2 className="text-lg font-black text-slate-900 mt-0.5">เดินตรวจ {checkpoints.length} จุดตรวจความปลอดภัย</h2>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-semibold uppercase tracking-wider text-sky-600">
+                  รอบตรวจปัจจุบัน • {activeShift.name}
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-800">
+                  {activeRound.frequencyHours === 3 ? "ทุก 3 ชม." : "ทุก 2 ชม."}
+                </span>
+              </div>
+              <h2 className="text-lg font-black text-slate-900 mt-0.5">{activeRound.name}</h2>
+              <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                <Clock className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                <span>กำหนดเสร็จภายใน: <strong className="text-slate-800 font-bold">{activeRound.deadlineTime} น.</strong> (1 ชม. แรก)</span>
+              </p>
             </div>
             <div className="text-right">
-              <span className="text-2xl font-black text-sky-600">{progressPercent}%</span>
-              <p className="text-[11px] text-slate-400">{completedIds.size}/{checkpoints.length} จุด</p>
+              <span className={`text-2xl font-black ${progressPercent === 100 ? "text-emerald-600" : "text-sky-600"}`}>
+                {progressPercent}%
+              </span>
+              <p className="text-[11px] text-slate-400 font-bold">
+                {completedInRound}/{checkpoints.length} จุด
+              </p>
             </div>
           </div>
           <div className="w-full bg-slate-100 rounded-full h-3 p-0.5 border border-slate-200">
             <div
-              className="bg-gradient-to-r from-sky-500 to-blue-600 h-full rounded-full transition-all duration-700 shadow-xs"
+              className={`h-full rounded-full transition-all duration-700 shadow-xs ${
+                progressPercent === 100
+                  ? "bg-gradient-to-r from-emerald-500 to-teal-600"
+                  : "bg-gradient-to-r from-sky-500 to-blue-600"
+              }`}
               style={{ width: `${Math.max(progressPercent, 4)}%` }}
             />
           </div>
+          {progressPercent === 100 ? (
+            <p className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5" /> ตรวจครบถ้วนตามเกณฑ์รอบนี้แล้ว ✅
+            </p>
+          ) : (
+            <p className="text-[11px] text-slate-400">
+              เหลืออีก {Math.max(checkpoints.length - completedInRound, 0)} จุดตรวจในรอบนี้
+            </p>
+          )}
         </div>
 
         {/* Guard Task Menu */}
         <div className="space-y-3">
+
+          {/* DEDICATED FEATURE: SHIFT HANDOVER REPORT (LINE GROUP) */}
+          <button
+            onClick={() => setShowShiftReportModal(true)}
+            className="w-full text-left p-4 bg-gradient-to-r from-emerald-600 via-teal-600 to-sky-700 hover:from-emerald-500 hover:to-sky-600 text-white rounded-2xl transition-all shadow-md shadow-emerald-700/20 active:scale-[0.98] border border-emerald-400/40 cursor-pointer"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-white/20 text-white flex items-center justify-center shadow-xs">
+                  <Send className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-black text-white text-base">📤 ส่งออกรายงานประจำกะ (LINE กลุ่ม)</h3>
+                    <span className="text-[10px] bg-white text-emerald-800 px-2 py-0.5 rounded-full font-bold">
+                      ช่วงต่อกะ
+                    </span>
+                  </div>
+                  <p className="text-xs text-emerald-100 mt-0.5">
+                    บันทึกภาพสรุปผลงานส่งเข้ากลุ่มไลน์ รปภ. • ระบุชื่อและกะอัตโนมัติ
+                  </p>
+                </div>
+              </div>
+              <ChevronRight className="w-5 h-5 text-white/80 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </button>
 
           <Link
             href="/patrol"
@@ -368,6 +438,11 @@ export default function GuardPage() {
         </span>
       </footer>
 
-          </div>
+      {/* Modal: Shift Handover Report (ส่งไลน์กลุ่ม) */}
+      <ShiftReportModal
+        isOpen={showShiftReportModal}
+        onClose={() => setShowShiftReportModal(false)}
+      />
+    </div>
   );
 }

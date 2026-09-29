@@ -21,6 +21,7 @@ import {
   StaffVehicle,
   ChecklistTemplate,
   ArchiveAuditLog,
+  ShiftReportLog,
   initialCheckpoints,
   initialChecklistTemplates,
   initialGuards,
@@ -203,6 +204,15 @@ export async function fetchArchiveAuditLogsFromCloud(): Promise<ArchiveAuditLog[
   } catch (err) {
     console.warn("Fetch archiveAuditLogs notice:", err);
     return [];
+  }
+}
+
+export async function saveShiftReportToCloud(report: ShiftReportLog) {
+  try {
+    const docRef = doc(db, "shiftReports", report.id);
+    await setDoc(docRef, report);
+  } catch (err) {
+    console.warn("Cloud save shiftReport failed:", err);
   }
 }
 

@@ -107,6 +107,17 @@ export function useFirebaseSync() {
       console.warn("Staff vehicles sync notice:", err.message);
     });
 
+    // 8. Real-time Listener: Shift Handover Reports
+    const unsubShiftReports = onSnapshot(collection(db, "shiftReports"), (snapshot) => {
+      if (!snapshot.empty) {
+        const cloudReports = snapshot.docs.map(doc => doc.data() as any);
+        cloudReports.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        useStore.setState({ shiftReports: cloudReports });
+      }
+    }, (err) => {
+      console.warn("Shift reports sync notice:", err.message);
+    });
+
     return () => {
       unsubPatrol();
       unsubParking();
@@ -114,6 +125,7 @@ export function useFirebaseSync() {
       unsubCheckpoints();
       unsubArchive();
       unsubVehicles();
+      unsubShiftReports();
     };
   }, []);
 

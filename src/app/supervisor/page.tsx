@@ -59,18 +59,34 @@ import {
   ExternalLink,
   FileText,
   CloudDownload,
-  Database
+  Database,
+  Camera,
+  Save
 } from "lucide-react";
 import Link from "next/link";
 import { useFirebaseSync } from "@/lib/useFirebaseSync";
 import HospitalBrand from "@/components/HospitalBrand";
 import PrintQRModal from "@/components/PrintQRModal";
 import { getThaiFiscalYear, isOlderThanDays, formatThaiDateTime } from "@/lib/fiscalYear";
+import { 
+  defaultPatrolRounds, 
+  hospitalShifts, 
+  getCurrentRound, 
+  getCurrentShift, 
+  getRoundProgress, 
+  calculateShiftKPIs, 
+  calculateGuardKPIs,
+  PatrolRound 
+} from "@/lib/patrolSchedule";
 
 export default function SupervisorPage() {
   const { 
     supervisorUser, 
     patrolLogs, 
+    patrolRounds,
+    updatePatrolRounds,
+    resetPatrolRoundsToDefault,
+    shiftReports,
     parkingScans, 
     checkpoints, 
     addCheckpoint,
@@ -106,9 +122,14 @@ export default function SupervisorPage() {
 
   const { isConnected: isCloudConnected } = useFirebaseSync();
 
-  const [activeTab, setActiveTab] = useState<"overview" | "checkpoints" | "staff" | "vehicles" | "incidents" | "ai" | "archive">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "rounds" | "checkpoints" | "staff" | "vehicles" | "incidents" | "ai" | "archive">("overview");
   const [lineSent, setLineSent] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
+
+  // Rounds Config & Photo Modal State
+  const [showRoundsConfigModal, setShowRoundsConfigModal] = useState(false);
+  const [tempRounds, setTempRounds] = useState<PatrolRound[]>([]);
+  const [selectedPhotoModal, setSelectedPhotoModal] = useState<{ url: string; title: string; timestamp?: string } | null>(null);
 
   // Google Drive Webhook Test State
   const [testDriveLoading, setTestDriveLoading] = useState(false);
@@ -767,6 +788,34 @@ export default function SupervisorPage() {
   const issuesFound = patrolLogs.filter((l) => l.status === "issue").length;
   const unknownCars = parkingScans.filter((s) => !s.isStaff).length;
 
+  // Patrol Rounds & Shift KPI Calculations
+  const supervisorRounds = (patrolRounds && patrolRounds.length > 0) ? patrolRounds : defaultPatrolRounds;
+  const supervisorNow = new Date();
+  const currentActiveRound = getCurrentRound(supervisorRounds, supervisorNow);
+  const currentActiveShift = getCurrentShift(supervisorNow);
+  const shiftKPIs = calculateShiftKPIs(supervisorRounds, checkpoints, patrolLogs, shiftReports || [], supervisorNow);
+  const guardKPIs = calculateGuardKPIs(onlyGuards, supervisorRounds, checkpoints, patrolLogs, shiftReports || [], supervisorNow);
+  const allRoundsProgress = supervisorRounds.map((r) => getRoundProgress(r, checkpoints, patrolLogs, supervisorNow));
+  const todayDateStr = supervisorNow.toISOString().split("T")[0];
+  const todayPhotosLogs = patrolLogs.filter((l) => !!l.imageUrl && l.timestamp?.startsWith(todayDateStr));
+
+  const handleOpenRoundsConfig = () => {
+    setTempRounds(JSON.parse(JSON.stringify(supervisorRounds)));
+    setShowRoundsConfigModal(true);
+  };
+
+  const handleSaveRoundsConfig = () => {
+    updatePatrolRounds(tempRounds);
+    setShowRoundsConfigModal(false);
+  };
+
+  const handleResetRounds = () => {
+    if (confirm("ต้องการคืนค่ามาตรฐานรอบตรวจ รพ.พล (10 รอบ: กลางวันทุก 3 ชม., กลางคืนทุก 2 ชม.) ใช่หรือไม่?")) {
+      resetPatrolRoundsToDefault();
+      setShowRoundsConfigModal(false);
+    }
+  };
+
   // 365-Day Archival Calculations
   const currentFiscalYear = getThaiFiscalYear(new Date());
   const filterByArchiveCriteria = (item: { timestamp: string }) => {
@@ -836,6 +885,7 @@ export default function SupervisorPage() {
         <div className="max-w-7xl mx-auto flex gap-2 overflow-x-auto py-2">
           {[
             { id: "overview", label: "ภาพรวม & KPI", icon: Award },
+            { id: "rounds", label: `⏰ รอบตรวจ & KPI (${(patrolRounds && patrolRounds.length) || 10} รอบ)`, icon: Clock },
             { id: "checkpoints", label: `จัดการจุดตรวจ (${checkpoints.length})`, icon: CheckSquare },
             { id: "staff", label: `จัดการพนักงาน รปภ. (${onlyGuards.length})`, icon: Users },
             { id: "vehicles", label: `รถบุคลากร (${staffVehicles.length})`, icon: Car },
@@ -930,7 +980,498 @@ export default function SupervisorPage() {
           </div>
         )}
 
-        {/* TAB 2: CHECKPOINTS MANAGEMENT */}
+        {/* TAB 2: PATROL ROUNDS & SHIFT KPI MANAGEMENT */}
+        {activeTab === "rounds" && (
+          <div className="space-y-6">
+            {/* Top Config & Policy Summary Card */}
+            <div className="bg-gradient-to-r from-slate-900 via-sky-950 to-blue-950 text-white rounded-3xl p-6 shadow-md border border-sky-900/60 relative overflow-hidden">
+              <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider bg-sky-500/20 text-sky-300 border border-sky-500/30 px-2.5 py-0.5 rounded-full">
+                      Hospital Patrol Schedule & KPIs
+                    </span>
+                    <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-0.5 rounded-full">
+                      10 รอบตรวจ / วัน
+                    </span>
+                  </div>
+                  <h2 className="text-xl font-black mt-2 text-white flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-sky-400" />
+                    ระบบบริหารจัดการรอบเดินตรวจ & KPI ประจำกะ (รพ.พล)
+                  </h2>
+                  <p className="text-xs text-sky-200/80 mt-1 max-w-3xl leading-relaxed">
+                    แบ่งช่วง 12 ชม./12 ชม. (กลางวัน 08:00 - 20:00 น. ทุก 3 ชม. • กลางคืน 20:00 - 08:00 น. ทุก 2 ชม.) สอดคล้อง 3 กะ รพ.พล • กฎทองตรวจเสร็จใน 1 ชม. แรก • GPS Geofence 30 ม. • ถ่ายรูปยืนยันทุกจุด
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <button
+                    onClick={handleOpenRoundsConfig}
+                    className="px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center gap-2 shadow-xs active:scale-95 transition-all cursor-pointer"
+                  >
+                    <Edit2 className="w-4 h-4" /> ปรับแต่งเวลา / รอบตรวจ
+                  </button>
+                  <button
+                    onClick={handleResetRounds}
+                    className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center gap-2 active:scale-95 transition-all cursor-pointer"
+                  >
+                    <RefreshCw className="w-4 h-4 text-sky-300" /> คืนค่ามาตรฐาน รพ.พล
+                  </button>
+                </div>
+              </div>
+
+              {/* Policy Badges */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5 pt-4 border-t border-white/10 text-xs">
+                <div className="bg-white/5 rounded-2xl p-3 border border-white/10">
+                  <span className="text-sky-300 text-[11px] block">☀️ กลางวัน (08:00 - 20:00)</span>
+                  <strong className="text-white text-base">ทุก 3 ชั่วโมง</strong>
+                  <span className="text-slate-400 text-[10px] block mt-0.5">4 รอบ (กะเช้า & กะบ่าย)</span>
+                </div>
+                <div className="bg-white/5 rounded-2xl p-3 border border-white/10">
+                  <span className="text-indigo-300 text-[11px] block">🌙 กลางคืน (20:00 - 08:00)</span>
+                  <strong className="text-white text-base">ทุก 2 ชั่วโมง</strong>
+                  <span className="text-slate-400 text-[10px] block mt-0.5">6 รอบ (กะบ่าย & กะดึก)</span>
+                </div>
+                <div className="bg-white/5 rounded-2xl p-3 border border-white/10">
+                  <span className="text-amber-300 text-[11px] block">⏰ กฎทอง 1 ชม. แรก</span>
+                  <strong className="text-white text-base">เสร็จใน 1 ชม.</strong>
+                  <span className="text-slate-400 text-[10px] block mt-0.5">เช่น 08:00 ต้องเสร็จ 09:00</span>
+                </div>
+                <div className="bg-white/5 rounded-2xl p-3 border border-white/10">
+                  <span className="text-emerald-300 text-[11px] block">📍 GPS & ภาพถ่าย</span>
+                  <strong className="text-white text-base">ไม่เกิน 30 ม.</strong>
+                  <span className="text-slate-400 text-[10px] block mt-0.5">บังคับแนบรูป 1 รูป/จุด</span>
+                </div>
+              </div>
+            </div>
+
+            {/* SECTION 2: SHIFT HANDOVER AUDIT (จับคนส่งรายงาน / คนอู้) */}
+            <div className="bg-white border border-sky-100 rounded-3xl p-6 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2">
+                      <Send className="w-5 h-5 text-emerald-600" />
+                      การติดตามการส่งมอบเวรประจำกะ (Shift Handover Audit)
+                    </h3>
+                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                      จับคนส่ง / คนอู้
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    ตรวจสอบว่า รปภ. ในแต่ละกะได้กดส่งออกรายงานสรุปประจำกะเข้า LINE กลุ่มหรือไม่ เพื่อประเมินความรับผิดชอบช่วงต่อกะ
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {shiftKPIs.map((shiftData, idx) => {
+                  const shift = shiftData.shift;
+                  const isSubmitted = shiftData.hasSubmittedReport;
+                  const handoverHour = parseInt(shift.handoverTime.split(":")[0]);
+                  const currentHour = supervisorNow.getHours();
+                  // กะถือว่าเลยกำหนดส่งหากเวลาปัจจุบันเลยเวลาเปลี่ยนกะมาแล้ว
+                  const isPastHandover = shift.id === "morning"
+                    ? currentHour >= 16
+                    : shift.id === "afternoon"
+                    ? currentHour >= 24 || currentHour < 8
+                    : currentHour >= 8 && currentHour < 16;
+
+                  const isSlacking = !isSubmitted && isPastHandover;
+
+                  return (
+                    <div
+                      key={idx}
+                      className={`p-4 rounded-2xl border transition-all ${
+                        isSubmitted
+                          ? "bg-emerald-50/70 border-emerald-300"
+                          : isSlacking
+                          ? "bg-rose-50 border-rose-300 ring-2 ring-rose-200"
+                          : "bg-slate-50 border-slate-200"
+                      }`}
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <span className="font-bold text-slate-900 text-sm">{shift.name}</span>
+                          <span className="text-[11px] text-slate-500 block">{shift.timeRange}</span>
+                        </div>
+                        {isSubmitted ? (
+                          <span className="px-2.5 py-0.5 rounded-full bg-emerald-600 text-white font-bold text-[10px] flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3" /> ส่งรายงานแล้ว
+                          </span>
+                        ) : isSlacking ? (
+                          <span className="px-2.5 py-0.5 rounded-full bg-rose-600 text-white font-bold text-[10px] flex items-center gap-1 animate-pulse">
+                            <AlertTriangle className="w-3 h-3" /> ขาดส่งรายงาน (อู้)
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-0.5 rounded-full bg-slate-200 text-slate-600 font-bold text-[10px]">
+                            รอส่งมอบเวร
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5 pt-2 border-t border-slate-200/60 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">กำหนดส่งมอบเวร:</span>
+                          <span className="font-bold text-slate-700 font-mono">{shift.handoverTime} น.</span>
+                        </div>
+
+                        {isSubmitted ? (
+                          <>
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">ผู้ส่งรายงาน:</span>
+                              <strong className="text-emerald-800">{shiftData.reportSubmittedBy}</strong>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">เวลาที่ส่งจริง:</span>
+                              <span className="font-mono text-emerald-700 font-semibold">
+                                {shiftData.reportSubmittedAt ? new Date(shiftData.reportSubmittedAt).toLocaleTimeString("th-TH") : "-"} น.
+                              </span>
+                            </div>
+                            <div className="p-2 bg-white rounded-xl border border-emerald-200 text-[11px] text-emerald-900 mt-2">
+                              ✅ บันทึกหลักฐานเรียบร้อย คะแนนความรับผิดชอบ 100%
+                            </div>
+                          </>
+                        ) : isSlacking ? (
+                          <div className="p-2.5 bg-white rounded-xl border border-rose-300 text-[11px] text-rose-800 space-y-1 mt-2">
+                            <p className="font-bold">⚠️ เลยเวลาส่งมอบเวร {shift.handoverTime} น. แล้ว</p>
+                            <p className="text-rose-600">ไม่มี รปภ. คนใดในกะนี้กดส่งออกรายงานสรุปงาน</p>
+                          </div>
+                        ) : (
+                          <div className="p-2 bg-white rounded-xl border border-slate-200 text-[11px] text-slate-500 text-center mt-2">
+                            ⚪ กะยังไม่สิ้นสุด ระบบจะเปิดรับรายงานช่วงต่อกะ
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* SECTION 1: DAILY 10 ROUNDS MONITOR */}
+            <div className="bg-white border border-sky-100 rounded-3xl p-6 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-sky-600" />
+                    ตารางมอนิเตอร์ 10 รอบตรวจประจำวัน (Daily Patrol Rounds)
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    แสดงสถานะการตรวจจริงแบบเรียลไทม์ ตรวจสอบการตรวจตรงเวลาภายใน 1 ชั่วโมงแรก
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold">
+                    ตรงเวลา 100% ✅
+                  </span>
+                  <span className="px-2.5 py-1 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 font-bold">
+                    ครบแต่ล่าช้า ⚠️
+                  </span>
+                  <span className="px-2.5 py-1 rounded-xl bg-sky-50 text-sky-800 border border-sky-200 font-bold">
+                    กำลังตรวจ 🟡
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3.5">
+                {allRoundsProgress.map((item, idx) => {
+                  const r = item.round;
+                  return (
+                    <div
+                      key={r.id}
+                      className={`p-4 rounded-2xl border transition-all flex flex-col justify-between ${
+                        item.status === "completed_ontime"
+                          ? "bg-emerald-50/70 border-emerald-300"
+                          : item.status === "completed_late"
+                          ? "bg-amber-50/70 border-amber-300"
+                          : item.status === "active"
+                          ? "bg-sky-50 border-sky-400 ring-2 ring-sky-200"
+                          : item.status === "missed"
+                          ? "bg-rose-50 border-rose-300"
+                          : "bg-slate-50 border-slate-200"
+                      }`}
+                    >
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-start">
+                          <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-800">
+                            {r.id}
+                          </span>
+                          <span className="text-[10px] font-semibold text-slate-500">
+                            {r.shift === "morning" ? "☀️ กะเช้า" : r.shift === "afternoon" ? "⛅ กะบ่าย" : "🌙 กะดึก"}
+                          </span>
+                        </div>
+
+                        <div>
+                          <strong className="text-sm font-black text-slate-900 block">{r.name}</strong>
+                          <span className="text-[11px] text-slate-500 block">
+                            ⏰ เส้นตาย 1 ชม.: <strong className="text-slate-800">{r.deadlineTime} น.</strong>
+                          </span>
+                        </div>
+
+                        {/* Progress Bar */}
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-[11px]">
+                            <span className="text-slate-500">จุดที่ตรวจ:</span>
+                            <span className="font-bold font-mono text-slate-800">
+                              {item.completedCount}/{checkpoints.length} จุด
+                            </span>
+                          </div>
+                          <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${
+                                item.status === "completed_ontime"
+                                  ? "bg-emerald-500"
+                                  : item.status === "completed_late"
+                                  ? "bg-amber-500"
+                                  : "bg-sky-500"
+                              }`}
+                              style={{ width: `${item.percent}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Status Chip */}
+                        <div>
+                          {item.status === "completed_ontime" && (
+                            <span className="inline-block px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 font-bold text-[10px]">
+                              ✅ ตรวจตรงเวลา 100%
+                            </span>
+                          )}
+                          {item.status === "completed_late" && (
+                            <span className="inline-block px-2.5 py-1 rounded-lg bg-amber-100 text-amber-800 font-bold text-[10px]">
+                              ⚠️ ครบแต่ล่าช้า (เกิน 1 ชม.)
+                            </span>
+                          )}
+                          {item.status === "active" && (
+                            <span className="inline-block px-2.5 py-1 rounded-lg bg-sky-100 text-sky-800 font-bold text-[10px] animate-pulse">
+                              🟡 กำลังตรวจอยู่ขณะนี้
+                            </span>
+                          )}
+                          {item.status === "missed" && (
+                            <span className="inline-block px-2.5 py-1 rounded-lg bg-rose-100 text-rose-800 font-bold text-[10px]">
+                              ❌ ขาดตรวจ (ไม่ครบ)
+                            </span>
+                          )}
+                          {item.status === "upcoming" && (
+                            <span className="inline-block px-2.5 py-1 rounded-lg bg-slate-200 text-slate-600 text-[10px]">
+                              ⚪ ยังไม่ถึงเวลาตรวจ
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Guards who scanned */}
+                      <div className="pt-2 mt-2 border-t border-slate-200/60 text-[10px] text-slate-500">
+                        {item.guards.length > 0 ? (
+                          <span>รปภ.: <strong className="text-slate-800">{item.guards.join(", ")}</strong></span>
+                        ) : (
+                          <span>ยังไม่มีบันทึก</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* SECTION 3: SHIFT PERFORMANCE COMPARISON */}
+            <div className="bg-white border border-sky-100 rounded-3xl p-6 shadow-xs space-y-4">
+              <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2">
+                <Award className="w-5 h-5 text-sky-600" />
+                เปรียบเทียบ KPI ประสิทธิภาพการเดินตรวจ 3 กะ (Shift Performance)
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {shiftKPIs.map((shiftData, idx) => {
+                  return (
+                    <div key={idx} className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="font-black text-slate-900 text-base">{shiftData.shift.name}</span>
+                        <span className="text-xs font-semibold text-slate-500">{shiftData.shift.timeRange}</span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-center">
+                        <div className="p-3 bg-white rounded-xl border border-slate-200">
+                          <span className="text-[10px] text-slate-500 block">ตรวจครบถ้วน</span>
+                          <span className="text-2xl font-black text-sky-700">{shiftData.complianceRate}%</span>
+                        </div>
+                        <div className="p-3 bg-white rounded-xl border border-slate-200">
+                          <span className="text-[10px] text-slate-500 block">ตรงเวลา (1 ชม.)</span>
+                          <span className="text-2xl font-black text-emerald-600">{shiftData.onTimeRate}%</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1 text-xs text-slate-600 pt-2 border-t border-slate-200">
+                        <div className="flex justify-between">
+                          <span>จำนวนรอบในกะ:</span>
+                          <strong className="text-slate-800">{shiftData.totalRounds} รอบ</strong>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>รอบที่ตรวจครบ:</span>
+                          <strong className="text-emerald-700">{shiftData.completedRounds} / {shiftData.totalRounds}</strong>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>ข้อบกพร่องที่พบ:</span>
+                          <strong className={shiftData.totalIssues > 0 ? "text-rose-600" : "text-emerald-700"}>
+                            {shiftData.totalIssues} จุด
+                          </strong>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>ส่งมอบรายงานกะ:</span>
+                          <strong className={shiftData.hasSubmittedReport ? "text-emerald-700" : "text-rose-600"}>
+                            {shiftData.hasSubmittedReport ? "ส่งแล้ว ✅" : "ยังไม่ส่ง ⚠️"}
+                          </strong>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* SECTION 4: INDIVIDUAL GUARD KPIS (ประเมินพนักงาน รปภ. 5 นาย) */}
+            <div className="bg-white border border-sky-100 rounded-3xl p-6 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2">
+                    <Users className="w-5 h-5 text-indigo-600" />
+                    KPI ผลงานรายบุคคล (ประเมินพนักงาน รปภ. {onlyGuards.length} นาย)
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    ติดตามสถิติการเดินตรวจจริง อัตราตรวจตรงเวลา 1 ชม. แรก และการส่งมอบงานประจำกะ
+                  </p>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left">
+                  <thead className="bg-slate-50 text-slate-600 font-bold border-y border-slate-200">
+                    <tr>
+                      <th className="py-3 px-3">ชื่อ - สกุล รปภ.</th>
+                      <th className="py-3 px-3 text-center">สแกนจุดตรวจ</th>
+                      <th className="py-3 px-3 text-center">รอบที่ตรวจ</th>
+                      <th className="py-3 px-3 text-center">ตรงเวลา (1 ชม.)</th>
+                      <th className="py-3 px-3 text-center bg-indigo-50/60 text-indigo-900">
+                        ส่งรายงานกะ (ครั้ง)
+                      </th>
+                      <th className="py-3 px-3 text-center">รูปถ่ายจุดตรวจ</th>
+                      <th className="py-3 px-3 text-center">ปัญหาที่แจ้ง</th>
+                      <th className="py-3 px-3 text-center">เกรดประเมิน</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {guardKPIs.map((gData) => {
+                      return (
+                        <tr key={gData.guard.id} className="hover:bg-sky-50/40 transition-colors">
+                          <td className="py-3 px-3">
+                            <span className="font-bold text-slate-900 block">{gData.guard.name}</span>
+                            <span className="text-[10px] text-slate-400 font-mono">PIN: {gData.guard.pin} • {gData.guard.phone}</span>
+                          </td>
+                          <td className="py-3 px-3 text-center font-bold font-mono text-slate-800">
+                            {gData.checkpointsScanned} จุด
+                          </td>
+                          <td className="py-3 px-3 text-center font-bold text-slate-700">
+                            {gData.roundsInvolved} รอบ
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            <span className={`font-bold font-mono px-2 py-0.5 rounded-full ${
+                              gData.onTimeRate >= 80 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+                            }`}>
+                              {gData.onTimeRate}%
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-center bg-indigo-50/30">
+                            <span className={`font-bold font-mono px-2.5 py-0.5 rounded-full ${
+                              gData.reportsSent > 0 ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-500"
+                            }`}>
+                              {gData.reportsSent} ครั้ง
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-center font-bold text-slate-700">
+                            {gData.photosUploaded} รูป
+                          </td>
+                          <td className="py-3 px-3 text-center font-bold text-slate-700">
+                            {gData.issuesReported} ข้อ
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            {gData.ratingGrade === "A" && (
+                              <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">
+                                ⭐️⭐️⭐️ ดีเยี่ยม
+                              </span>
+                            )}
+                            {gData.ratingGrade === "B" && (
+                              <span className="px-2.5 py-1 rounded-full bg-sky-100 text-sky-800 font-bold text-[10px]">
+                                ⭐️⭐️ ผ่านเกณฑ์
+                              </span>
+                            )}
+                            {gData.ratingGrade === "C" && (
+                              <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 font-semibold text-[10px]">
+                                รอประเมิน
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* SECTION 5: CHECKPOINT PHOTO EVIDENCE GALLERY */}
+            <div className="bg-white border border-sky-100 rounded-3xl p-6 shadow-xs space-y-4">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2">
+                    <Camera className="w-5 h-5 text-sky-600" />
+                    แกลเลอรีรูปถ่ายยืนยันจุดตรวจวันนี้ ({todayPhotosLogs.length} ภาพ)
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    ภาพถ่ายจริงที่ รปภ. ถ่ายส่งมาจากจุดตรวจ พร้อมบันทึกระยะห่าง GPS (แตะเพื่อดูภาพขยาย)
+                  </p>
+                </div>
+              </div>
+
+              {todayPhotosLogs.length === 0 ? (
+                <div className="p-8 border-2 border-dashed border-slate-200 rounded-2xl text-center text-slate-400 text-xs">
+                  ยังไม่มีรูปถ่ายจุดตรวจสำหรับวันนี้ (จะปรากฏขึ้นอัตโนมัติเมื่อ รปภ. สแกนและถ่ายรูป)
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
+                  {todayPhotosLogs.map((log) => {
+                    const cp = checkpoints.find((c) => c.id === log.checkpointId);
+                    return (
+                      <div
+                        key={log.id}
+                        onClick={() => setSelectedPhotoModal({
+                          url: log.imageUrl!,
+                          title: `${cp?.name || "จุดตรวจ"} (${cp?.code || "-"})`,
+                          timestamp: log.timestamp
+                        })}
+                        className="group relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-900 aspect-square cursor-pointer hover:shadow-md transition-all active:scale-95"
+                      >
+                        <img
+                          src={log.imageUrl}
+                          alt="Checkpoint photo"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent flex flex-col justify-end p-2 text-white text-[10px]">
+                          <span className="font-bold truncate">{cp?.code}: {cp?.name}</span>
+                          <span className="text-[9px] text-sky-300 truncate">
+                            {log.guardName} • {log.distanceMeters ?? 0} ม.
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: CHECKPOINTS MANAGEMENT */}
         
         {activeTab === "checkpoints" && (
           <div className="bg-white border border-sky-100 rounded-3xl p-6 shadow-xs space-y-6">
@@ -3606,6 +4147,229 @@ export default function SupervisorPage() {
               >
                 ปิดหน้าต่าง
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CONFIGURE PATROL ROUNDS (ตั้งค่ารอบการเดินตรวจ & ความถี่) */}
+      {showRoundsConfigModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl border border-sky-100 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-start pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-xl bg-sky-100 text-sky-700">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-slate-900">
+                    กำหนดรอบการเดินตรวจและความถี่ (Patrol Rounds Config)
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    กำหนดช่วงเวลาตรวจและเส้นตาย 1 ชม. แรก (กลางวันทุก 3 ชม. / กลางคืนทุก 2 ชม.)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRoundsConfigModal(false)}
+                className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto py-4 space-y-3">
+              <div className="p-3 bg-sky-50 rounded-2xl border border-sky-100 text-xs text-sky-800 space-y-1">
+                <p className="font-bold flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-sky-600" /> นโยบาย 10 รอบตรวจ รพ.พล
+                </p>
+                <p className="text-[11px] text-sky-700">
+                  • กลางวัน (08:00 - 20:00): ทุก 3 ชั่วโมง (4 รอบ: 08:00, 11:00, 14:00, 17:00)<br />
+                  • กลางคืน (20:00 - 08:00): ทุก 2 ชั่วโมง (6 รอบ: 20:00, 22:00, 00:00, 02:00, 04:00, 06:00)<br />
+                  • กฎ 1 ชม. แรก: ระบบจะบันทึกสถานะตรงเวลาเมื่อสแกนครบก่อนเวลา Deadline
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                {tempRounds.map((r, index) => {
+                  return (
+                    <div
+                      key={r.id}
+                      className="p-3 rounded-2xl border border-slate-200 bg-slate-50/60 hover:bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <span className="font-mono font-bold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-700">
+                          {r.id}
+                        </span>
+                        <div>
+                          <input
+                            type="text"
+                            value={r.name}
+                            onChange={(e) => {
+                              const updated = [...tempRounds];
+                              updated[index].name = e.target.value;
+                              setTempRounds(updated);
+                            }}
+                            className="font-bold text-slate-900 bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs w-44 focus:outline-sky-500"
+                          />
+                          <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-1.5">
+                            <span>กะ:</span>
+                            <select
+                              value={r.shift}
+                              onChange={(e) => {
+                                const updated = [...tempRounds];
+                                updated[index].shift = e.target.value as any;
+                                setTempRounds(updated);
+                              }}
+                              className="bg-white border border-slate-200 rounded px-1.5 py-0.5 text-[11px] font-semibold"
+                            >
+                              <option value="morning">☀️ เช้า (08-16)</option>
+                              <option value="afternoon">⛅ บ่าย (16-24)</option>
+                              <option value="night">🌙 ดึก (24-08)</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+                        <div className="flex items-center gap-1">
+                          <span className="text-slate-500 text-[11px]">เริ่ม:</span>
+                          <input
+                            type="time"
+                            value={r.startTime}
+                            onChange={(e) => {
+                              const updated = [...tempRounds];
+                              updated[index].startTime = e.target.value;
+                              setTempRounds(updated);
+                            }}
+                            className="bg-white border border-slate-200 rounded-lg px-2 py-1 font-mono text-xs text-slate-800"
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          <span className="text-slate-500 text-[11px]">สิ้นสุดรอบ:</span>
+                          <input
+                            type="time"
+                            value={r.endTime}
+                            onChange={(e) => {
+                              const updated = [...tempRounds];
+                              updated[index].endTime = e.target.value;
+                              setTempRounds(updated);
+                            }}
+                            className="bg-white border border-slate-200 rounded-lg px-2 py-1 font-mono text-xs text-slate-800"
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          <span className="text-rose-600 font-bold text-[11px]">Deadline:</span>
+                          <input
+                            type="time"
+                            value={r.deadlineTime}
+                            onChange={(e) => {
+                              const updated = [...tempRounds];
+                              updated[index].deadlineTime = e.target.value;
+                              setTempRounds(updated);
+                            }}
+                            className="bg-white border border-rose-300 rounded-lg px-2 py-1 font-mono font-bold text-xs text-rose-700 bg-rose-50/30"
+                            title="เส้นตาย 1 ชั่วโมงแรกสำหรับการตรวจให้ครบ"
+                          />
+                        </div>
+
+                        <label className="flex items-center gap-1.5 cursor-pointer ml-1">
+                          <input
+                            type="checkbox"
+                            checked={r.isActive}
+                            onChange={(e) => {
+                              const updated = [...tempRounds];
+                              updated[index].isActive = e.target.checked;
+                              setTempRounds(updated);
+                            }}
+                            className="rounded text-sky-600 focus:ring-sky-500"
+                          />
+                          <span className="text-[11px] font-semibold text-slate-700">เปิดใช้</span>
+                        </label>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={handleResetRounds}
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center gap-2 active:scale-95 transition-all"
+              >
+                <RefreshCw className="w-4 h-4 text-slate-500" /> คืนค่า 10 รอบ รพ.พล
+              </button>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowRoundsConfigModal(false)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs active:scale-95 transition-all"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveRoundsConfig}
+                  className="px-6 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs shadow-xs active:scale-95 transition-all flex items-center gap-2"
+                >
+                  <Save className="w-4 h-4" /> บันทึกการเปลี่ยนแปลง
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: VIEW PHOTO EVIDENCE (ดูรูปถ่ายจุดตรวจขยาย) */}
+      {selectedPhotoModal && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => setSelectedPhotoModal(null)}
+        >
+          <div 
+            className="bg-white rounded-3xl overflow-hidden max-w-lg w-full shadow-2xl flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
+              <div>
+                <h4 className="font-bold text-sm text-white">{selectedPhotoModal.title}</h4>
+                {selectedPhotoModal.timestamp && (
+                  <p className="text-[11px] text-slate-400">
+                    เวลาถ่าย: {new Date(selectedPhotoModal.timestamp).toLocaleString("th-TH")}
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedPhotoModal(null)}
+                className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="bg-black flex items-center justify-center p-2 max-h-[70vh]">
+              <img 
+                src={selectedPhotoModal.url} 
+                alt={selectedPhotoModal.title} 
+                className="max-h-[65vh] w-auto object-contain rounded-xl"
+              />
+            </div>
+            <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-between items-center text-xs">
+              <span className="text-slate-500 text-[11px]">หลักฐานการตรวจยืนยันพิกัด GPS</span>
+              <a
+                href={selectedPhotoModal.url}
+                target="_blank"
+                rel="noreferrer"
+                className="px-3 py-1.5 rounded-lg bg-sky-600 text-white font-bold text-xs hover:bg-sky-500 transition-colors"
+              >
+                เปิดภาพขนาดเต็ม
+              </a>
             </div>
           </div>
         </div>

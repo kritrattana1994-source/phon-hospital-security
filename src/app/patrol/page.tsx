@@ -16,15 +16,26 @@ import {
   Camera,
   ExternalLink,
   LocateFixed,
-  CheckSquare
+  CheckSquare,
+  Image as ImageIcon,
+  Trash2,
+  AlertTriangle,
+  Clock
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import HospitalBrand from "@/components/HospitalBrand";
+import { 
+  calculateDistanceMeters, 
+  getCurrentRound, 
+  isScanOnTime,
+  getCurrentShift,
+  defaultPatrolRounds
+} from "@/lib/patrolSchedule";
 
 export default function PatrolPage() {
   const router = useRouter();
-  const { currentUser, checkpoints, patrolLogs, addPatrolLog } = useStore();
+  const { currentUser, checkpoints, patrolLogs, addPatrolLog, patrolRounds } = useStore();
   const [scanning, setScanning] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [selectedCheckpoint, setSelectedCheckpoint] = useState<Checkpoint | null>(null);
@@ -32,6 +43,11 @@ export default function PatrolPage() {
   const [notes, setNotes] = useState("");
   const [checklistItems, setChecklistItems] = useState<string[]>([]);
   const [checkedMap, setCheckedMap] = useState<Record<string, boolean>>({});
+
+  // Photo state (จุดละ 1 รูป)
+  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Sync checklist items when a checkpoint is selected
   useEffect(() => {
@@ -51,6 +67,8 @@ export default function PatrolPage() {
       setCheckedMap(initialMap);
       setStatus("normal");
       setNotes("");
+      setCapturedPhoto(null);
+      setPhotoError(null);
     }
   }, [selectedCheckpoint]);
 
@@ -65,6 +83,55 @@ export default function PatrolPage() {
       }
       return next;
     });
+  };
+
+  // จัดการการถ่ายรูป/อัปโหลดภาพประจำจุดตรวจ พร้อมบีบอัดรูปภาพ
+  const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new (window as any).Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const maxDim = 800;
+        let w = img.width;
+        let h = img.height;
+        if (w > h && w > maxDim) {
+          h = Math.round((h * maxDim) / w);
+          w = maxDim;
+        } else if (h > maxDim) {
+          w = Math.round((w * maxDim) / h);
+          h = maxDim;
+        }
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, w, h);
+          const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.7);
+          setCapturedPhoto(compressedDataUrl);
+          setPhotoError(null);
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // จำลองเดินมาที่จุดตรวจนี้ (สำหรับทดสอบในคอมพิวเตอร์)
+  const handleSimulateAtCheckpoint = () => {
+    if (selectedCheckpoint?.coords) {
+      setGpsLocation({
+        lat: selectedCheckpoint.coords.lat + 0.00002, // ~2 เมตร
+        lng: selectedCheckpoint.coords.lng + 0.00002,
+        accuracy: 3.5,
+        timestamp: new Date().toLocaleTimeString("th-TH"),
+        isReal: true,
+      });
+      setGpsLocked(true);
+    }
   };
 
   // GPS Location State
@@ -192,35 +259,68 @@ export default function PatrolPage() {
     }, 600);
   };
 
-  const handleSubmit = () => {
-    if (selectedCheckpoint) {
-      const failedItems = checklistItems.filter((item) => checkedMap[item] === false);
-      let resolvedNotes = notes.trim();
-      if (!resolvedNotes) {
-        if (status === "issue" && failedItems.length > 0) {
-          resolvedNotes = `พบปัญหา: ${failedItems.join(", ")}`;
-        } else if (status === "normal") {
-          resolvedNotes = `ตรวจเช็กเรียบร้อยปกติครบถ้วน (${checklistItems.length} รายการ)`;
-        } else {
-          resolvedNotes = "พบสิ่งผิดปกติหน้างาน";
-        }
-      }
+  const rounds = (patrolRounds && patrolRounds.length > 0) ? patrolRounds : defaultPatrolRounds;
+  const now = new Date();
+  const activeRound = getCurrentRound(rounds, now);
+  const activeShift = getCurrentShift(now);
 
-      addPatrolLog({
-        checkpointId: selectedCheckpoint.id,
-        timestamp: new Date().toISOString(),
-        status,
-        notes: resolvedNotes,
-        coords: {
-          lat: gpsLocation.lat,
-          lng: gpsLocation.lng,
-          accuracy: gpsLocation.accuracy,
-        },
-      });
-      setSelectedCheckpoint(null);
-      setStatus("normal");
-      setNotes("");
+  const handleSubmit = () => {
+    if (!selectedCheckpoint) return;
+
+    // ตรวจสอบระยะพิกัด GPS เทียบกับจุดตรวจจริง (ระยะไม่เกิน 30 เมตร)
+    const distance = (selectedCheckpoint.coords && gpsLocation)
+      ? calculateDistanceMeters(gpsLocation.lat, gpsLocation.lng, selectedCheckpoint.coords.lat, selectedCheckpoint.coords.lng)
+      : 0;
+
+    if (distance > 30) {
+      alert(`⚠️ อยู่นอกระยะจุดตรวจ! คุณอยู่ห่างจากจุดตรวจ ${distance} เมตร (กำหนดไม่เกิน 30 ม.) ต้องเดินเข้าไปใกล้จุดตรวจเพื่อเช็คอิน`);
+      return;
     }
+
+    // บังคับถ่ายรูป 1 รูป
+    if (!capturedPhoto) {
+      setPhotoError("กรุณาถ่ายรูปจุดตรวจ 1 รูปเพื่อยืนยันการปฏิบัติงาน");
+      return;
+    }
+
+    const failedItems = checklistItems.filter((item) => checkedMap[item] === false);
+    let resolvedNotes = notes.trim();
+    if (!resolvedNotes) {
+      if (status === "issue" && failedItems.length > 0) {
+        resolvedNotes = `พบปัญหา: ${failedItems.join(", ")}`;
+      } else if (status === "normal") {
+        resolvedNotes = `ตรวจเช็กเรียบร้อยปกติครบถ้วน (${checklistItems.length} รายการ)`;
+      } else {
+        resolvedNotes = "พบสิ่งผิดปกติหน้างาน";
+      }
+    }
+
+    const scanTimeIso = new Date().toISOString();
+    const onTime = isScanOnTime(scanTimeIso, activeRound);
+
+    addPatrolLog({
+      checkpointId: selectedCheckpoint.id,
+      timestamp: scanTimeIso,
+      status,
+      notes: resolvedNotes,
+      coords: {
+        lat: gpsLocation.lat,
+        lng: gpsLocation.lng,
+        accuracy: gpsLocation.accuracy,
+      },
+      roundId: activeRound.id,
+      roundName: activeRound.name,
+      shift: activeShift.id,
+      imageUrl: capturedPhoto,
+      distanceMeters: distance,
+      isOnTime: onTime,
+    });
+
+    setSelectedCheckpoint(null);
+    setStatus("normal");
+    setNotes("");
+    setCapturedPhoto(null);
+    setPhotoError(null);
   };
 
   return (
@@ -243,6 +343,22 @@ export default function PatrolPage() {
       </header>
 
       <main className="flex-1 p-4 space-y-4 overflow-y-auto">
+        {/* Active Patrol Round & 1-Hour Deadline Banner */}
+        <div className="p-3 bg-gradient-to-r from-sky-600 to-blue-700 text-white rounded-2xl shadow-xs flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-sky-200 shrink-0" />
+            <div>
+              <span className="font-bold">{activeRound.name} • {activeShift.name}</span>
+              <span className="text-[10px] text-sky-100 block">
+                กฎทอง: ต้องตรวจเสร็จภายใน <strong>{activeRound.deadlineTime} น.</strong>
+              </span>
+            </div>
+          </div>
+          <span className="px-2 py-0.5 rounded-full bg-white/20 text-white font-bold text-[10px]">
+            {activeRound.frequencyHours === 3 ? "ทุก 3 ชม." : "ทุก 2 ชม."}
+          </span>
+        </div>
+
         {/* Live GPS Verification Card */}
         <div className="p-4 bg-white border border-sky-200 rounded-3xl shadow-xs space-y-2">
           <div className="flex items-center justify-between">
@@ -380,21 +496,67 @@ export default function PatrolPage() {
               </button>
             </div>
 
-            {/* GPS Location Proof Card */}
-            <div className="p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-2xl space-y-1.5 text-xs text-emerald-900">
-              <div className="flex items-center justify-between font-bold">
-                <span className="flex items-center gap-1.5 text-emerald-800">
-                  <MapPin className="w-4 h-4 text-emerald-600" /> บันทึกพิกัด GPS ณ เวลาเข้าตรวจ:
-                </span>
-                <span className="text-[10px] text-emerald-700 font-mono">
-                  {gpsLocation.timestamp}
-                </span>
-              </div>
-              <div className="font-mono text-emerald-800 text-[11px] bg-white p-2 rounded-xl border border-emerald-200 flex justify-between">
-                <span>📍 {gpsLocation.lat.toFixed(6)}, {gpsLocation.lng.toFixed(6)}</span>
-                <span className="text-emerald-700 font-semibold">ถูกต้องตามจุดตรวจ ✅</span>
-              </div>
-            </div>
+            {/* GPS Location & 30-Meter Geofence Validation */}
+            {(() => {
+              const distance = (selectedCheckpoint.coords && gpsLocation)
+                ? calculateDistanceMeters(gpsLocation.lat, gpsLocation.lng, selectedCheckpoint.coords.lat, selectedCheckpoint.coords.lng)
+                : 0;
+              const isWithin30m = distance <= 30;
+
+              return (
+                <div
+                  className={`p-3.5 rounded-2xl border space-y-2 text-xs transition-all ${
+                    isWithin30m
+                      ? "bg-emerald-50/80 border-emerald-300 text-emerald-900"
+                      : "bg-rose-50 border-rose-300 text-rose-900"
+                  }`}
+                >
+                  <div className="flex items-center justify-between font-bold">
+                    <span className="flex items-center gap-1.5">
+                      <MapPin className={`w-4 h-4 ${isWithin30m ? "text-emerald-600" : "text-rose-600"}`} />
+                      ตรวจสอบระยะห่างจุดตรวจจริง (เกณฑ์ไม่เกิน 30 ม.):
+                    </span>
+                    <span className="text-[10px] font-mono">
+                      {gpsLocation.timestamp}
+                    </span>
+                  </div>
+
+                  <div className="bg-white p-2.5 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 font-mono text-[11px]">
+                    <div>
+                      <span>📍 พิกัด รปภ.: {gpsLocation.lat.toFixed(5)}, {gpsLocation.lng.toFixed(5)}</span>
+                      <span className="block text-[10px] text-slate-500">
+                        ระยะห่าง: <strong className={isWithin30m ? "text-emerald-700" : "text-rose-600"}>{distance} เมตร</strong>
+                      </span>
+                    </div>
+
+                    {isWithin30m ? (
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px] flex items-center gap-1 self-start sm:self-center">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" /> อยู่ในระยะถูกต้อง ✅
+                      </span>
+                    ) : (
+                      <div className="flex flex-col items-start sm:items-end gap-1">
+                        <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 font-bold text-[10px] flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3 text-rose-600" /> ห่างเกิน 30 ม. ❌
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleSimulateAtCheckpoint}
+                          className="text-[10px] text-sky-700 hover:text-sky-900 underline font-semibold"
+                        >
+                          [📍 จำลองพิกัดเข้าจุดตรวจ (ทดสอบ)]
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {!isWithin30m && (
+                    <p className="text-[11px] text-rose-700 font-semibold flex items-center gap-1">
+                      ⚠️ คุณอยู่ห่างจากจุดตรวจ {distance} เมตร ต้องเดินเข้าไปใกล้ๆ (ไม่เกิน 30 ม.) จึงจะบันทึกได้
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Checklist */}
             <div>
@@ -446,6 +608,72 @@ export default function PatrolPage() {
               </div>
             </div>
 
+            {/* Photo Capture Section (บังคับถ่ายรูป 1 รูป) */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                  <Camera className="w-4 h-4 text-sky-600" />
+                  ถ่ายรูปยืนยันจุดตรวจ (บังคับ 1 รูป) <span className="text-rose-600">*</span>
+                </span>
+                {capturedPhoto && (
+                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    แนบรูปแล้ว ✅
+                  </span>
+                )}
+              </div>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handlePhotoCapture}
+                className="hidden"
+              />
+
+              {capturedPhoto ? (
+                <div className="relative rounded-2xl overflow-hidden border-2 border-emerald-400 bg-black aspect-video max-h-48 group">
+                  <img
+                    src={capturedPhoto}
+                    alt="Checkpoint Evidence"
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent flex items-end justify-between p-3">
+                    <span className="text-white text-[10px] font-bold">
+                      📸 บันทึกหลักฐานจุด {selectedCheckpoint.code}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setCapturedPhoto(null)}
+                      className="px-2.5 py-1 rounded-xl bg-rose-600 text-white font-bold text-[10px] flex items-center gap-1 hover:bg-rose-700 active:scale-95 transition-all shadow-md"
+                    >
+                      <Trash2 className="w-3 h-3" /> ถ่ายใหม่
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full py-4 rounded-2xl border-2 border-dashed border-sky-300 hover:border-sky-500 bg-sky-50/50 hover:bg-sky-50 text-sky-800 font-bold text-xs flex flex-col items-center justify-center gap-1.5 active:scale-98 transition-all"
+                >
+                  <div className="w-10 h-10 rounded-full bg-sky-100 flex items-center justify-center text-sky-600">
+                    <Camera className="w-5 h-5" />
+                  </div>
+                  <span>แตะเพื่อถ่ายรูปพื้นที่จุดตรวจ (1 รูป)</span>
+                  <span className="text-[10px] text-slate-400 font-normal">
+                    บีบอัดอัตโนมัติ ส่งข้อมูลรวดเร็ว
+                  </span>
+                </button>
+              )}
+
+              {photoError && (
+                <p className="text-[11px] text-rose-600 font-bold flex items-center gap-1">
+                  ⚠️ {photoError}
+                </p>
+              )}
+            </div>
+
             {/* Status Selector */}
             <div className="grid grid-cols-2 gap-3 pt-1">
               <button
@@ -482,12 +710,35 @@ export default function PatrolPage() {
               />
             )}
 
-            <button
-              onClick={handleSubmit}
-              className="w-full py-4 rounded-2xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-bold text-sm shadow-md shadow-sky-500/25 active:scale-95 transition-all"
-            >
-              บันทึกผลการตรวจ + พิกัด GPS
-            </button>
+            {/* Submit Button with Dynamic Disabled State */}
+            {(() => {
+              const distance = (selectedCheckpoint.coords && gpsLocation)
+                ? calculateDistanceMeters(gpsLocation.lat, gpsLocation.lng, selectedCheckpoint.coords.lat, selectedCheckpoint.coords.lng)
+                : 0;
+              const isWithin30m = distance <= 30;
+              const canSubmit = isWithin30m && !!capturedPhoto;
+
+              return (
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={!canSubmit}
+                  className={`w-full py-4 rounded-2xl font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 ${
+                    canSubmit
+                      ? "bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white shadow-sky-500/25 active:scale-95 cursor-pointer"
+                      : "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
+                  }`}
+                >
+                  {!isWithin30m ? (
+                    <span>❌ อยู่นอกระยะจุดตรวจ (ห่าง {distance} ม. - กำหนด ≤ 30 ม.)</span>
+                  ) : !capturedPhoto ? (
+                    <span>📷 กรุณาถ่ายรูปจุดตรวจ 1 รูปก่อนบันทึก</span>
+                  ) : (
+                    <span>✅ บันทึกผลการตรวจ + รูปถ่าย + พิกัด GPS</span>
+                  )}
+                </button>
+              );
+            })()}
           </div>
         )}
 
