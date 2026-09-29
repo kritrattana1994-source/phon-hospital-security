@@ -22,13 +22,13 @@ export async function POST(req: NextRequest) {
       buffer = Buffer.from(image, "base64");
     }
 
-    // Run OCR with a strict 4.5-second timeout to prevent any server hang
+    // Run OCR with a safe 8.5-second timeout
     const ocrPromise = (async () => {
       let worker: any = null;
       try {
         worker = await createWorker("eng");
         await worker.setParameters({
-          tessedit_char_whitelist: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
+          tessedit_char_whitelist: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz- ",
         });
 
         const { data } = await worker.recognize(buffer);
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
     })();
 
     const timeoutPromise = new Promise<string>((_, reject) =>
-      setTimeout(() => reject(new Error("OCR timeout")), 4500)
+      setTimeout(() => reject(new Error("OCR timeout")), 8500)
     );
 
     let rawText = "";
@@ -70,8 +70,17 @@ export async function POST(req: NextRequest) {
     // Prefer 4-digit or 3-digit matches
     let bestPlate = "";
     if (digitMatches && digitMatches.length > 0) {
-      const sortedByLength = [...digitMatches].sort((a, b) => b.length - a.length);
-      bestPlate = sortedByLength[0];
+      // Prioritize 4-digit matches, then 3-digit, then 2-digit, then 1-digit
+      const fourDigits = digitMatches.filter((d) => d.length === 4);
+      const threeDigits = digitMatches.filter((d) => d.length === 3);
+      if (fourDigits.length > 0) {
+        bestPlate = fourDigits[0];
+      } else if (threeDigits.length > 0) {
+        bestPlate = threeDigits[0];
+      } else {
+        const sortedByLength = [...digitMatches].sort((a, b) => b.length - a.length);
+        bestPlate = sortedByLength[0];
+      }
     }
 
     return NextResponse.json({

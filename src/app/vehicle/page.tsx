@@ -22,12 +22,17 @@ import {
   Info,
   Check,
   X,
-  Delete
+  Delete,
+  Camera,
+  Loader2,
+  Sparkles,
+  Upload
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import HospitalBrand from "@/components/HospitalBrand";
 import { defaultPatrolRounds, getCurrentRound, getCurrentShift } from "@/lib/patrolSchedule";
+import { uploadImageToDrive } from "@/lib/uploadToDrive";
 
 interface FloatingToast {
   id: string;
@@ -39,11 +44,53 @@ interface FloatingToast {
   message: string;
 }
 
+function resizeImageBase64(file: File, maxDimension = 1200): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(e.target?.result as string);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", 0.85));
+      };
+      img.onerror = () => reject(new Error("Failed to load image for resizing"));
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsDataURL(file);
+  });
+}
+
 function VehicleContent() {
   const router = useRouter();
-  const { currentUser, staffVehicles, addParkingScan, parkingScans, patrolRounds } = useStore();
+  const { currentUser, staffVehicles, addParkingScan, parkingScans, patrolRounds, googleDriveWebhookUrl } = useStore();
   const hospitalRounds = (patrolRounds && patrolRounds.length > 0) ? patrolRounds : defaultPatrolRounds;
   const activeHospitalRound = getCurrentRound(hospitalRounds, new Date());
+
+  // OCR Processing States
+  const [isOcrProcessing, setIsOcrProcessing] = useState(false);
+  const [ocrStatusText, setOcrStatusText] = useState<string | null>(null);
+  const patrolFileInputRef = useRef<HTMLInputElement | null>(null);
+  const lookupFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Top-level View: "lookup" (ดูว่ารถใคร 24 ชม.) | "patrol" (เดินตรวจสแกนรถทุกคันใน รพ.)
   const [mainTab, setMainTab] = useState<"lookup" | "patrol">("lookup");
@@ -265,8 +312,103 @@ function VehicleContent() {
     }
   };
 
+  // --- CAMERA CAPTURE & AI OCR METHODS ---
+  const captureVideoFrame = (): string | null => {
+    if (!videoRef.current) return null;
+    try {
+      const video = videoRef.current;
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth || 1280;
+      canvas.height = video.videoHeight || 720;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return null;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL("image/jpeg", 0.85);
+    } catch (err) {
+      console.error("Frame capture error:", err);
+      return null;
+    }
+  };
+
+  const performOcrOnImage = async (dataUrl: string, targetMode: "lookup" | "patrol") => {
+    setIsOcrProcessing(true);
+    setOcrStatusText("กำลังส่งภาพให้ระบบ AI ตรวจวิเคราะห์เลขทะเบียน...");
+    try {
+      const res = await fetch("/api/ocr-plate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: dataUrl }),
+      });
+      const data = await res.json();
+      if (data.success && data.plateNumber) {
+        const plate = data.plateNumber;
+        if (targetMode === "lookup") {
+          setDialQuery(plate);
+          handlePerformSearch(plate);
+          addToast({
+            plate,
+            isStaff: false,
+            type: "success",
+            message: `AI ตรวจพบเลขทะเบียน ${plate} จากภาพถ่ายสำเร็จ`,
+          });
+        } else {
+          await handleContinuousScan(plate, undefined, dataUrl);
+        }
+      } else {
+        const msg = "ไม่สามารถอ่านเลขทะเบียนจากภาพได้ชัดเจน กรุณาถ่ายใหม่อีกครั้งให้ใกล้และชัดเจนขึ้น หรือพิมพ์เลขทะเบียน";
+        alert(`⚠️ ${msg}`);
+        addToast({
+          plate: "-",
+          isStaff: false,
+          type: "warning",
+          message: msg,
+        });
+      }
+    } catch (err: any) {
+      console.error("OCR error:", err);
+      alert("เกิดข้อผิดพลาดในการวิเคราะห์ภาพ กรุณาลองใหม่อีกครั้งหรือพิมพ์เลขทะเบียนด้วยตนเอง");
+    } finally {
+      setIsOcrProcessing(false);
+      setOcrStatusText(null);
+    }
+  };
+
+  const handleVideoShutter = async (targetMode: "lookup" | "patrol") => {
+    if (!videoRef.current) {
+      alert("กล้องยังไม่พร้อมใช้งาน กรุณากดปุ่มรีสตาร์ตกล้อง หรือเลือกอัปโหลดรูปภาพ");
+      return;
+    }
+    const frame = captureVideoFrame();
+    if (!frame) {
+      alert("ไม่สามารถจับภาพจากกล้องได้ กรุณาลองใหม่อีกครั้ง");
+      return;
+    }
+    await performOcrOnImage(frame, targetMode);
+  };
+
+  const handleFileInputChange = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    targetMode: "lookup" | "patrol"
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setIsOcrProcessing(true);
+      setOcrStatusText("กำลังปรับขนาดและประมวลผลรูปภาพ...");
+      const dataUrl = await resizeImageBase64(file, 1280);
+      await performOcrOnImage(dataUrl, targetMode);
+    } catch (err) {
+      console.error("File processing error:", err);
+      alert("ไม่สามารถประมวลผลไฟล์ภาพได้ กรุณาลองใหม่อีกครั้ง");
+      setIsOcrProcessing(false);
+      setOcrStatusText(null);
+    } finally {
+      if (e.target) e.target.value = "";
+    }
+  };
+
   // --- PATROL CONTINUOUS SCAN HANDLER ---
-  const handleContinuousScan = (rawPlate: string, zoneOverride?: string) => {
+  const handleContinuousScan = async (rawPlate: string, zoneOverride?: string, capturedImage?: string) => {
     const plate = rawPlate.trim().toUpperCase();
     if (!plate) return;
 
@@ -300,6 +442,21 @@ function VehicleContent() {
     const currentRoundObj = hospitalRounds.find(r => r.id === selectedRound) || { id: selectedRound, name: `รอบ ${selectedRound}` };
     const zone = zoneOverride || selectedZone || (isStaff ? staff.zone : "ลานจอดทั่วไป");
 
+    // อัปโหลดรูปภาพหลักฐานไปยัง Google Drive โฟลเดอร์ "ภาพถ่ายตรวจรถ (Vehicle Scans)"
+    let finalPhotoUrl = capturedImage;
+    if (capturedImage && capturedImage.startsWith("data:image")) {
+      try {
+        finalPhotoUrl = (await uploadImageToDrive({
+          image: capturedImage,
+          title: `CAR_${plate}_${selectedRound}`,
+          subfolder: "ภาพถ่ายตรวจรถ (Vehicle Scans)",
+          webhookUrl: googleDriveWebhookUrl,
+        })) || capturedImage;
+      } catch (uploadErr) {
+        console.warn("Drive vehicle photo upload fallback:", uploadErr);
+      }
+    }
+
     addParkingScan({
       plateNumber: plate,
       province: staff ? staff.province : "ขอนแก่น",
@@ -310,6 +467,7 @@ function VehicleContent() {
       ownerName: staff ? staff.ownerName : undefined,
       department: staff ? staff.department : undefined,
       zone,
+      imageUrl: finalPhotoUrl,
     });
 
     if (isStaff) {
@@ -530,6 +688,37 @@ function VehicleContent() {
                 </div>
               </form>
             </div>
+
+            {/* Hidden file input for native camera in Lookup mode */}
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              ref={lookupFileInputRef}
+              onChange={(e) => handleFileInputChange(e, "lookup")}
+              className="hidden"
+            />
+
+            {/* AI Camera OCR Button */}
+            <button
+              type="button"
+              onClick={() => lookupFileInputRef.current?.click()}
+              disabled={isOcrProcessing}
+              className="w-full py-3.5 px-4 bg-gradient-to-r from-emerald-600 via-teal-600 to-sky-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-2xl font-bold text-xs sm:text-sm shadow-md shadow-emerald-600/25 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              {isOcrProcessing ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                  <span>{ocrStatusText || "กำลังวิเคราะห์ป้ายทะเบียนด้วย AI..."}</span>
+                </>
+              ) : (
+                <>
+                  <Camera className="w-4 h-4 text-emerald-100" />
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  <span>ถ่ายรูปสแกนป้ายด้วยกล้อง AI (ไม่ต้องพิมพ์)</span>
+                </>
+              )}
+            </button>
 
             {/* QUICK NUMERIC DIALPAD */}
             <div className="p-3 bg-white border border-slate-200 rounded-3xl shadow-xs space-y-2.5">
@@ -1077,6 +1266,55 @@ function VehicleContent() {
               </div>
             </div>
 
+            {/* Hidden file input for native camera in Patrol mode */}
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              ref={patrolFileInputRef}
+              onChange={(e) => handleFileInputChange(e, "patrol")}
+              className="hidden"
+            />
+
+            {/* AI OCR Shutter & High-Res Upload Action Buttons */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleVideoShutter("patrol")}
+                disabled={isOcrProcessing || !cameraActive}
+                className="py-3.5 px-3 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white font-bold text-xs sm:text-sm rounded-2xl shadow-lg shadow-sky-600/30 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {isOcrProcessing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>กำลังวิเคราะห์...</span>
+                  </>
+                ) : (
+                  <>
+                    <Camera className="w-4 h-4" />
+                    <span>ถ่ายจับป้าย (AI OCR)</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => patrolFileInputRef.current?.click()}
+                disabled={isOcrProcessing}
+                className="py-3.5 px-3 bg-white hover:bg-slate-50 border-2 border-sky-200 text-sky-800 font-bold text-xs sm:text-sm rounded-2xl shadow-xs active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Upload className="w-4 h-4 text-sky-600" />
+                <span>ถ่ายชัดสูง / อัปโหลด</span>
+              </button>
+            </div>
+
+            {isOcrProcessing && (
+              <div className="p-3 bg-sky-50 border border-sky-300 rounded-2xl flex items-center gap-2.5 text-sky-900 text-xs animate-pulse">
+                <Loader2 className="w-4 h-4 animate-spin text-sky-600 shrink-0" />
+                <span className="font-semibold">{ocrStatusText || "กำลังประมวลผลวิเคราะห์ป้ายทะเบียนด้วย AI..."}</span>
+              </div>
+            )}
+
             {cameraError && (
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-amber-800 text-xs flex items-center gap-2">
                 <Info className="w-4 h-4 text-amber-600 shrink-0" />
@@ -1185,10 +1423,24 @@ function VehicleContent() {
                           }`}
                         />
                         <div>
-                          <span className="font-mono font-bold text-slate-900 text-sm block">
-                            {scan.plateNumber}
-                          </span>
-                          <span className="text-[10px] text-slate-500">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono font-bold text-slate-900 text-sm">
+                              {scan.plateNumber}
+                            </span>
+                            {scan.imageUrl && (
+                              <a
+                                href={scan.imageUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-0.5 text-[9px] text-sky-600 hover:text-sky-800 bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200"
+                                title="ดูภาพถ่ายหลักฐาน"
+                              >
+                                <Camera className="w-2.5 h-2.5" />
+                                <span>ภาพ</span>
+                              </a>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-slate-500 block">
                             {scan.ownerName || scan.zone || "รถภายนอก"}
                           </span>
                         </div>

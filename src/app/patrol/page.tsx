@@ -50,6 +50,22 @@ export default function PatrolPage() {
   const [photoError, setPhotoError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Read URL query parameter on mount (?cp=cp01 or ?scan=01)
+  useEffect(() => {
+    if (typeof window !== "undefined" && checkpoints.length > 0) {
+      const params = new URLSearchParams(window.location.search);
+      const cpQuery = params.get("cp") || params.get("scan");
+      if (cpQuery) {
+        const found = checkpoints.find(
+          (c) => c.id === cpQuery || c.code === cpQuery || c.code.toLowerCase() === cpQuery.toLowerCase()
+        );
+        if (found) {
+          setSelectedCheckpoint(found);
+        }
+      }
+    }
+  }, [checkpoints]);
+
   // Sync checklist items when a checkpoint is selected
   useEffect(() => {
     if (selectedCheckpoint) {
@@ -241,9 +257,7 @@ export default function PatrolPage() {
     if (matched) {
       setSelectedCheckpoint(matched);
     } else {
-      // If code doesn't match, pick next checkpoint
-      const remaining = checkpoints.filter((item) => !completedIds.has(item.id));
-      setSelectedCheckpoint(remaining.length > 0 ? remaining[0] : checkpoints[0]);
+      alert(`⚠️ ป้าย QR Code ที่สแกน ("${text}") ไม่ตรงกับจุดตรวจใดในระบบโรงพยาบาลพล กรุณาลองใหม่อีกครั้ง`);
     }
   };
 

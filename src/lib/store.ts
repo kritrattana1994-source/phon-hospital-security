@@ -113,6 +113,7 @@ export interface ParkingScan {
   guardName: string;
   synced: boolean;
   expireAt?: string;
+  imageUrl?: string;
 }
 
 export interface DailyAISummary {
