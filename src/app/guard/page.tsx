@@ -362,13 +362,13 @@ export default function GuardPage() {
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="font-black text-white text-base">📤 ส่งออกรายงานประจำกะ (LINE กลุ่ม)</h3>
+                    <h3 className="font-black text-white text-base">📤 รายงานผลการเดินตรวจ & ส่งมอบเวร (LINE กลุ่ม)</h3>
                     <span className="text-[10px] bg-white text-emerald-800 px-2 py-0.5 rounded-full font-bold">
                       ช่วงต่อกะ
                     </span>
                   </div>
                   <p className="text-xs text-emerald-100 mt-0.5">
-                    บันทึกภาพสรุปผลงานส่งเข้ากลุ่มไลน์ รปภ. • ระบุชื่อและกะอัตโนมัติ
+                    บันทึกภาพสรุปผลงานส่งเข้ากลุ่มไลน์ รปภ. • ระบุชื่อและผลัดปฏิบัติงานอัตโนมัติ
                   </p>
                 </div>
               </div>

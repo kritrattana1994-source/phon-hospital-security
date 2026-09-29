@@ -144,7 +144,7 @@ export default function ShiftReportModal({ isOpen, onClose }: ShiftReportModalPr
   const drawReportToCanvas = async (): Promise<HTMLCanvasElement> => {
     const canvas = document.createElement("canvas");
     const width = 1080;
-    const height = 1680;
+    const height = 1520;
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext("2d");
@@ -219,10 +219,10 @@ export default function ShiftReportModal({ isOpen, onClose }: ShiftReportModalPr
     const textStartX = 215;
 
     // Badge: Official Dispatch
-    drawRoundRect(ctx, textStartX, 45, 280, 30, 15, "rgba(56, 189, 248, 0.15)", "rgba(56, 189, 248, 0.4)", 1);
+    drawRoundRect(ctx, textStartX, 45, 330, 30, 15, "rgba(56, 189, 248, 0.15)", "rgba(56, 189, 248, 0.4)", 1);
     ctx.font = "bold 13px 'Sarabun', sans-serif";
     ctx.fillStyle = "#7dd3fc";
-    ctx.fillText("🛡️ OFFICIAL SECURITY DISPATCH REPORT", textStartX + 14, 65);
+    ctx.fillText("🛡️ เอกสารรายงานการปฏิบัติงานรักษาความปลอดภัย", textStartX + 14, 65);
 
     // Main Hospital Brand
     ctx.font = "bold 32px 'Sarabun', sans-serif";
@@ -237,19 +237,19 @@ export default function ShiftReportModal({ isOpen, onClose }: ShiftReportModalPr
     // Report Title
     ctx.font = "bold 20px 'Sarabun', sans-serif";
     ctx.fillStyle = "#f0fdf4";
-    ctx.fillText("รายงานสรุปการเดินตรวจรักษาความปลอดภัยประจำกะ (Shift Handover Report)", textStartX, 164);
+    ctx.fillText("รายงานผลการเดินตรวจและส่งมอบเวรประจำกะ (Shift Handover Report)", textStartX, 164);
 
     // Doc Reference Pill (Right corner)
-    const docRef = `DOC: PHON-PATROL-${new Date().getFullYear() + 543}`;
-    drawRoundRect(ctx, width - 245, 45, 190, 30, 15, "rgba(255, 255, 255, 0.12)", "rgba(255, 255, 255, 0.2)", 1);
-    ctx.font = "bold 13px monospace";
+    const docRef = `เลขที่: รพ.พล-รปภ-${new Date().getFullYear() + 543}`;
+    drawRoundRect(ctx, width - 265, 45, 210, 30, 15, "rgba(255, 255, 255, 0.12)", "rgba(255, 255, 255, 0.2)", 1);
+    ctx.font = "bold 13px 'Sarabun', sans-serif";
     ctx.fillStyle = "#ffffff";
-    ctx.fillText(docRef, width - 233, 65);
+    ctx.fillText(docRef, width - 253, 65);
 
     // 3. Card 1: Shift & Guard Identification Card
     const cardMargin = 50;
     const cardWidth = width - cardMargin * 2;
-    const card1Y = 260;
+    const card1Y = 255;
     const card1H = 150;
 
     // Card 1 Container
@@ -277,17 +277,17 @@ export default function ShiftReportModal({ isOpen, onClose }: ShiftReportModalPr
     // Guard Details
     ctx.font = "bold 26px 'Sarabun', sans-serif";
     ctx.fillStyle = "#0f172a";
-    ctx.fillText(currentUser?.name || "เจ้าหน้าที่ รปภ. ประจำจุด", avatarX + avatarSize + 22, card1Y + 58);
+    ctx.fillText(currentUser?.name || "พนักงานรักษาความปลอดภัย", avatarX + avatarSize + 22, card1Y + 58);
 
     ctx.font = "600 16px 'Sarabun', sans-serif";
     ctx.fillStyle = "#475569";
-    ctx.fillText(`รหัสประจำตัว: ${currentUser?.pin || "1111"}   •   ตำแหน่ง: เจ้าหน้าที่ รปภ. ปฏิบัติหน้าที่`, avatarX + avatarSize + 22, card1Y + 90);
+    ctx.fillText(`รหัสประจำตัว: ${currentUser?.pin || "1111"}   •   ตำแหน่ง: พนักงานรักษาความปลอดภัย`, avatarX + avatarSize + 22, card1Y + 90);
 
     // Verified Staff Badge
-    drawRoundRect(ctx, avatarX + avatarSize + 22, card1Y + 105, 175, 26, 13, "#f0fdf4", "#86efac", 1);
+    drawRoundRect(ctx, avatarX + avatarSize + 22, card1Y + 105, 185, 26, 13, "#f0fdf4", "#86efac", 1);
     ctx.font = "bold 12px 'Sarabun', sans-serif";
     ctx.fillStyle = "#166534";
-    ctx.fillText("✓ ตรวจสอบตัวตนผ่านระบบ", avatarX + avatarSize + 32, card1Y + 122);
+    ctx.fillText("✓ ยืนยันตัวตนในระบบเรียบร้อย", avatarX + avatarSize + 28, card1Y + 122);
 
     // Divider Line inside Card 1
     ctx.strokeStyle = "#e2e8f0";
@@ -299,16 +299,15 @@ export default function ShiftReportModal({ isOpen, onClose }: ShiftReportModalPr
 
     // Shift & Handover Timing (Right side)
     const shiftX = width / 2 + 100;
-    // Shift Pill
     const shiftColor = currentShift.id === "morning" ? "#d97706" : currentShift.id === "afternoon" ? "#0284c7" : "#4338ca";
     const shiftBg = currentShift.id === "morning" ? "#fffbeb" : currentShift.id === "afternoon" ? "#f0f9ff" : "#eef2ff";
     const shiftBorder = currentShift.id === "morning" ? "#fde68a" : currentShift.id === "afternoon" ? "#bae6fd" : "#c7d2fe";
 
-    drawRoundRect(ctx, shiftX, card1Y + 28, 300, 36, 18, shiftBg, shiftBorder, 1);
+    drawRoundRect(ctx, shiftX, card1Y + 28, 305, 36, 18, shiftBg, shiftBorder, 1);
     ctx.font = "bold 16px 'Sarabun', sans-serif";
     ctx.fillStyle = shiftColor;
     const shiftIcon = currentShift.id === "morning" ? "☀️" : currentShift.id === "afternoon" ? "⛅" : "🌙";
-    ctx.fillText(`${shiftIcon} กะปฏิบัติการ: ${currentShift.name} (${currentShift.timeRange})`, shiftX + 16, card1Y + 52);
+    ctx.fillText(`${shiftIcon} กะปฏิบัติการ: ${currentShift.name} (เวลา ${currentShift.timeRange} น.)`, shiftX + 16, card1Y + 52);
 
     ctx.font = "500 16px 'Sarabun', sans-serif";
     ctx.fillStyle = "#334155";
@@ -316,10 +315,10 @@ export default function ShiftReportModal({ isOpen, onClose }: ShiftReportModalPr
 
     ctx.font = "bold 16px 'Sarabun', sans-serif";
     ctx.fillStyle = "#0369a1";
-    ctx.fillText(`🕒 ส่งมอบเวรเวลา: ${timeFormatted} น. (ระบบบันทึกเรียลไทม์)`, shiftX, card1Y + 120);
+    ctx.fillText(`🕒 เวลาส่งมอบเวร: ${timeFormatted} น.`, shiftX, card1Y + 120);
 
     // 4. Card 2: 3 Executive KPI Hero Cards
-    const kpiY = 430;
+    const kpiY = 425;
     const kpiW = (cardWidth - 36) / 3;
     const kpiH = 165;
 
@@ -337,7 +336,7 @@ export default function ShiftReportModal({ isOpen, onClose }: ShiftReportModalPr
 
     ctx.font = "bold 15px 'Sarabun', sans-serif";
     ctx.fillStyle = "#15803d";
-    ctx.fillText("อัตราการตรวจครบถ้วน", cardMargin + 66, kpiY + 39);
+    ctx.fillText("ความครอบคลุมของจุดตรวจ", cardMargin + 66, kpiY + 39);
 
     ctx.font = "bold 48px 'Sarabun', sans-serif";
     ctx.fillStyle = complianceRate >= 80 ? "#15803d" : "#b45309";
@@ -345,12 +344,12 @@ export default function ShiftReportModal({ isOpen, onClose }: ShiftReportModalPr
 
     ctx.font = "500 14px 'Sarabun', sans-serif";
     ctx.fillStyle = "#475569";
-    ctx.fillText(`ตรวจสำเร็จ ${totalPointsCompleted} จาก ${totalPointsExpected} จุด`, cardMargin + 20, kpiY + 130);
+    ctx.fillText(`ตรวจแล้วเสร็จ ${totalPointsCompleted} จากทั้งหมด ${totalPointsExpected} จุด`, cardMargin + 20, kpiY + 130);
 
     drawRoundRect(ctx, cardMargin + 20, kpiY + 140, kpiW - 40, 6, 3, "#e2e8f0");
     drawRoundRect(ctx, cardMargin + 20, kpiY + 140, (kpiW - 40) * (complianceRate / 100), 6, 3, "#10b981");
 
-    // KPI 2: On-Time (1-Hour Golden Rule)
+    // KPI 2: On-Time (Golden Rule 1 Hour)
     const kpi2X = cardMargin + kpiW + 18;
     ctx.save();
     ctx.shadowColor = "rgba(2, 132, 199, 0.1)";
@@ -365,7 +364,7 @@ export default function ShiftReportModal({ isOpen, onClose }: ShiftReportModalPr
 
     ctx.font = "bold 15px 'Sarabun', sans-serif";
     ctx.fillStyle = "#0369a1";
-    ctx.fillText("ตรงเวลากฎทอง 1 ชม.", kpi2X + 66, kpiY + 39);
+    ctx.fillText("ความตรงต่อเวลาตามเกณฑ์", kpi2X + 66, kpiY + 39);
 
     ctx.font = "bold 48px 'Sarabun', sans-serif";
     ctx.fillStyle = onTimeRate >= 80 ? "#0284c7" : "#d97706";
@@ -373,7 +372,7 @@ export default function ShiftReportModal({ isOpen, onClose }: ShiftReportModalPr
 
     ctx.font = "500 14px 'Sarabun', sans-serif";
     ctx.fillStyle = "#475569";
-    ctx.fillText(`ตรงเวลา ${onTimeRoundsCount} จาก ${shiftRounds.length} รอบตรวจ`, kpi2X + 20, kpiY + 130);
+    ctx.fillText(`ตรงตามเกณฑ์ ${onTimeRoundsCount} จาก ${shiftRounds.length} รอบการตรวจ`, kpi2X + 20, kpiY + 130);
 
     drawRoundRect(ctx, kpi2X + 20, kpiY + 140, kpiW - 40, 6, 3, "#e2e8f0");
     drawRoundRect(ctx, kpi2X + 20, kpiY + 140, (kpiW - 40) * (onTimeRate / 100), 6, 3, "#0284c7");
@@ -394,20 +393,20 @@ export default function ShiftReportModal({ isOpen, onClose }: ShiftReportModalPr
 
     ctx.font = "bold 15px 'Sarabun', sans-serif";
     ctx.fillStyle = isNormal ? "#15803d" : "#be123c";
-    ctx.fillText("ความปลอดภัย / ข้อบกพร่อง", kpi3X + 66, kpiY + 39);
+    ctx.fillText("ความสงบเรียบร้อยในพื้นที่", kpi3X + 66, kpiY + 39);
 
     ctx.font = "bold 48px 'Sarabun', sans-serif";
     ctx.fillStyle = isNormal ? "#15803d" : "#be123c";
-    ctx.fillText(isNormal ? "ปกติ" : `${issueLogs.length} จุด`, kpi3X + 20, kpiY + 102);
+    ctx.fillText(isNormal ? "เหตุการณ์ปกติ" : `${issueLogs.length} ข้อ`, kpi3X + 20, kpiY + 102);
 
     ctx.font = "500 14px 'Sarabun', sans-serif";
     ctx.fillStyle = isNormal ? "#166534" : "#be123c";
-    ctx.fillText(isNormal ? "✅ ไม่พบสิ่งผิดปกติในเวร" : "⚠️ บันทึกแจ้งซ่อม/รายงานแล้ว", kpi3X + 20, kpiY + 130);
+    ctx.fillText(isNormal ? "✅ ไม่พบสิ่งผิดปกติในผลัดปฏิบัติงาน" : "⚠️ พบข้อบกพร่อง/แจ้งดำเนินการแล้ว", kpi3X + 20, kpiY + 130);
 
     drawRoundRect(ctx, kpi3X + 20, kpiY + 140, kpiW - 40, 6, 3, isNormal ? "#86efac" : "#fda4af");
 
     // 5. Card 3: Patrol Rounds Timeline Cards
-    const roundsContainerY = 615;
+    const roundsContainerY = 610;
     const roundsContainerH = 475;
 
     ctx.save();
@@ -424,11 +423,11 @@ export default function ShiftReportModal({ isOpen, onClose }: ShiftReportModalPr
 
     ctx.font = "bold 24px 'Sarabun', sans-serif";
     ctx.fillStyle = "#0f172a";
-    ctx.fillText(`บันทึกผลการเดินตรวจแยกตามรอบ (${shiftRounds.length} รอบในกะนี้)`, cardMargin + 80, roundsContainerY + 48);
+    ctx.fillText(`บันทึกผลการเดินตรวจการณ์ตามรอบเวลา (${shiftRounds.length} รอบตรวจ)`, cardMargin + 80, roundsContainerY + 48);
 
     ctx.font = "500 15px 'Sarabun', sans-serif";
     ctx.fillStyle = "#64748b";
-    ctx.fillText("เกณฑ์มาตรฐาน รพ.พล: ภายใน 1 ชั่วโมงแรกของแต่ละรอบ ต้องเดินตรวจเช็คอินให้ครบถ้วน", cardMargin + 80, roundsContainerY + 74);
+    ctx.fillText("เกณฑ์มาตรฐานโรงพยาบาลพล: กำหนดให้ดำเนินการตรวจเช็คอินให้ครบถ้วนภายใน 1 ชั่วโมงแรกของแต่ละรอบ", cardMargin + 80, roundsContainerY + 74);
 
     // Rounds Rows Loop
     const rowStartY = roundsContainerY + 95;
@@ -462,13 +461,13 @@ export default function ShiftReportModal({ isOpen, onClose }: ShiftReportModalPr
 
       ctx.font = "500 14px 'Sarabun', sans-serif";
       ctx.fillStyle = "#64748b";
-      ctx.fillText(`⏱️ เส้นตาย 1 ชม. แรก: ภายใน ${item.round.deadlineTime} น.`, cardMargin + 130, rowY + 62);
+      ctx.fillText(`⏱️ กำหนดเสร็จสิ้นภายใน: ${item.round.deadlineTime} น.`, cardMargin + 130, rowY + 62);
 
       // Center: Progress Bar
       const progX = width / 2 + 10;
       ctx.font = "bold 14px 'Sarabun', sans-serif";
       ctx.fillStyle = "#334155";
-      ctx.fillText(`สแกนแล้ว ${item.completedCount}/${checkpoints.length} จุด (${item.percent}%)`, progX, rowY + 35);
+      ctx.fillText(`ตรวจแล้ว ${item.completedCount}/${checkpoints.length} จุด (${item.percent}%)`, progX, rowY + 35);
 
       const barW = 200;
       drawRoundRect(ctx, progX, rowY + 46, barW, 10, 5, "#e2e8f0");
@@ -485,71 +484,33 @@ export default function ShiftReportModal({ isOpen, onClose }: ShiftReportModalPr
         drawRoundRect(ctx, statusPillX, statusPillY, statusPillW, 38, 19, "#ecfdf5", "#86efac", 1);
         ctx.font = "bold 15px 'Sarabun', sans-serif";
         ctx.fillStyle = "#15803d";
-        ctx.fillText("✅ ตรงเวลา 100%", statusPillX + 26, statusPillY + 24);
+        ctx.fillText("✅ ตรวจเสร็จสิ้นตามเวลา", statusPillX + 22, statusPillY + 24);
       } else if (isLate) {
         drawRoundRect(ctx, statusPillX, statusPillY, statusPillW, 38, 19, "#fffbeb", "#fde68a", 1);
         ctx.font = "bold 15px 'Sarabun', sans-serif";
         ctx.fillStyle = "#b45309";
-        ctx.fillText("⚠️ ครบแต่ล่าช้า", statusPillX + 32, statusPillY + 24);
+        ctx.fillText("⚠️ ตรวจครบแต่เกินเวลา", statusPillX + 22, statusPillY + 24);
       } else if (isActive) {
         drawRoundRect(ctx, statusPillX, statusPillY, statusPillW, 38, 19, "#f0f9ff", "#7dd3fc", 1.5);
         ctx.font = "bold 15px 'Sarabun', sans-serif";
         ctx.fillStyle = "#0369a1";
-        ctx.fillText("🟡 กำลังตรวจอยู่", statusPillX + 30, statusPillY + 24);
+        ctx.fillText("🟡 อยู่ระหว่างตรวจการณ์", statusPillX + 22, statusPillY + 24);
       } else if (isMissed) {
         drawRoundRect(ctx, statusPillX, statusPillY, statusPillW, 38, 19, "#fff1f2", "#fecdd3", 1);
         ctx.font = "bold 15px 'Sarabun', sans-serif";
         ctx.fillStyle = "#be123c";
-        ctx.fillText("❌ ขาดตรวจ", statusPillX + 44, statusPillY + 24);
+        ctx.fillText("❌ ไม่พบการตรวจตามกำหนด", statusPillX + 16, statusPillY + 24);
       } else {
         drawRoundRect(ctx, statusPillX, statusPillY, statusPillW, 38, 19, "#f1f5f9", "#cbd5e1", 1);
         ctx.font = "bold 15px 'Sarabun', sans-serif";
         ctx.fillStyle = "#64748b";
-        ctx.fillText("⚪ ยังไม่ถึงรอบ", statusPillX + 38, statusPillY + 24);
+        ctx.fillText("⚪ ยังไม่ถึงกำหนดรอบตรวจ", statusPillX + 20, statusPillY + 24);
       }
     });
 
-    // 6. Security Quality Standard Pills
-    const badgeY = 1110;
-    const badgeW = (cardWidth - 28) / 3;
-    const badgeH = 75;
-
-    // Badge 1: GPS
-    drawRoundRect(ctx, cardMargin, badgeY, badgeW, badgeH, 18, "#ffffff", "#e2e8f0", 1);
-    ctx.font = "24px 'Sarabun', sans-serif";
-    ctx.fillText("📍", cardMargin + 20, badgeY + 46);
-    ctx.font = "bold 15px 'Sarabun', sans-serif";
-    ctx.fillStyle = "#0f172a";
-    ctx.fillText("GPS Geofence ≤ 30 ม.", cardMargin + 60, badgeY + 36);
-    ctx.font = "500 13px 'Sarabun', sans-serif";
-    ctx.fillStyle = "#64748b";
-    ctx.fillText("บังคับตรวจจริงตามพิกัดอาคาร", cardMargin + 60, badgeY + 56);
-
-    // Badge 2: Photo
-    drawRoundRect(ctx, cardMargin + badgeW + 14, badgeY, badgeW, badgeH, 18, "#ffffff", "#e2e8f0", 1);
-    ctx.font = "24px 'Sarabun', sans-serif";
-    ctx.fillText("📸", cardMargin + badgeW + 34, badgeY + 46);
-    ctx.font = "bold 15px 'Sarabun', sans-serif";
-    ctx.fillStyle = "#0f172a";
-    ctx.fillText("ภาพถ่ายยืนยัน 1 รูป/จุด", cardMargin + badgeW + 74, badgeY + 36);
-    ctx.font = "500 13px 'Sarabun', sans-serif";
-    ctx.fillStyle = "#64748b";
-    ctx.fillText("มีหลักฐานบันทึกเก็บในคลัง", cardMargin + badgeW + 74, badgeY + 56);
-
-    // Badge 3: Cloud Sync
-    drawRoundRect(ctx, cardMargin + (badgeW + 14) * 2, badgeY, badgeW, badgeH, 18, "#ffffff", "#e2e8f0", 1);
-    ctx.font = "24px 'Sarabun', sans-serif";
-    ctx.fillText("☁️", cardMargin + (badgeW + 14) * 2 + 20, badgeY + 46);
-    ctx.font = "bold 15px 'Sarabun', sans-serif";
-    ctx.fillStyle = "#0f172a";
-    ctx.fillText("ซิงค์คลาวด์ รพ.พล ทันที", cardMargin + (badgeW + 14) * 2 + 60, badgeY + 36);
-    ctx.font = "500 13px 'Sarabun', sans-serif";
-    ctx.fillStyle = "#64748b";
-    ctx.fillText("หัวหน้าตรวจสอบได้แบบสด 24 ชม.", cardMargin + (badgeW + 14) * 2 + 60, badgeY + 56);
-
-    // 7. Shift Handover Remarks Bubble Card
-    const noteY = 1205;
-    const noteH = 160;
+    // 6. Shift Handover Remarks Bubble Card (Re-positioned cleanly after removing the 3 standard pills)
+    const noteY = 1105;
+    const noteH = 150;
 
     ctx.save();
     ctx.shadowColor = "rgba(15, 23, 42, 0.05)";
@@ -560,21 +521,21 @@ export default function ShiftReportModal({ isOpen, onClose }: ShiftReportModalPr
 
     ctx.font = "bold 18px 'Sarabun', sans-serif";
     ctx.fillStyle = "#0f172a";
-    ctx.fillText("📝 ข้อความส่งมอบเวร & ส่งมอบอุปกรณ์ (Handover Remarks)", cardMargin + 25, noteY + 38);
+    ctx.fillText("📝 บันทึกข้อความการส่งมอบเวรและอุปกรณ์ประจำผลัด", cardMargin + 25, noteY + 38);
 
     // Quote Box
-    drawRoundRect(ctx, cardMargin + 25, noteY + 55, cardWidth - 50, 85, 16, "#f8fafc", "#e2e8f0", 1);
-    ctx.font = "600 18px 'Sarabun', sans-serif";
+    drawRoundRect(ctx, cardMargin + 25, noteY + 55, cardWidth - 50, 78, 16, "#f8fafc", "#e2e8f0", 1);
+    ctx.font = "600 17px 'Sarabun', sans-serif";
     ctx.fillStyle = "#1e293b";
-    ctx.fillText(`“${handoverNote}”`, cardMargin + 45, noteY + 95);
+    ctx.fillText(`“${handoverNote}”`, cardMargin + 45, noteY + 90);
 
     ctx.font = "500 14px 'Sarabun', sans-serif";
     ctx.fillStyle = "#64748b";
-    ctx.fillText("• ส่งมอบวิทยุสื่อสาร, สมุดบันทึกเหตุการณ์ และกุญแจประจำจุดตรวจให้กะถัดไปเรียบร้อยแล้ว", cardMargin + 45, noteY + 122);
+    ctx.fillText("• ส่งมอบวิทยุสื่อสาร สมุดบันทึกเหตุการณ์ และกุญแจประจำจุดตรวจแก่เจ้าหน้าที่ผลัดถัดไปเรียบร้อยแล้ว", cardMargin + 45, noteY + 116);
 
-    // 8. Digital Security Seal & Executive Footer
-    const footerY = 1385;
-    const footerH = 240;
+    // 7. Executive Formal Footer with Official Handover Sign-off
+    const footerY = 1275;
+    const footerH = 205;
 
     const footerGrad = ctx.createLinearGradient(0, footerY, width, footerY + footerH);
     footerGrad.addColorStop(0, "#071b2f");
@@ -585,50 +546,48 @@ export default function ShiftReportModal({ isOpen, onClose }: ShiftReportModalPr
     ctx.strokeStyle = "rgba(56, 189, 248, 0.25)";
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.moveTo(cardMargin + 25, footerY + 70);
-    ctx.lineTo(width - cardMargin - 25, footerY + 70);
+    ctx.moveTo(cardMargin + 25, footerY + 68);
+    ctx.lineTo(width - cardMargin - 25, footerY + 68);
     ctx.stroke();
 
     // Footer Title
-    drawRoundRect(ctx, cardMargin + 25, footerY + 25, 36, 36, 12, "rgba(56, 189, 248, 0.15)");
+    drawRoundRect(ctx, cardMargin + 25, footerY + 22, 36, 36, 12, "rgba(56, 189, 248, 0.15)");
     ctx.font = "20px 'Sarabun', sans-serif";
-    ctx.fillText("🛡️", cardMargin + 33, footerY + 51);
+    ctx.fillText("🛡️", cardMargin + 33, footerY + 48);
 
-    ctx.font = "bold 20px 'Sarabun', sans-serif";
+    ctx.font = "bold 19px 'Sarabun', sans-serif";
     ctx.fillStyle = "#38bdf8";
-    ctx.fillText("CERTIFIED SHIFT HANDOVER REPORT • SMART PATROL SECURITY SYSTEM", cardMargin + 72, footerY + 49);
+    ctx.fillText("ระบบบริหารจัดการงานรักษาความปลอดภัย โรงพยาบาลพล (SMART PATROL)", cardMargin + 72, footerY + 46);
 
-    // Footer Content (Left)
-    ctx.font = "bold 20px 'Sarabun', sans-serif";
+    // Footer Content (Left side: Official Officer & Timestamp)
+    ctx.font = "bold 19px 'Sarabun', sans-serif";
     ctx.fillStyle = "#ffffff";
-    ctx.fillText(`ผู้ส่งมอบงาน: ${currentUser?.name || "-"} (รหัสพนักงาน: ${currentUser?.pin || "-"})`, cardMargin + 25, footerY + 115);
+    ctx.fillText(`ผู้ส่งมอบงาน: ${currentUser?.name || "-"} (รหัสพนักงาน: ${currentUser?.pin || "-"})`, cardMargin + 25, footerY + 108);
 
     ctx.font = "500 15px 'Sarabun', sans-serif";
     ctx.fillStyle = "#94a3b8";
-    ctx.fillText(`เวลาบันทึกการส่งมอบ: ${thaiDateFormatted} เวลา ${timeFormatted} น.`, cardMargin + 25, footerY + 148);
+    ctx.fillText(`วันและเวลาที่บันทึกส่งมอบ: ${thaiDateFormatted} เวลา ${timeFormatted} น.`, cardMargin + 25, footerY + 138);
 
     ctx.font = "500 14px 'Sarabun', sans-serif";
     ctx.fillStyle = "#64748b";
-    ctx.fillText("งานรักษาความปลอดภัย กลุ่มงานบริหารทั่วไป โรงพยาบาลพล อ.พล จ.ขอนแก่น 40120 โทร. 043-414-111", cardMargin + 25, footerY + 180);
+    ctx.fillText("งานรักษาความปลอดภัย กลุ่มงานบริหารทั่วไป โรงพยาบาลพล อำเภอพล จังหวัดขอนแก่น", cardMargin + 25, footerY + 168);
 
-    // Verification Box (Right)
-    const verifW = 280;
-    const verifX = width - cardMargin - 25 - verifW;
-    const verifY = footerY + 95;
-    drawRoundRect(ctx, verifX, verifY, verifW, 110, 16, "rgba(15, 23, 42, 0.6)", "rgba(56, 189, 248, 0.3)", 1);
+    // Official Handover Certification / Sign-off Block (Right side - replaces digital verification hash)
+    const signW = 340;
+    const signX = width - cardMargin - 25 - signW;
+    const signY = footerY + 86;
+    drawRoundRect(ctx, signX, signY, signW, 100, 16, "rgba(15, 23, 42, 0.5)", "rgba(56, 189, 248, 0.25)", 1);
 
-    ctx.font = "bold 11px monospace";
-    ctx.fillStyle = "#38bdf8";
-    ctx.fillText("DIGITAL VERIFICATION HASH", verifX + 16, verifY + 28);
-
-    ctx.font = "bold 13px monospace";
+    ctx.font = "500 14px 'Sarabun', sans-serif";
+    ctx.fillStyle = "#cbd5e1";
+    ctx.fillText("ลงชื่อ.................................................. ผู้ส่งมอบเวร", signX + 22, signY + 30);
+    ctx.font = "bold 14px 'Sarabun', sans-serif";
     ctx.fillStyle = "#ffffff";
-    ctx.fillText(`PHON-SEC-${Date.now().toString(36).toUpperCase()}`, verifX + 16, verifY + 52);
+    ctx.fillText(`( ${currentUser?.name || "พนักงานรักษาความปลอดภัย"} )`, signX + 50, signY + 54);
 
-    drawRoundRect(ctx, verifX + 16, verifY + 68, verifW - 32, 26, 13, "rgba(16, 185, 129, 0.2)", "rgba(16, 185, 129, 0.4)", 1);
     ctx.font = "bold 12px 'Sarabun', sans-serif";
-    ctx.fillStyle = "#34d399";
-    ctx.fillText("✓ ยืนยันข้อมูลในศูนย์ Supervisor", verifX + 28, verifY + 86);
+    ctx.fillStyle = "#38bdf8";
+    ctx.fillText("✓ บันทึกยืนยันข้อมูลผ่านระบบอย่างเป็นทางการ", signX + 50, signY + 80);
 
     return canvas;
   };
@@ -766,8 +725,8 @@ export default function ShiftReportModal({ isOpen, onClose }: ShiftReportModalPr
 
         const file = new File([blob], filename, { type: "image/png" });
         const shareData = {
-          title: `รายงานประจำกะ ${currentShift.name} - รพ.พล`,
-          text: `🏥 รายงานสรุปการเดินตรวจประจำกะ (${currentShift.name})\n📅 วันที่: ${thaiDateFormatted}\n👤 ผู้ส่งมอบเวร: ${currentUser.name}\n📊 ความคืบหน้า: ${complianceRate}% (ตรงเวลากฎทอง 1 ชม. ${onTimeRate}%)\n🛡️ บันทึกส่งมอบเวรเรียบร้อยครับ`,
+          title: `รายงานผลการเดินตรวจและส่งมอบเวร ${currentShift.name} - รพ.พล`,
+          text: `🏥 รายงานผลการเดินตรวจและส่งมอบเวรประจำกะ (${currentShift.name})\n📅 วันที่: ${thaiDateFormatted}\n👤 ผู้ส่งมอบเวร: ${currentUser.name}\n📊 ความครอบคลุม: ${complianceRate}% (ตรงเวลาตามเกณฑ์ ${onTimeRate}%)\n🛡️ บันทึกส่งมอบเวรเรียบร้อยแล้ว`,
           files: [file],
         };
 
@@ -802,9 +761,9 @@ export default function ShiftReportModal({ isOpen, onClose }: ShiftReportModalPr
   };
 
   const sampleNotes = [
-    "ตรวจครบถ้วนเรียบร้อย ส่งมอบวิทยุสื่อสารและกุญแจประจำจุดให้กะถัดไปแล้ว",
-    "เหตุการณ์ปกติ การจราจรคล่องตัว อุปกรณ์ดับเพลิงและประตูหนีไฟปกติ",
-    "ส่งมอบเวรเรียบร้อย มีการแจ้งข้อมูลจุดเฝ้าระวังพิเศษให้กะถัดไปรับทราบแล้ว",
+    "ดำเนินการตรวจการณ์ครบถ้วนตามเกณฑ์ ส่งมอบวิทยุสื่อสารและกุญแจประจำจุดตรวจแก่ผลัดถัดไปเรียบร้อยแล้ว",
+    "เหตุการณ์ทั่วไปปกติ การจราจรคล่องตัว อุปกรณ์ระงับอัคคีภัยและประตูหนีไฟอยู่ในสภาพพร้อมใช้งาน",
+    "ส่งมอบผลัดเวรเรียบร้อย พร้อมแจ้งข้อมูลจุดเฝ้าระวังพิเศษแก่เจ้าหน้าที่ผลัดถัดไปรับทราบแล้ว",
   ];
 
   return (
@@ -884,7 +843,7 @@ export default function ShiftReportModal({ isOpen, onClose }: ShiftReportModalPr
                 </div>
               )}
               <div className="absolute bottom-2 right-2 bg-black/70 backdrop-blur-xs text-white text-[10px] px-2.5 py-1 rounded-full font-mono">
-                1080 × 1680 HD • Retina
+                1080 × 1520 HD • เอกสารรายงานทางการ
               </div>
             </div>
           </div>
@@ -897,17 +856,17 @@ export default function ShiftReportModal({ isOpen, onClose }: ShiftReportModalPr
               <span className="text-[10px] text-slate-400 block mt-0.5">{totalPointsCompleted}/{totalPointsExpected} จุด</span>
             </div>
             <div className="p-3 bg-white border border-sky-200 rounded-2xl text-center shadow-2xs">
-              <span className="text-[10px] font-bold text-sky-800 block">ตรงเวลากฎทอง 1 ชม.</span>
+              <span className="text-[10px] font-bold text-sky-800 block">ตรงเวลาตามเกณฑ์</span>
               <span className="text-xl font-black text-sky-700">{onTimeRate}%</span>
               <span className="text-[10px] text-slate-400 block mt-0.5">{onTimeRoundsCount}/{shiftRounds.length} รอบ</span>
             </div>
             <div className="p-3 bg-white border border-slate-200 rounded-2xl text-center shadow-2xs">
-              <span className="text-[10px] font-bold text-slate-600 block">สถานะความปลอดภัย</span>
+              <span className="text-[10px] font-bold text-slate-600 block">ความสงบเรียบร้อย</span>
               <span className={`text-xl font-black ${issueLogs.length === 0 ? "text-emerald-700" : "text-rose-600"}`}>
                 {issueLogs.length === 0 ? "ปกติ" : `${issueLogs.length} ข้อ`}
               </span>
               <span className="text-[10px] text-slate-400 block mt-0.5">
-                {issueLogs.length === 0 ? "ปลอดภัย 100%" : "บันทึกเข้าระบบ"}
+                {issueLogs.length === 0 ? "เหตุการณ์ปกติ" : "บันทึกแจ้งซ่อม"}
               </span>
             </div>
           </div>
@@ -915,7 +874,7 @@ export default function ShiftReportModal({ isOpen, onClose }: ShiftReportModalPr
           {/* Handover Note & Sample Presets */}
           <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-xs space-y-2.5">
             <label className="block text-xs font-bold text-slate-800">
-              💬 ข้อความส่งมอบเวร & ส่งมอบอุปกรณ์:
+              💬 บันทึกข้อความการส่งมอบเวรและอุปกรณ์ประจำผลัด:
             </label>
             <textarea
               rows={2}
@@ -927,7 +886,7 @@ export default function ShiftReportModal({ isOpen, onClose }: ShiftReportModalPr
 
             {/* Presets */}
             <div className="space-y-1">
-              <span className="text-[10px] font-bold text-slate-400 block">เลือกข้อความสำเร็จรูป:</span>
+              <span className="text-[10px] font-bold text-slate-400 block">เลือกข้อความทางการสำเร็จรูป:</span>
               <div className="flex flex-wrap gap-1.5">
                 {sampleNotes.map((note, idx) => (
                   <button

@@ -1957,7 +1957,7 @@ export default function SupervisorPage() {
                     ระบบบริหารจัดการรอบเดินตรวจ & KPI ประจำกะ (รพ.พล)
                   </h2>
                   <p className="text-xs text-sky-200/80 mt-1 max-w-3xl leading-relaxed">
-                    แบ่งช่วง 12 ชม./12 ชม. (กลางวัน 08:00 - 20:00 น. ทุก 3 ชม. • กลางคืน 20:00 - 08:00 น. ทุก 2 ชม.) สอดคล้อง 3 กะ รพ.พล • กฎทองตรวจเสร็จใน 1 ชม. แรก • GPS Geofence 30 ม. • ถ่ายรูปยืนยันทุกจุด
+                    แบ่งช่วง 12 ชม./12 ชม. (กลางวัน 08:00 - 20:00 น. ทุก 3 ชม. • กลางคืน 20:00 - 08:00 น. ทุก 2 ชม.) สอดคล้อง 3 กะ รพ.พล • เกณฑ์เวลาตรวจเสร็จสิ้นใน 1 ชม. แรก • GPS Geofence 30 ม. • ถ่ายรูปยืนยันทุกจุด
                   </p>
                 </div>
 
@@ -1990,8 +1990,8 @@ export default function SupervisorPage() {
                   <span className="text-slate-400 text-[10px] block mt-0.5">6 รอบ (กะบ่าย & กะดึก)</span>
                 </div>
                 <div className="bg-white/5 rounded-2xl p-3 border border-white/10">
-                  <span className="text-amber-300 text-[11px] block">⏰ กฎทอง 1 ชม. แรก</span>
-                  <strong className="text-white text-base">เสร็จใน 1 ชม.</strong>
+                  <span className="text-amber-300 text-[11px] block">⏰ เกณฑ์เวลา 1 ชม. แรก</span>
+                  <strong className="text-white text-base">เสร็จสิ้นใน 1 ชม.</strong>
                   <span className="text-slate-400 text-[10px] block mt-0.5">เช่น 08:00 ต้องเสร็จ 09:00</span>
                 </div>
                 <div className="bg-white/5 rounded-2xl p-3 border border-white/10">

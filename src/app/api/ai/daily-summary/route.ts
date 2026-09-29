@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
 
 ข้อมูลการเดินตรวจ (Patrol Compliance):
 - จุดตรวจที่สแกนครบ: ${uniqueCheckpointsScanned}/${totalCheckpointsTarget} จุด (${patrolComplianceRate}%)
-- ความตรงเวลากฎทอง 1 ชม. แรก: ${patrolOnTimeRate}%
+- ความตรงต่อเวลาตามเกณฑ์ 1 ชม. แรก: ${patrolOnTimeRate}%
 - การแจ้งข้อบกพร่อง/ปัญหา: ${patrolIssuesCount} รายการ
 - การส่งมอบเวรประจำกะ: ส่งมอบแล้ว ${dayShiftReports.length} กะ
 
@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
 
 #### 1. สรุปภาพรวมความปลอดภัย (Executive Overview)
 • การเดินตรวจจุดตรวจทำได้ **${patrolComplianceRate}%** (${uniqueCheckpointsScanned}/${totalCheckpointsTarget} จุดตรวจ)
-• อัตราการตรวจตรงเวลากฎทอง 1 ชม. แรก อยู่ที่ **${patrolOnTimeRate}%** ${patrolOnTimeRate >= 80 ? "อยู่ในเกณฑ์ดีเยี่ยม ✅" : "มีบางรอบที่ล่าช้า ควรติดตาม ⚠️"}
+• อัตราการตรวจตรงเวลาตามเกณฑ์ 1 ชม. แรก อยู่ที่ **${patrolOnTimeRate}%** ${patrolOnTimeRate >= 80 ? "อยู่ในเกณฑ์ดีเยี่ยม ✅" : "มีบางรอบที่ล่าช้า ควรติดตาม ⚠️"}
 • ตรวจพบข้อบกพร่อง/เหตุแจ้งเตือนในพื้นที่ **${patrolIssuesCount} รายการ** ${patrolIssuesCount === 0 ? "(สภาพแวดล้อมปกติ ปลอดภัย 100%)" : "(ประสานงานช่าง/ผู้เกี่ยวข้องแล้ว)"}
 
 #### 2. สรุปผลการสแกนตรวจรถในโรงพยาบาล (Vehicle Fleet Patrol)

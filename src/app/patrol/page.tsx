@@ -366,7 +366,7 @@ export default function PatrolPage() {
             <div>
               <span className="font-bold">{activeRound.name} • {activeShift.name}</span>
               <span className="text-[10px] text-sky-100 block">
-                กฎทอง: ต้องตรวจเสร็จภายใน <strong>{activeRound.deadlineTime} น.</strong>
+                เกณฑ์เวลา: กำหนดตรวจเสร็จสิ้นภายใน <strong>{activeRound.deadlineTime} น.</strong>
               </span>
             </div>
           </div>
