@@ -26,12 +26,13 @@ import {
   Camera,
   Loader2,
   Sparkles,
-  Upload
+  Upload,
+  Moon,
+  Sun
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import HospitalBrand from "@/components/HospitalBrand";
-import { defaultPatrolRounds, getCurrentRound, getCurrentShift } from "@/lib/patrolSchedule";
 import { uploadImageToDrive } from "@/lib/uploadToDrive";
 
 interface FloatingToast {
@@ -82,9 +83,7 @@ function resizeImageBase64(file: File, maxDimension = 1200): Promise<string> {
 
 function VehicleContent() {
   const router = useRouter();
-  const { currentUser, staffVehicles, addParkingScan, parkingScans, patrolRounds, googleDriveWebhookUrl } = useStore();
-  const hospitalRounds = (patrolRounds && patrolRounds.length > 0) ? patrolRounds : defaultPatrolRounds;
-  const activeHospitalRound = getCurrentRound(hospitalRounds, new Date());
+  const { currentUser, staffVehicles, addParkingScan, parkingScans, googleDriveWebhookUrl } = useStore();
 
   // OCR Processing States
   const [isOcrProcessing, setIsOcrProcessing] = useState(false);
@@ -119,8 +118,11 @@ function VehicleContent() {
   const [reportedIssue, setReportedIssue] = useState<string | null>(null);
 
   // --- TAB 2: PATROL ROUND (เดินตรวจสแกนรถทุกคันใน รพ.) STATES ---
-  const [selectedRound, setSelectedRound] = useState<string>(activeHospitalRound.id);
-  const [selectedZone, setSelectedZone] = useState<string>("ลานหน้า OPD");
+  // ตรวจเฉพาะ 2 รอบมาตรฐาน: 22:00 (รอบดึก) และ 06:00 (รอบเช้า)
+  const [selectedRound, setSelectedRound] = useState<"22:00" | "06:00">(() => {
+    const hour = new Date().getHours();
+    return (hour >= 14 || hour < 2) ? "22:00" : "06:00";
+  });
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -439,8 +441,8 @@ function VehicleContent() {
     });
 
     const isStaff = !!staff;
-    const currentRoundObj = hospitalRounds.find(r => r.id === selectedRound) || { id: selectedRound, name: `รอบ ${selectedRound}` };
-    const zone = zoneOverride || selectedZone || (isStaff ? staff.zone : "ลานจอดทั่วไป");
+    const roundLabel = selectedRound === "22:00" ? "รอบดึก 22:00 น." : "รอบเช้า 06:00 น.";
+    const zone = zoneOverride || (isStaff ? (staff.zone || "ลานจอดบุคลากร") : "ลานจอดโรงพยาบาล");
 
     // อัปโหลดรูปภาพหลักฐานไปยัง Google Drive โฟลเดอร์ "ภาพถ่ายตรวจรถ (Vehicle Scans)"
     let finalPhotoUrl = capturedImage;
@@ -448,7 +450,7 @@ function VehicleContent() {
       try {
         finalPhotoUrl = (await uploadImageToDrive({
           image: capturedImage,
-          title: `CAR_${plate}_${selectedRound}`,
+          title: `CAR_${plate}_${selectedRound.replace(":", "")}`,
           subfolder: "ภาพถ่ายตรวจรถ (Vehicle Scans)",
           webhookUrl: googleDriveWebhookUrl,
         })) || capturedImage;
@@ -461,7 +463,7 @@ function VehicleContent() {
       plateNumber: plate,
       province: staff ? staff.province : "ขอนแก่น",
       round: selectedRound,
-      roundName: currentRoundObj.name,
+      roundName: roundLabel,
       timestamp: new Date().toISOString(),
       isStaff,
       ownerName: staff ? staff.ownerName : undefined,
@@ -1093,22 +1095,35 @@ function VehicleContent() {
             <div className="p-4 bg-white border border-sky-100 rounded-3xl shadow-xs space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex-1">
-                  <label className="block text-[11px] font-bold text-slate-500 mb-1">
-                    เลือกรอบการตรวจสแกนรถ:
-                  </label>
-                  <select
-                    value={selectedRound}
-                    onChange={(e) => setSelectedRound(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-sky-500"
-                  >
-                    {hospitalRounds.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.id}: {r.name}
-                      </option>
-                    ))}
-                    <option value="22:00">🌙 รอบดึกพิเศษ 22:00 น.</option>
-                    <option value="06:00">☀️ รอบเช้าพิเศษ 06:00 น.</option>
-                  </select>
+                  <span className="text-[11px] font-bold text-slate-500 block mb-1.5">
+                    รอบตรวจสแกนรถ (เฉพาะ 2 รอบมาตรฐาน):
+                  </span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedRound("22:00")}
+                      className={`py-2 px-3 rounded-2xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
+                        selectedRound === "22:00"
+                          ? "bg-slate-900 text-amber-300 shadow-md ring-2 ring-amber-400/40"
+                          : "bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200"
+                      }`}
+                    >
+                      <Moon className="w-3.5 h-3.5" />
+                      <span>🌙 รอบ 22:00 น. (ดึก)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedRound("06:00")}
+                      className={`py-2 px-3 rounded-2xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
+                        selectedRound === "06:00"
+                          ? "bg-sky-600 text-white shadow-md ring-2 ring-sky-300"
+                          : "bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200"
+                      }`}
+                    >
+                      <Sun className="w-3.5 h-3.5" />
+                      <span>☀️ รอบ 06:00 น. (เช้า)</span>
+                    </button>
+                  </div>
                 </div>
 
                 <button
@@ -1132,7 +1147,7 @@ function VehicleContent() {
                   <div className="flex items-center justify-between text-[11px] font-bold text-sky-800">
                     <span className="flex items-center gap-1">
                       <span className="w-2 h-2 rounded-full bg-sky-500 animate-ping" />
-                      รอบ {selectedRound}
+                      {selectedRound === "22:00" ? "รอบดึก 22:00 น." : "รอบเช้า 06:00 น."}
                     </span>
                     <span className="text-[10px] bg-white px-2 py-0.5 rounded-full border border-sky-200 text-sky-700">รอบนี้</span>
                   </div>
@@ -1165,35 +1180,6 @@ function VehicleContent() {
                     <span>•</span>
                     <span className="text-amber-700 font-semibold">นอก {todayOutsideCount}</span>
                   </div>
-                </div>
-              </div>
-
-              {/* Quick Zone Selector */}
-              <div className="pt-2 border-t border-slate-100 space-y-1.5">
-                <span className="text-[11px] font-bold text-slate-600 block">
-                  📍 กำลังตรวจ ณ โซน: <strong className="text-sky-700">{selectedZone}</strong>
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {[
-                    "ลานหน้า OPD",
-                    "ลานแพทย์ A/B",
-                    "แฟลตพยาบาล",
-                    "โซนฉุกเฉิน (ER)",
-                    "ลานหลัง รพ."
-                  ].map((z) => (
-                    <button
-                      key={z}
-                      type="button"
-                      onClick={() => setSelectedZone(z)}
-                      className={`text-[11px] font-semibold px-2.5 py-1 rounded-xl transition-all ${
-                        selectedZone === z
-                          ? "bg-sky-600 text-white shadow-xs font-bold"
-                          : "bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200"
-                      }`}
-                    >
-                      {z}
-                    </button>
-                  ))}
                 </div>
               </div>
             </div>
@@ -1340,15 +1326,15 @@ function VehicleContent() {
             <div className="space-y-2">
               <div className="flex items-center justify-between px-1">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  รายการสแกนรอบนี้ ({currentRoundScans.length} คัน)
+                  รายการสแกนรอบ {selectedRound === "22:00" ? "22:00 น. (ดึก)" : "06:00 น. (เช้า)"} ({currentRoundScans.length} คัน)
                 </h3>
                 <span className="text-[11px] text-sky-700 font-bold">แคชออฟไลน์ 0.01s</span>
               </div>
 
               {currentRoundScans.length === 0 ? (
                 <div className="p-6 bg-white border border-slate-200 rounded-3xl text-center text-xs text-slate-400 space-y-1">
-                  <p>ยังไม่มีรายการบันทึกในรอบ {selectedRound} น.</p>
-                  <p className="text-[11px]">พิมพ์เลข 4 ตัวท้ายด้านบนเพื่อบันทึก</p>
+                  <p>ยังไม่มีรายการบันทึกในรอบ {selectedRound === "22:00" ? "22:00 น. (ดึก)" : "06:00 น. (เช้า)"}</p>
+                  <p className="text-[11px]">พิมพ์เลข 4 ตัวท้ายด้านบนหรือใช้กล้องสแกนเพื่อบันทึก</p>
                 </div>
               ) : (
                 <div className="space-y-2">

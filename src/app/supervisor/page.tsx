@@ -1141,14 +1141,19 @@ export default function SupervisorPage() {
     };
   }).sort((a, b) => (b.totalScans + b.reportsCount) - (a.totalScans + a.reportsCount));
 
-  // Selected Day Vehicle Patrol Breakdown
+  // Selected Day Vehicle Patrol Breakdown (2 รอบมาตรฐาน: รอบดึก 22:00 น. และ รอบเช้า 06:00 น.)
   const dayVehiclesScanned = parkingScans.filter((s) => s.timestamp?.startsWith(selectedVehiclePatrolDate));
   const staffVehiclesDayCount = dayVehiclesScanned.filter((s) => s.isStaff).length;
   const outsideVehiclesDayCount = dayVehiclesScanned.filter((s) => !s.isStaff).length;
 
-  const roundsVehicleBreakdown = supervisorRounds.map((round) => {
+  const vehicleInspectionRounds = [
+    { id: "22:00", name: "🌙 รอบดึก 22:00 น.", startTime: "21:00", endTime: "23:59", shift: "night", description: "ตรวจความปลอดภัยกลางคืน / เฝ้าระวังรถจอดค้างคืน" },
+    { id: "06:00", name: "☀️ รอบเช้า 06:00 น.", startTime: "05:00", endTime: "08:00", shift: "morning", description: "ตรวจความเรียบร้อยและส่งมอบเวรเช้า" },
+  ];
+
+  const roundsVehicleBreakdown = vehicleInspectionRounds.map((round) => {
     const roundScans = dayVehiclesScanned.filter((s) => {
-      if (s.round === round.id || s.roundName === round.name) return true;
+      if (s.round === round.id || (s.roundName && s.roundName.includes(round.id))) return true;
       if (!s.timestamp) return false;
       const timePart = s.timestamp.split("T")[1]?.slice(0, 5);
       if (!timePart) return false;
@@ -1830,10 +1835,10 @@ export default function SupervisorPage() {
                 <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-200 flex items-center justify-between">
                   <h4 className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 text-sky-600" />
-                    ตารางสรุปจำนวนรถที่สแกนตรวจในแต่ละรอบเวลา (Hospital Patrol 10 Rounds)
+                    ตารางสรุปจำนวนรถที่สแกนตรวจในแต่ละรอบเวลา (รอบ 22:00 น. และ 06:00 น.)
                   </h4>
                   <span className="text-[11px] text-slate-500">
-                    ตรวจครบทุก 3 ชม. (กลางวัน) และทุก 2 ชม. (กลางคืน)
+                    รอบตรวจมาตรฐาน 2 รอบต่อวัน (รอบดึก 22:00 น. และรอบเช้า 06:00 น.)
                   </span>
                 </div>
 
@@ -3758,7 +3763,7 @@ export default function SupervisorPage() {
 **ประจำวันที่:** ${selectedAiArchiveDate}
 
 #### 1. สรุปภาพรวมความพร้อมลานจอด (Parking Readiness)
-• ตรวจสอบรอบเวลา 10 รอบ พบรถทั้งสิ้น ${parkingScans.length} คัน (บุคลากร ${parkingScans.filter((s) => s.isStaff).length} คัน / ภายนอก ${parkingScans.filter((s) => !s.isStaff).length} คัน)
+• ตรวจสอบรอบเวลามาตรฐาน (รอบ 22:00 น. และ 06:00 น.) พบรถทั้งสิ้น ${parkingScans.length} คัน (บุคลากร ${parkingScans.filter((s) => s.isStaff).length} คัน / ภายนอก ${parkingScans.filter((s) => !s.isStaff).length} คัน)
 • ช่องจอดรถสำหรับผู้ป่วยนอก (OPD) พร้อมใช้งานช่วงเช้า ว่างประมาณ 85% ไม่มีความแออัดสะสม
 
 #### 2. สิ่งที่ต้องจัดการด่วน (Action Items สำหรับ รปภ. กะเช้า)
