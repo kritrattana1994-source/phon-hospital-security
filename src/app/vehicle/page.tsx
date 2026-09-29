@@ -172,7 +172,7 @@ function VehicleContent() {
       setCameraActive(true);
     } catch (err: any) {
       console.warn("Camera access error:", err);
-      setCameraError("ไม่สามารถเปิดกล้องได้ (จำลองการสแกนผ่านแถบคีย์ด่วนด้านล่างได้)");
+      setCameraError("ไม่สามารถเปิดกล้องได้ (สามารถพิมพ์เลขทะเบียนหรือเลือกถ่ายภาพความชัดสูงด้านล่างได้)");
       setCameraActive(false);
     }
   };
@@ -669,23 +669,6 @@ function VehicleContent() {
                   )}
                 </div>
 
-                {/* Quick sample chips */}
-                <div className="flex items-center gap-1.5 pt-0.5 overflow-x-auto text-[11px] text-slate-500 no-scrollbar justify-center">
-                  <span className="shrink-0 text-slate-400">ตัวอย่าง:</span>
-                  {["1234", "5678", "3333", "8888"].map((sample) => (
-                    <button
-                      key={sample}
-                      type="button"
-                      onClick={() => {
-                        setDialQuery(sample);
-                        handlePerformSearch(sample);
-                      }}
-                      className="px-2.5 py-0.5 rounded-lg bg-slate-100 hover:bg-slate-200 font-mono text-slate-700 transition-colors"
-                    >
-                      {sample}
-                    </button>
-                  ))}
-                </div>
               </form>
             </div>
 
@@ -1351,48 +1334,6 @@ function VehicleContent() {
                   <Zap className="w-4 h-4 fill-current" /> บันทึก
                 </button>
               </form>
-
-              {/* Demo quick scan buttons */}
-              <div className="space-y-1.5 pt-1 border-t border-slate-100">
-                <span className="text-[11px] text-slate-400 block">กดจำลองสแกนรถ:</span>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleContinuousScan("1234")}
-                    className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 text-left transition-all active:scale-95"
-                  >
-                    <span className="font-mono font-bold text-emerald-800 text-xs block">1234 (หมอวิทยา)</span>
-                    <span className="text-[10px] text-emerald-600">รถแพทย์ รพ.พล</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleContinuousScan("5678")}
-                    className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 text-left transition-all active:scale-95"
-                  >
-                    <span className="font-mono font-bold text-emerald-800 text-xs block">5678 (หมอสมศรี)</span>
-                    <span className="text-[10px] text-emerald-600">รถแพทย์ รพ.พล</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleContinuousScan("9999", "ชั้นใต้ดิน B2 (เสา 14)")}
-                    className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 hover:bg-rose-100 text-left transition-all active:scale-95"
-                  >
-                    <span className="font-mono font-bold text-rose-800 text-xs block">9999 (รถต้องสงสัย)</span>
-                    <span className="text-[10px] text-rose-600">รถภายนอก / แอบจอดแช่</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleContinuousScan("กข-4455", "ช่องแพทย์ฉุกเฉิน (ER)")}
-                    className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 hover:bg-amber-100 text-left transition-all active:scale-95"
-                  >
-                    <span className="font-mono font-bold text-amber-800 text-xs block">กข-4455 (จอดขวาง ER)</span>
-                    <span className="text-[10px] text-amber-600">รถภายนอก / ขวางทางฉุกเฉิน</span>
-                  </button>
-                </div>
-              </div>
             </div>
 
             {/* Scans List in Round */}

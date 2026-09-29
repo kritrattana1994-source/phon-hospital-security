@@ -366,18 +366,7 @@ export const mockStaffVehicles: StaffVehicle[] = [];
 
 const initialParkingScans: ParkingScan[] = [];
 
-export const initialIncidents: Incident[] = [
-  {
-    id: 'inc-1',
-    type: 'facility',
-    severity: 'medium',
-    title: 'ไฟทางหนีไฟดับบริเวณบันไดชั้น 2 ตึก A',
-    reporterName: 'นายสมชาย รักษา',
-    timestamp: '2026-09-11 05:30',
-    status: 'investigating',
-    imageUrl: 'https://images.unsplash.com/photo-1517646287270-a5a9ca602e5c?w=600&q=80',
-  }
-];
+export const initialIncidents: Incident[] = [];
 export const initialBuildings: string[] = [
   'อาคารเฉลิมพระเกียรติ A',
   'อาคารบริการผู้ป่วย B',
@@ -760,6 +749,12 @@ export const useStore = create<AppState>()(
               : [];
             const merged = Array.from(new Set([...initialBuildings, ...cpBuildings]));
             useStore.setState({ buildings: merged });
+          }
+          if (Array.isArray(state.incidents)) {
+            const cleanIncidents = state.incidents.filter((i) => i.id !== 'inc-1');
+            if (cleanIncidents.length !== state.incidents.length) {
+              useStore.setState({ incidents: cleanIncidents });
+            }
           }
         }
       },

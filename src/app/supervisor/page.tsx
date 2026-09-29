@@ -619,13 +619,7 @@ export default function SupervisorPage() {
           setLocatingCpId(null);
         },
         (err) => {
-          const simCoords = {
-            lat: 15.81462 + (Math.random() - 0.5) * 0.001,
-            lng: 102.60124 + (Math.random() - 0.5) * 0.001,
-            accuracy: 4.5,
-            setAt: new Date().toLocaleString("th-TH")
-          };
-          updateCheckpoint(cp.id, { coords: simCoords });
+          alert("ไม่สามารถรับสัญญาณพิกัด GPS ได้ กรุณาเปิด Location Service หรือลองใหม่อีกครั้ง");
           setLocatingCpId(null);
         },
         { enableHighAccuracy: true, timeout: 8000 }
@@ -967,16 +961,16 @@ export default function SupervisorPage() {
       });
     } else if (hasRealLogs) {
       const uniqueCp = new Set(dayPatrol.map((p) => p.checkpointId)).size;
-      const comp = Math.min(100, Math.round((uniqueCp / Math.max(checkpoints.length, 1)) * 100));
+      const comp = checkpoints.length > 0 ? Math.min(100, Math.round((uniqueCp / checkpoints.length) * 100)) : 0;
       const onTimeScans = dayPatrol.filter((p) => p.isOnTime !== false).length;
-      const onTimeRate = dayPatrol.length > 0 ? Math.round((onTimeScans / dayPatrol.length) * 100) : 100;
+      const onTimeRate = dayPatrol.length > 0 ? Math.round((onTimeScans / dayPatrol.length) * 100) : 0;
 
       monthlyDaysData.push({
         dayNum: d,
         dateStr,
         isToday,
         isFuture: false,
-        complianceRate: comp > 0 ? comp : (d % 3 === 0 ? 94 : 96),
+        complianceRate: comp,
         onTimeRate: onTimeRate,
         scansCount: dayPatrol.length,
         vehiclesCount: dayParking.length,
@@ -984,40 +978,71 @@ export default function SupervisorPage() {
         hasRealLogs: true,
       });
     } else {
-      // Deterministic realistic baseline for previous days (maintaining >90% target)
-      const baseCompliance = 90 + ((d * 7 + 3) % 9);
-      const baseOnTime = 88 + ((d * 5 + 2) % 11);
-      const baseVehicles = 34 + ((d * 11) % 25);
-      const baseReports = 3;
-      const baseScans = Math.max(10, checkpoints.length * (d % 2 === 0 ? 9 : 10));
-
+      // ไม่มีข้อมูลจริงสำหรับวันนี้ -> ค่าเป็น 0 ทั้งหมด (ไม่มีการจำลองข้อมูล)
       monthlyDaysData.push({
         dayNum: d,
         dateStr,
         isToday,
         isFuture: false,
-        complianceRate: baseCompliance,
-        onTimeRate: baseOnTime,
-        scansCount: baseScans,
-        vehiclesCount: baseVehicles,
-        reportsCount: baseReports,
+        complianceRate: 0,
+        onTimeRate: 0,
+        scansCount: 0,
+        vehiclesCount: 0,
+        reportsCount: 0,
         hasRealLogs: false,
       });
     }
   }
 
-  const validDays = monthlyDaysData.filter((d) => !d.isFuture);
-  const monthlyAvgCompliance = validDays.length > 0
-    ? Math.round(validDays.reduce((acc, d) => acc + d.complianceRate, 0) / validDays.length)
-    : 95;
-  const monthlyAvgOnTime = validDays.length > 0
-    ? Math.round(validDays.reduce((acc, d) => acc + d.onTimeRate, 0) / validDays.length)
-    : 92;
-  const monthlyTotalVehicles = validDays.reduce((acc, d) => acc + d.vehiclesCount, 0);
-  const monthlyTotalReports = validDays.reduce((acc, d) => acc + d.reportsCount, 0);
-  const bestDay = [...validDays].sort(
-    (a, b) => (b.complianceRate + b.onTimeRate) - (a.complianceRate + a.onTimeRate)
-  )[0] || validDays[0];
+  const daysWithLogs = monthlyDaysData.filter((d) => d.hasRealLogs);
+  const monthlyAvgCompliance = daysWithLogs.length > 0
+    ? Math.round(daysWithLogs.reduce((acc, d) => acc + d.complianceRate, 0) / daysWithLogs.length)
+    : 0;
+  const monthlyAvgOnTime = daysWithLogs.length > 0
+    ? Math.round(daysWithLogs.reduce((acc, d) => acc + d.onTimeRate, 0) / daysWithLogs.length)
+    : 0;
+  const monthlyTotalVehicles = monthlyDaysData.reduce((acc, d) => acc + d.vehiclesCount, 0);
+  const monthlyTotalReports = monthlyDaysData.reduce((acc, d) => acc + d.reportsCount, 0);
+  const bestDay = daysWithLogs.length > 0
+    ? [...daysWithLogs].sort((a, b) => (b.complianceRate + b.onTimeRate) - (a.complianceRate + a.onTimeRate))[0]
+    : null;
+
+  const monthPrefix = `${selectedYearStr}-${selectedMonthStr}`;
+  const monthPatrolLogs = patrolLogs.filter((p) => p.timestamp?.startsWith(monthPrefix));
+  const monthParkingScans = parkingScans.filter((s) => s.timestamp?.startsWith(monthPrefix));
+  const monthShiftReports = shiftReports.filter(
+    (r) => (r.dateString && r.dateString.startsWith(monthPrefix)) || (r.timestamp && r.timestamp.startsWith(monthPrefix))
+  );
+
+  const getShiftRealStats = (shiftId: 'morning' | 'afternoon' | 'night') => {
+    const shiftLogs = monthPatrolLogs.filter((p) => p.shift === shiftId);
+    const shiftReportsCount = monthShiftReports.filter((r) => r.shiftId === shiftId).length;
+    
+    const uniqueCp = new Set(shiftLogs.map((p) => p.checkpointId)).size;
+    const compRate = (shiftLogs.length > 0 && checkpoints.length > 0)
+      ? Math.min(100, Math.round((uniqueCp / checkpoints.length) * 100))
+      : 0;
+    
+    const onTimeScans = shiftLogs.filter((p) => p.isOnTime !== false).length;
+    const onTimeRate = shiftLogs.length > 0 ? Math.round((onTimeScans / shiftLogs.length) * 100) : 0;
+    
+    const shiftRounds = supervisorRounds.filter((r) => r.shift === shiftId).map((r) => r.id);
+    const vehiclesInShift = monthParkingScans.filter((s) => shiftRounds.includes(s.round || "")).length;
+    const avgVehicles = daysWithLogs.length > 0 ? Math.round(vehiclesInShift / daysWithLogs.length) : vehiclesInShift;
+    
+    return {
+      scansCount: shiftLogs.length,
+      complianceRate: compRate,
+      onTimeRate,
+      vehiclesCount: vehiclesInShift,
+      avgVehicles,
+      reportsCount: shiftReportsCount,
+    };
+  };
+
+  const morningStats = getShiftRealStats("morning");
+  const afternoonStats = getShiftRealStats("afternoon");
+  const nightStats = getShiftRealStats("night");
 
   const monthlyShiftStats = [
     {
@@ -1028,11 +1053,11 @@ export default function SupervisorPage() {
       color: "from-amber-500 to-orange-500",
       bgLight: "bg-amber-50 border-amber-200 text-amber-900",
       badgeBg: "bg-amber-100 text-amber-800",
-      roundsCount: 2,
-      complianceRate: 98,
-      onTimeRate: 96,
-      avgVehicles: Math.round((monthlyTotalVehicles * 0.42) / Math.max(validDays.length, 1)),
-      reportsCount: validDays.length,
+      roundsCount: supervisorRounds.filter((r) => r.shift === "morning").length,
+      complianceRate: morningStats.complianceRate,
+      onTimeRate: morningStats.onTimeRate,
+      avgVehicles: morningStats.avgVehicles,
+      reportsCount: morningStats.reportsCount,
       rank: 1,
       highlight: "หนาแน่นช่วงเปิดบริการ OPD และลานแพทย์",
     },
@@ -1044,11 +1069,11 @@ export default function SupervisorPage() {
       color: "from-sky-500 to-blue-600",
       bgLight: "bg-sky-50 border-sky-200 text-sky-900",
       badgeBg: "bg-sky-100 text-sky-800",
-      roundsCount: 3,
-      complianceRate: 95,
-      onTimeRate: 92,
-      avgVehicles: Math.round((monthlyTotalVehicles * 0.35) / Math.max(validDays.length, 1)),
-      reportsCount: validDays.length,
+      roundsCount: supervisorRounds.filter((r) => r.shift === "afternoon").length,
+      complianceRate: afternoonStats.complianceRate,
+      onTimeRate: afternoonStats.onTimeRate,
+      avgVehicles: afternoonStats.avgVehicles,
+      reportsCount: afternoonStats.reportsCount,
       rank: 2,
       highlight: "ตรวจช่วงเปลี่ยนเวรและปิดอาคารผู้ป่วยนอก",
     },
@@ -1060,42 +1085,44 @@ export default function SupervisorPage() {
       color: "from-indigo-600 to-slate-900",
       bgLight: "bg-indigo-50 border-indigo-200 text-indigo-900",
       badgeBg: "bg-indigo-100 text-indigo-800",
-      roundsCount: 5,
-      complianceRate: 93,
-      onTimeRate: 90,
-      avgVehicles: Math.round((monthlyTotalVehicles * 0.23) / Math.max(validDays.length, 1)),
-      reportsCount: validDays.length,
+      roundsCount: supervisorRounds.filter((r) => r.shift === "night").length,
+      complianceRate: nightStats.complianceRate,
+      onTimeRate: nightStats.onTimeRate,
+      avgVehicles: nightStats.avgVehicles,
+      reportsCount: nightStats.reportsCount,
       rank: 3,
       highlight: "เน้นตรวจรถค้างคืน และความปลอดภัยรอบรั้ว รพ.",
     },
   ];
 
-  const monthlyGuardStats = onlyGuards.map((guard, idx) => {
-    const guardLogs = patrolLogs.filter((p) => p.guardName?.includes(guard.name) || p.guardId === guard.id);
-    const guardReports = shiftReports.filter((r) => r.guardName?.includes(guard.name) || r.guardId === guard.id);
+  const monthlyGuardStats = onlyGuards.map((guard) => {
+    const guardLogs = monthPatrolLogs.filter((p) => p.guardName?.includes(guard.name) || p.guardId === guard.id);
+    const guardReports = monthShiftReports.filter((r) => r.guardName?.includes(guard.name) || r.guardId === guard.id);
     const guardPhotos = guardLogs.filter((p) => !!p.imageUrl).length;
 
-    const totalScans = guardLogs.length > 0 ? guardLogs.length : 110 + idx * 14;
+    const totalScans = guardLogs.length;
     const onTimeScans = guardLogs.filter((p) => p.isOnTime !== false).length;
-    const onTimeRate = guardLogs.length > 0 ? Math.round((onTimeScans / guardLogs.length) * 100) : 94 - idx * 2;
-    const reportsCount = guardReports.length > 0 ? guardReports.length : 18 - idx * 2;
-    const photosCount = guardPhotos > 0 ? guardPhotos : Math.max(10, totalScans - 4);
-    const vehiclesContributed = 30 + idx * 9;
+    const onTimeRate = totalScans > 0 ? Math.round((onTimeScans / totalScans) * 100) : 0;
+    const reportsCount = guardReports.length;
+    const photosCount = guardPhotos;
+    const vehiclesContributed = monthParkingScans.filter((s) => s.guardName?.includes(guard.name)).length;
 
-    let grade = "A";
-    let gradeColor = "text-emerald-700 bg-emerald-100 border-emerald-300";
-    if (onTimeRate >= 95 && reportsCount >= 16) {
-      grade = "A+";
-      gradeColor = "text-emerald-800 bg-emerald-100 border-emerald-400";
-    } else if (onTimeRate >= 90) {
-      grade = "A";
-      gradeColor = "text-sky-800 bg-sky-100 border-sky-300";
-    } else if (onTimeRate >= 85) {
-      grade = "B+";
-      gradeColor = "text-amber-800 bg-amber-100 border-amber-300";
-    } else {
-      grade = "B";
-      gradeColor = "text-slate-800 bg-slate-100 border-slate-300";
+    let grade = "-";
+    let gradeColor = "text-slate-500 bg-slate-100 border-slate-200";
+    if (totalScans > 0 || reportsCount > 0) {
+      if (onTimeRate >= 95 && reportsCount >= 10) {
+        grade = "A+";
+        gradeColor = "text-emerald-800 bg-emerald-100 border-emerald-400";
+      } else if (onTimeRate >= 90) {
+        grade = "A";
+        gradeColor = "text-sky-800 bg-sky-100 border-sky-300";
+      } else if (onTimeRate >= 80) {
+        grade = "B+";
+        gradeColor = "text-amber-800 bg-amber-100 border-amber-300";
+      } else {
+        grade = "B";
+        gradeColor = "text-rose-800 bg-rose-100 border-rose-300";
+      }
     }
 
     return {
@@ -1110,9 +1137,9 @@ export default function SupervisorPage() {
       vehiclesContributed,
       grade,
       gradeColor,
-      isDiligent: reportsCount >= 14,
+      isDiligent: reportsCount >= 10,
     };
-  }).sort((a, b) => b.onTimeRate - a.onTimeRate);
+  }).sort((a, b) => (b.totalScans + b.reportsCount) - (a.totalScans + a.reportsCount));
 
   // Selected Day Vehicle Patrol Breakdown
   const dayVehiclesScanned = parkingScans.filter((s) => s.timestamp?.startsWith(selectedVehiclePatrolDate));
@@ -1326,7 +1353,7 @@ export default function SupervisorPage() {
                   />
                 </div>
                 <p className="text-[11px] text-slate-500 mt-2">
-                  เฉลี่ยจาก {validDays.length} วันที่มีการบันทึกข้อมูล
+                  {daysWithLogs.length > 0 ? `เฉลี่ยจาก ${daysWithLogs.length} วันที่มีการบันทึกข้อมูล` : "ยังไม่มีข้อมูลบันทึกในเดือนนี้"}
                 </p>
               </div>
 
@@ -1362,7 +1389,7 @@ export default function SupervisorPage() {
                 <div className="w-full bg-slate-100 h-2 rounded-full mt-3 overflow-hidden">
                   <div
                     className="bg-emerald-500 h-full rounded-full transition-all duration-500"
-                    style={{ width: "100%" }}
+                    style={{ width: `${Math.min(100, Math.round((monthlyTotalVehicles / 100) * 100))}%` }}
                   />
                 </div>
                 <p className="text-[11px] text-emerald-600 mt-2 font-medium">
@@ -1382,7 +1409,7 @@ export default function SupervisorPage() {
                 <div className="w-full bg-slate-100 h-2 rounded-full mt-3 overflow-hidden">
                   <div
                     className="bg-amber-500 h-full rounded-full transition-all duration-500"
-                    style={{ width: "95%" }}
+                    style={{ width: `${Math.min(100, Math.round((monthlyTotalReports / 30) * 100))}%` }}
                   />
                 </div>
                 <p className="text-[11px] text-amber-700 mt-2 font-medium">
@@ -1437,6 +1464,8 @@ export default function SupervisorPage() {
                       let barColor = "bg-sky-500 hover:bg-sky-600";
                       if (day.isFuture) {
                         barColor = "bg-slate-100 border border-dashed border-slate-300";
+                      } else if (!day.hasRealLogs) {
+                        barColor = "bg-slate-100/70 border border-slate-200";
                       } else if (day.complianceRate >= 95) {
                         barColor = "bg-emerald-500 hover:bg-emerald-600";
                       } else if (day.complianceRate >= 90) {
@@ -1447,7 +1476,11 @@ export default function SupervisorPage() {
                         barColor = "bg-rose-500 hover:bg-rose-600";
                       }
 
-                      const heightPercent = day.isFuture ? 8 : Math.max(12, day.complianceRate);
+                      const heightPercent = day.isFuture
+                        ? 6
+                        : !day.hasRealLogs
+                        ? 6
+                        : Math.max(12, day.complianceRate);
 
                       return (
                         <div
@@ -1455,12 +1488,14 @@ export default function SupervisorPage() {
                           onMouseEnter={() => setSelectedDayHover(day.dayNum)}
                           onMouseLeave={() => setSelectedDayHover(null)}
                           onClick={() => {
-                            if (!day.isFuture) {
+                            if (!day.isFuture && day.hasRealLogs) {
                               setSelectedVehiclePatrolDate(day.dateStr);
                               setSelectedAiArchiveDate(day.dateStr);
                             }
                           }}
-                          className="flex flex-col items-center group relative cursor-pointer h-full justify-end"
+                          className={`flex flex-col items-center group relative h-full justify-end ${
+                            !day.isFuture && day.hasRealLogs ? "cursor-pointer" : "cursor-default"
+                          }`}
                         >
                           {/* Tooltip Popup on Hover */}
                           {isHovered && !day.isFuture && (
@@ -1468,29 +1503,35 @@ export default function SupervisorPage() {
                               <p className="font-bold text-sky-300 border-b border-slate-700 pb-1">
                                 วันที่ {day.dayNum} {availableMonths.find(m => m.key === selectedMonth)?.monthName}
                               </p>
-                              <div className="mt-1 space-y-0.5 text-slate-300">
-                                <div className="flex justify-between">
-                                  <span>ตรวจสำเร็จ:</span>
-                                  <strong className="text-white">{day.complianceRate}%</strong>
+                              {day.hasRealLogs ? (
+                                <div className="mt-1 space-y-0.5 text-slate-300">
+                                  <div className="flex justify-between">
+                                    <span>ตรวจสำเร็จ:</span>
+                                    <strong className="text-white">{day.complianceRate}%</strong>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span>ตรงเวลา 1 ชม.:</span>
+                                    <strong className="text-emerald-300">{day.onTimeRate}%</strong>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span>ตรวจรถ:</span>
+                                    <strong className="text-amber-300">{day.vehiclesCount} คัน</strong>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span>รายงานกะ:</span>
+                                    <strong className="text-white">{day.reportsCount} ฉบับ</strong>
+                                  </div>
                                 </div>
-                                <div className="flex justify-between">
-                                  <span>ตรงเวลา 1 ชม.:</span>
-                                  <strong className="text-emerald-300">{day.onTimeRate}%</strong>
+                              ) : (
+                                <div className="mt-1 text-slate-400 py-1 text-center">
+                                  ยังไม่มีบันทึกข้อมูลการปฏิบัติงาน
                                 </div>
-                                <div className="flex justify-between">
-                                  <span>ตรวจรถ:</span>
-                                  <strong className="text-amber-300">{day.vehiclesCount} คัน</strong>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span>รายงานกะ:</span>
-                                  <strong className="text-white">{day.reportsCount} ฉบับ</strong>
-                                </div>
-                              </div>
+                              )}
                             </div>
                           )}
 
                           {/* Top rate label for notable bars */}
-                          {!day.isFuture && (
+                          {!day.isFuture && day.hasRealLogs && (
                             <span className="text-[9px] font-bold text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity mb-1">
                               {day.complianceRate}%
                             </span>
@@ -1530,7 +1571,15 @@ export default function SupervisorPage() {
                 <span className="flex items-center gap-2">
                   <Award className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span>
-                    🏆 <strong>วันที่ผลงานดีเด่นที่สุด:</strong> วันที่ {bestDay.dayNum} ({bestDay.complianceRate}% ความครอบคลุม • {bestDay.onTimeRate}% ตรงเวลา • สแกนตรวจรถ {bestDay.vehiclesCount} คัน)
+                    {bestDay ? (
+                      <>
+                        🏆 <strong>วันที่ผลงานดีเด่นที่สุด:</strong> วันที่ {bestDay.dayNum} ({bestDay.complianceRate}% ความครอบคลุม • {bestDay.onTimeRate}% ตรงเวลา • สแกนตรวจรถ {bestDay.vehiclesCount} คัน)
+                      </>
+                    ) : (
+                      <>
+                        🏆 <strong>วันที่ผลงานดีเด่นที่สุด:</strong> ยังไม่มีการบันทึกข้อมูลการปฏิบัติงานในเดือนนี้
+                      </>
+                    )}
                   </span>
                 </span>
                 <span className="text-slate-400 text-[11px]">
@@ -4214,7 +4263,7 @@ export default function SupervisorPage() {
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                     <ListChecks className="w-4 h-4 text-sky-600" />
-                    จำลองผลลัพธ์รายการที่จะถูกจัดเก็บ (Simulated Preview):
+                    สรุปรายการที่จะถูกจัดเก็บสำรอง (Archive Preview):
                   </span>
                   <span className="text-xs font-extrabold text-amber-700 bg-amber-100/80 px-2.5 py-0.5 rounded-full">
                     รวม {previewTotal} รายการ
