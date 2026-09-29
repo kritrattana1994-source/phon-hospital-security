@@ -153,7 +153,7 @@ export default function PrintQRModal({ checkpoints, onClose }: PrintQRModalProps
 
                 {/* Footer on Badge */}
                 <div className="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[9px] text-slate-500 font-medium">
-                  <span>📍 บันทึกพิกัด GPS และเวลาจริงระดับวินาที</span>
+                  <span className="text-slate-600 font-semibold">ระบบรักษาความปลอดภัย โรงพยาบาลพล</span>
                   <span className="text-sky-700 font-bold">แอป รปภ. รพ.พล</span>
                 </div>
               </div>
