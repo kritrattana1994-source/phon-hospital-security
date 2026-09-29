@@ -28,7 +28,8 @@ import {
   Sparkles,
   Upload,
   Moon,
-  Sun
+  Sun,
+  Scan
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -134,6 +135,23 @@ function VehicleContent() {
   const lastScannedRef = useRef<Record<string, number>>({});
   const [cameraInputPlate, setCameraInputPlate] = useState("");
 
+  // --- Auto-Scan & Floating Scan Alert States ---
+  const [autoScanActive, setAutoScanActive] = useState(true);
+  const [isAutoScanningFrame, setIsAutoScanningFrame] = useState(false);
+  const [floatingNotification, setFloatingNotification] = useState<{
+    id: string;
+    plate: string;
+    isStaff: boolean;
+    ownerName?: string;
+    department?: string;
+    round: string;
+    timestamp: string;
+  } | null>(null);
+
+  const autoScanTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isAutoScanProcessingRef = useRef(false);
+  const floatingNotificationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
     if (!currentUser) {
       router.push("/guard");
@@ -180,12 +198,17 @@ function VehicleContent() {
   };
 
   const stopPatrolCamera = () => {
+    if (autoScanTimerRef.current) {
+      clearInterval(autoScanTimerRef.current);
+      autoScanTimerRef.current = null;
+    }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
     setCameraActive(false);
     setTorchOn(false);
+    setIsAutoScanningFrame(false);
   };
 
   const toggleTorch = async () => {
@@ -332,6 +355,117 @@ function VehicleContent() {
     }
   };
 
+  // ตัดภาพเฉพาะโซนกรอบเล็งเป้า (Viewfinder HUD) ตรงกลาง เพื่อให้ OCR วิเคราะห์เลขทะเบียนได้แม่นยำและเร็วที่สุด (เสี้ยววินาที)
+  const captureOcrScanArea = (): { cropDataUrl: string; fullDataUrl: string } | null => {
+    if (!videoRef.current) return null;
+    try {
+      const video = videoRef.current;
+      if (video.readyState < 2 || video.videoWidth === 0) return null;
+
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+
+      // ภาพเต็มความละเอียดสูง สำหรับบันทึกลงระบบและ Google Drive
+      const fullCanvas = document.createElement("canvas");
+      fullCanvas.width = Math.min(vw, 1280);
+      fullCanvas.height = Math.min(vh, 720);
+      const fullCtx = fullCanvas.getContext("2d");
+      if (!fullCtx) return null;
+      fullCtx.drawImage(video, 0, 0, fullCanvas.width, fullCanvas.height);
+      const fullDataUrl = fullCanvas.toDataURL("image/jpeg", 0.80);
+
+      // ตัดเฉพาะกรอบกลาง (ความกว้าง 72% ความสูง 38% ตรงเป้าเล็ง)
+      const cropW = Math.round(vw * 0.72);
+      const cropH = Math.round(vh * 0.38);
+      const cropX = Math.round((vw - cropW) / 2);
+      const cropY = Math.round((vh - cropH) / 2);
+
+      const cropCanvas = document.createElement("canvas");
+      cropCanvas.width = 480;
+      cropCanvas.height = Math.round((480 * cropH) / cropW);
+      const cropCtx = cropCanvas.getContext("2d");
+      if (!cropCtx) return null;
+
+      cropCtx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropCanvas.width, cropCanvas.height);
+
+      // เพิ่มความคมชัด (Contrast Enhancement) เพื่อให้อ่านตัวเลขอัตโนมัติได้เฉียบคม
+      const imgData = cropCtx.getImageData(0, 0, cropCanvas.width, cropCanvas.height);
+      const d = imgData.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+        const contrastGray = ((gray - 128) * 1.35) + 128;
+        const clamped = Math.min(255, Math.max(0, contrastGray));
+        d[i] = clamped;
+        d[i + 1] = clamped;
+        d[i + 2] = clamped;
+      }
+      cropCtx.putImageData(imgData, 0, 0);
+
+      const cropDataUrl = cropCanvas.toDataURL("image/jpeg", 0.85);
+      return { cropDataUrl, fullDataUrl };
+    } catch (err) {
+      console.warn("captureOcrScanArea notice:", err);
+      return null;
+    }
+  };
+
+  // ลูปตรวจจับป้ายทะเบียนอัตโนมัติขณะส่องกล้อง (Auto-Scan Loop)
+  useEffect(() => {
+    if (mainTab !== "patrol" || !cameraActive || !autoScanActive) {
+      if (autoScanTimerRef.current) {
+        clearInterval(autoScanTimerRef.current);
+        autoScanTimerRef.current = null;
+      }
+      return;
+    }
+
+    const runAutoScan = async () => {
+      if (isAutoScanProcessingRef.current || isOcrProcessing) return;
+      if (!videoRef.current || videoRef.current.paused || videoRef.current.ended) return;
+
+      const frames = captureOcrScanArea();
+      if (!frames) return;
+
+      isAutoScanProcessingRef.current = true;
+      setIsAutoScanningFrame(true);
+
+      try {
+        const res = await fetch("/api/ocr-plate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: frames.cropDataUrl }),
+        });
+        const data = await res.json();
+
+        if (data.success && data.plateNumber && data.plateNumber.length >= 2) {
+          const plate = data.plateNumber.trim().toUpperCase();
+          const lastTime = lastScannedRef.current[plate] || 0;
+          const now = Date.now();
+
+          // ป้องกันการบันทึกซ้ำซ้อนภายใน 10 วินาที
+          if (now - lastTime >= 10000) {
+            await handleContinuousScan(plate, undefined, frames.fullDataUrl);
+          }
+        }
+      } catch {
+        // ทำงานต่อเนื่องแบบ Background ไม่บล็อกหน้าจอ
+      } finally {
+        isAutoScanProcessingRef.current = false;
+        setIsAutoScanningFrame(false);
+      }
+    };
+
+    // ตรวจจับทุก 1.6 วินาทีขณะเล็งกล้อง
+    autoScanTimerRef.current = setInterval(runAutoScan, 1600);
+
+    return () => {
+      if (autoScanTimerRef.current) {
+        clearInterval(autoScanTimerRef.current);
+        autoScanTimerRef.current = null;
+      }
+    };
+  }, [mainTab, cameraActive, autoScanActive, isOcrProcessing]);
+
   const performOcrOnImage = async (dataUrl: string, targetMode: "lookup" | "patrol") => {
     setIsOcrProcessing(true);
     setOcrStatusText("กำลังส่งภาพให้ระบบ AI ตรวจวิเคราะห์เลขทะเบียน...");
@@ -358,7 +492,9 @@ function VehicleContent() {
         }
       } else {
         const msg = "ไม่สามารถอ่านเลขทะเบียนจากภาพได้ชัดเจน กรุณาถ่ายใหม่อีกครั้งให้ใกล้และชัดเจนขึ้น หรือพิมพ์เลขทะเบียน";
-        alert(`⚠️ ${msg}`);
+        if (targetMode === "lookup") {
+          alert(`⚠️ ${msg}`);
+        }
         addToast({
           plate: "-",
           isStaff: false,
@@ -368,7 +504,9 @@ function VehicleContent() {
       }
     } catch (err: any) {
       console.error("OCR error:", err);
-      alert("เกิดข้อผิดพลาดในการวิเคราะห์ภาพ กรุณาลองใหม่อีกครั้งหรือพิมพ์เลขทะเบียนด้วยตนเอง");
+      if (targetMode === "lookup") {
+        alert("เกิดข้อผิดพลาดในการวิเคราะห์ภาพ กรุณาลองใหม่อีกครั้งหรือพิมพ์เลขทะเบียนด้วยตนเอง");
+      }
     } finally {
       setIsOcrProcessing(false);
       setOcrStatusText(null);
@@ -491,6 +629,24 @@ function VehicleContent() {
         message: `บันทึกทะเบียน ${plate} เรียบร้อยแล้ว (รถภายนอก - บันทึกเฝ้าระวัง)`,
       });
     }
+
+    // ✨ แสดงข้อความแจ้งเตือนบันทึกลอยมา (Floating Banner Alert)
+    setFloatingNotification({
+      id: "alert-" + Date.now(),
+      plate,
+      isStaff,
+      ownerName: staff ? staff.ownerName : undefined,
+      department: staff ? staff.department : undefined,
+      round: selectedRound,
+      timestamp: new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }),
+    });
+
+    if (floatingNotificationTimeoutRef.current) {
+      clearTimeout(floatingNotificationTimeoutRef.current);
+    }
+    floatingNotificationTimeoutRef.current = setTimeout(() => {
+      setFloatingNotification(null);
+    }, 4500);
 
     setCameraInputPlate("");
   };
@@ -1195,42 +1351,127 @@ function VehicleContent() {
               />
 
               {/* Viewfinder HUD */}
-              <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-6">
-                <div className="w-full max-w-[280px] h-28 border-2 border-sky-400/80 rounded-2xl relative shadow-2xl">
+              <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-6 z-10">
+                <div className={`w-full max-w-[280px] h-28 border-2 rounded-2xl relative shadow-2xl transition-all duration-300 ${
+                  isAutoScanningFrame ? "border-emerald-400 ring-2 ring-emerald-400/50 shadow-emerald-500/30" : "border-sky-400/80"
+                }`}>
                   <div className="absolute -top-1 -left-1 w-4 h-4 border-t-4 border-l-4 border-emerald-400 rounded-tl-lg" />
                   <div className="absolute -top-1 -right-1 w-4 h-4 border-t-4 border-r-4 border-emerald-400 rounded-tr-lg" />
                   <div className="absolute -bottom-1 -left-1 w-4 h-4 border-b-4 border-l-4 border-emerald-400 rounded-bl-lg" />
                   <div className="absolute -bottom-1 -right-1 w-4 h-4 border-b-4 border-r-4 border-emerald-400 rounded-br-lg" />
 
-                  <div className="w-full h-0.5 bg-gradient-to-r from-transparent via-sky-400 to-transparent absolute top-1/2 -translate-y-1/2 animate-pulse" />
+                  {/* Laser Scanning Animation */}
+                  <div className={`w-full h-0.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent absolute top-1/2 -translate-y-1/2 ${
+                    isAutoScanningFrame ? "animate-ping opacity-100" : "animate-pulse opacity-70"
+                  }`} />
 
                   <div className="absolute -bottom-6 left-0 right-0 text-center">
-                    <span className="text-[10px] font-bold text-white/90 bg-slate-900/70 px-2.5 py-0.5 rounded-full backdrop-blur-xs">
-                      ส่องมุมมองขณะเดินตรวจลานจอด
+                    <span className="text-[10px] font-bold text-white/90 bg-slate-900/85 px-2.5 py-0.5 rounded-full backdrop-blur-xs">
+                      {isAutoScanningFrame ? "⚡ กำลังตรวจจับเลขทะเบียน..." : "นำกรอบนี้ส่องตรงป้ายทะเบียน"}
                     </span>
                   </div>
                 </div>
               </div>
 
-              <div className="relative z-10 flex items-center justify-between">
-                <span className="px-2.5 py-1 rounded-full bg-slate-900/80 backdrop-blur-md text-[10px] font-mono text-emerald-400 flex items-center gap-1.5 border border-emerald-500/30">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                  LIVE PATROL
-                </span>
+              {/* ✨ ข้อความแจ้งเตือนบันทึกลอยมาทันทีเมื่อส่องกล้อง (Floating Save Banner) */}
+              {floatingNotification && (
+                <div className="absolute inset-x-3 top-13 z-30 animate-in fade-in-0 slide-in-from-top-4 zoom-in-95 duration-200">
+                  <div
+                    className={`p-3.5 rounded-2xl shadow-2xl backdrop-blur-xl border-2 flex items-center gap-3 ${
+                      floatingNotification.isStaff
+                        ? "bg-slate-950/95 text-white border-emerald-400 shadow-emerald-500/40 ring-4 ring-emerald-500/20"
+                        : "bg-slate-950/95 text-white border-sky-400 shadow-sky-500/40 ring-4 ring-sky-500/20"
+                    }`}
+                  >
+                    <div
+                      className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 shadow-lg ${
+                        floatingNotification.isStaff ? "bg-emerald-500 text-white" : "bg-sky-500 text-white"
+                      }`}
+                    >
+                      <CheckCircle2 className="w-6 h-6 stroke-[2.5] animate-bounce" />
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                          บันทึกสำเร็จ {floatingNotification.round === "22:00" ? "รอบดึก 22:00 น." : "รอบเช้า 06:00 น."}
+                        </span>
+                        <span
+                          className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
+                            floatingNotification.isStaff
+                              ? "bg-emerald-500/30 text-emerald-300 border-emerald-400/40"
+                              : "bg-sky-500/30 text-sky-300 border-sky-400/40"
+                          }`}
+                        >
+                          {floatingNotification.isStaff ? "บุคลากร รพ." : "รถภายนอก"}
+                        </span>
+                      </div>
+
+                      <div className="flex items-baseline gap-2 mt-0.5">
+                        <span className="text-xl font-black font-mono tracking-wider text-white">
+                          {floatingNotification.plate}
+                        </span>
+                        {floatingNotification.ownerName && (
+                          <span className="text-xs text-emerald-200 truncate font-bold">
+                            • {floatingNotification.ownerName}
+                          </span>
+                        )}
+                      </div>
+
+                      {floatingNotification.department && (
+                        <span className="text-[10px] text-slate-300 block truncate">
+                          {floatingNotification.department}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Viewfinder Header Toolbar */}
+              <div className="relative z-20 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-1 rounded-full bg-slate-900/80 backdrop-blur-md text-[10px] font-mono text-emerald-400 flex items-center gap-1.5 border border-emerald-500/30">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                    LIVE PATROL
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => setAutoScanActive(!autoScanActive)}
+                    className={`px-2.5 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 backdrop-blur-md border transition-all active:scale-95 ${
+                      autoScanActive
+                        ? "bg-emerald-500/30 text-emerald-300 border-emerald-400/50 shadow-xs"
+                        : "bg-slate-800/80 text-slate-400 border-slate-700"
+                    }`}
+                  >
+                    <Zap className={`w-3 h-3 ${autoScanActive ? "fill-current text-amber-300 animate-pulse" : ""}`} />
+                    <span>{autoScanActive ? "สแกนอัตโนมัติ: เปิด" : "สแกนอัตโนมัติ: ปิด"}</span>
+                  </button>
+                </div>
 
                 <button
                   type="button"
                   onClick={startPatrolCamera}
-                  className="p-1.5 rounded-xl bg-slate-900/70 text-white/80 hover:text-white backdrop-blur-md text-[10px] flex items-center gap-1"
+                  className="p-1.5 rounded-xl bg-slate-900/70 text-white/80 hover:text-white backdrop-blur-md text-[10px] flex items-center gap-1 border border-white/10"
                   title="รีสตาร์ตกล้อง"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                 </button>
               </div>
 
-              <div className="relative z-10 text-center">
-                <span className="text-[11px] text-white/80 bg-slate-900/80 px-3 py-1 rounded-full backdrop-blur-md border border-white/10">
-                  บันทึกทะเบียนรถที่พบในรอบนี้ลงระบบอัตโนมัติ
+              {/* Viewfinder Bottom Status */}
+              <div className="relative z-20 text-center">
+                <span className="text-[11px] text-white/90 bg-slate-900/85 px-3.5 py-1.5 rounded-full backdrop-blur-md border border-white/10 inline-flex items-center gap-1.5 shadow-md">
+                  {autoScanActive ? (
+                    <>
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                      <span>ส่องกรอบไปที่ป้ายทะเบียน ระบบจะบันทึกลอยขึ้นมาอัตโนมัติ</span>
+                    </>
+                  ) : (
+                    <span>โหมดกดถ่าย: กดปุ่ม "ถ่ายจับป้าย (AI OCR)" ด้านล่าง</span>
+                  )}
                 </span>
               </div>
             </div>

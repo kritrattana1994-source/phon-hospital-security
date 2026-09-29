@@ -1,6 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createWorker } from "tesseract.js";
 
+// Global persistent worker cache for high-speed repeated frame recognition
+let cachedWorker: any = null;
+let isInitializing = false;
+
+async function getOcrWorker() {
+  if (cachedWorker) return cachedWorker;
+
+  if (isInitializing) {
+    while (isInitializing) {
+      await new Promise((resolve) => setTimeout(resolve, 80));
+    }
+    if (cachedWorker) return cachedWorker;
+  }
+
+  isInitializing = true;
+  try {
+    const worker = await createWorker("eng");
+    await worker.setParameters({
+      tessedit_char_whitelist: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz- ",
+    });
+    cachedWorker = worker;
+    return cachedWorker;
+  } finally {
+    isInitializing = false;
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -22,30 +49,34 @@ export async function POST(req: NextRequest) {
       buffer = Buffer.from(image, "base64");
     }
 
-    // Run OCR with a safe 8.5-second timeout
+    // Run OCR with cached worker
     const ocrPromise = (async () => {
-      let worker: any = null;
       try {
-        worker = await createWorker("eng");
-        await worker.setParameters({
+        const worker = await getOcrWorker();
+        const { data } = await worker.recognize(buffer);
+        return data.text || "";
+      } catch (workerErr) {
+        console.warn("Cached worker error, reinitializing worker:", workerErr);
+        try {
+          if (cachedWorker) {
+            await cachedWorker.terminate().catch(() => {});
+          }
+        } catch {}
+        cachedWorker = null;
+
+        // Fallback: one-time worker
+        const oneTimeWorker = await createWorker("eng");
+        await oneTimeWorker.setParameters({
           tessedit_char_whitelist: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz- ",
         });
-
-        const { data } = await worker.recognize(buffer);
-        await worker.terminate();
+        const { data } = await oneTimeWorker.recognize(buffer);
+        cachedWorker = oneTimeWorker;
         return data.text || "";
-      } catch (err) {
-        if (worker) {
-          try {
-            await worker.terminate();
-          } catch {}
-        }
-        throw err;
       }
     })();
 
     const timeoutPromise = new Promise<string>((_, reject) =>
-      setTimeout(() => reject(new Error("OCR timeout")), 8500)
+      setTimeout(() => reject(new Error("OCR timeout")), 7000)
     );
 
     let rawText = "";
@@ -70,13 +101,16 @@ export async function POST(req: NextRequest) {
     // Prefer 4-digit or 3-digit matches
     let bestPlate = "";
     if (digitMatches && digitMatches.length > 0) {
-      // Prioritize 4-digit matches, then 3-digit, then 2-digit, then 1-digit
       const fourDigits = digitMatches.filter((d) => d.length === 4);
       const threeDigits = digitMatches.filter((d) => d.length === 3);
+      const twoDigits = digitMatches.filter((d) => d.length === 2);
+      
       if (fourDigits.length > 0) {
         bestPlate = fourDigits[0];
       } else if (threeDigits.length > 0) {
         bestPlate = threeDigits[0];
+      } else if (twoDigits.length > 0) {
+        bestPlate = twoDigits[0];
       } else {
         const sortedByLength = [...digitMatches].sort((a, b) => b.length - a.length);
         bestPlate = sortedByLength[0];
@@ -84,7 +118,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({
-      success: true,
+      success: !!bestPlate,
       rawText: cleanText,
       plateNumber: bestPlate,
       matches: digitMatches || [],
