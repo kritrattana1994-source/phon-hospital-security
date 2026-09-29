@@ -32,10 +32,11 @@ import {
   getCurrentShift,
   defaultPatrolRounds
 } from "@/lib/patrolSchedule";
+import { uploadImageToDrive } from "@/lib/uploadToDrive";
 
 export default function PatrolPage() {
   const router = useRouter();
-  const { currentUser, checkpoints, patrolLogs, addPatrolLog, patrolRounds } = useStore();
+  const { currentUser, checkpoints, patrolLogs, addPatrolLog, patrolRounds, googleDriveWebhookUrl } = useStore();
   const [scanning, setScanning] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [selectedCheckpoint, setSelectedCheckpoint] = useState<Checkpoint | null>(null);
@@ -264,7 +265,7 @@ export default function PatrolPage() {
   const activeRound = getCurrentRound(rounds, now);
   const activeShift = getCurrentShift(now);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!selectedCheckpoint) return;
 
     // ตรวจสอบระยะพิกัด GPS เทียบกับจุดตรวจจริง (ระยะไม่เกิน 30 เมตร)
@@ -298,6 +299,21 @@ export default function PatrolPage() {
     const scanTimeIso = new Date().toISOString();
     const onTime = isScanOnTime(scanTimeIso, activeRound);
 
+    // อัปโหลดภาพเข้า Google Drive โฟลเดอร์ "ภาพถ่ายจุดตรวจ (Patrol Logs)"
+    let finalPhotoUrl = capturedPhoto;
+    if (capturedPhoto && capturedPhoto.startsWith("data:image")) {
+      try {
+        finalPhotoUrl = (await uploadImageToDrive({
+          image: capturedPhoto,
+          title: `CP_${selectedCheckpoint.code}_${activeRound.id}`,
+          subfolder: "ภาพถ่ายจุดตรวจ (Patrol Logs)",
+          webhookUrl: googleDriveWebhookUrl,
+        })) || capturedPhoto;
+      } catch (uploadErr) {
+        console.warn("Drive upload fallback:", uploadErr);
+      }
+    }
+
     addPatrolLog({
       checkpointId: selectedCheckpoint.id,
       timestamp: scanTimeIso,
@@ -311,7 +327,7 @@ export default function PatrolPage() {
       roundId: activeRound.id,
       roundName: activeRound.name,
       shift: activeShift.id,
-      imageUrl: capturedPhoto,
+      imageUrl: finalPhotoUrl,
       distanceMeters: distance,
       isOnTime: onTime,
     });

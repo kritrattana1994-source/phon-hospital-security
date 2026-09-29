@@ -36,7 +36,8 @@ export default function GuardPage() {
     patrolLogs, 
     checkpoints, 
     parkingScans,
-    patrolRounds
+    patrolRounds,
+    incidents
   } = useStore();
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
@@ -112,6 +113,16 @@ export default function GuardPage() {
     if (!s.timestamp?.startsWith(todayStr)) return false;
     return s.round === activeRound.id || s.roundName === activeRound.name || s.round === activeRound.name;
   }).length;
+
+  const unresolvedIncidents = (incidents || []).filter((i) => i.status !== "resolved");
+  const currentShiftIncidents = unresolvedIncidents.filter((i) => {
+    if (i.shift && i.shift === activeShift.id) return true;
+    if (i.timestamp) {
+      const incDate = new Date(i.timestamp);
+      return getCurrentShift(incDate).id === activeShift.id && incDate.toDateString() === now.toDateString();
+    }
+    return false;
+  });
 
   // 1. PIN LOGIN SCREEN FOR GUARDS (LIGHT MEDICAL THEME)
   if (!currentUser) {
@@ -313,6 +324,32 @@ export default function GuardPage() {
         {/* Guard Task Menu */}
         <div className="space-y-3">
 
+          {/* URGENT INCIDENT ALERT BANNER FOR CURRENT SHIFT */}
+          {currentShiftIncidents.length > 0 && (
+            <Link
+              href="/incident"
+              className="block p-3.5 bg-gradient-to-r from-rose-600 via-rose-500 to-amber-600 text-white rounded-2xl shadow-lg shadow-rose-600/25 border border-rose-300 animate-pulse hover:animate-none transition-all cursor-pointer"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                    <AlertTriangle className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-black text-sm">🚨 มีเหตุการณ์ในกะนี้ ({currentShiftIncidents.length} เรื่อง)</span>
+                      <span className="bg-white text-rose-700 text-[10px] font-black px-1.5 py-0.5 rounded-full">รอดำเนินการ/ปิดงาน</span>
+                    </div>
+                    <p className="text-[11px] text-rose-100 line-clamp-1 mt-0.5">
+                      {currentShiftIncidents[0].title} — กดเพื่อเข้าจัดการสถานะ
+                    </p>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-white/90 shrink-0" />
+              </div>
+            </Link>
+          )}
+
           {/* DEDICATED FEATURE: SHIFT HANDOVER REPORT (LINE GROUP) */}
           <button
             onClick={() => setShowShiftReportModal(true)}
@@ -364,21 +401,40 @@ export default function GuardPage() {
 
           <Link
             href="/incident"
-            className="group block p-4 bg-white hover:bg-rose-50/40 border border-rose-100 hover:border-rose-300 rounded-2xl transition-all shadow-xs active:scale-[0.98]"
+            className={`group block p-4 bg-white hover:bg-rose-50/40 border ${
+              currentShiftIncidents.length > 0
+                ? "border-rose-400 ring-2 ring-rose-200 bg-rose-50/20"
+                : "border-rose-100 hover:border-rose-300"
+            } rounded-2xl transition-all shadow-xs active:scale-[0.98]`}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3.5">
-                <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
+                <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform relative">
                   <AlertTriangle className="w-6 h-6" />
+                  {currentShiftIncidents.length > 0 && (
+                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-600 text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-white animate-bounce">
+                      {currentShiftIncidents.length}
+                    </span>
+                  )}
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-slate-900 text-base">โมดูล 2: บันทึกแจ้งเหตุด่วน</h3>
-                    <span className="text-[10px] bg-rose-100 text-rose-700 px-2 py-0.5 rounded-md font-semibold">
-                      ส่ง Google Drive
-                    </span>
+                    <h3 className="font-bold text-slate-900 text-base">โมดูล 2: จัดการเหตุการณ์ & แจ้งเหตุด่วน</h3>
+                    {currentShiftIncidents.length > 0 ? (
+                      <span className="text-[10px] bg-rose-600 text-white px-2 py-0.5 rounded-md font-bold animate-pulse">
+                        กะนี้ {currentShiftIncidents.length} เคส
+                      </span>
+                    ) : unresolvedIncidents.length > 0 ? (
+                      <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md font-semibold">
+                        ค้างกะก่อน {unresolvedIncidents.length} เคส
+                      </span>
+                    ) : (
+                      <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-md font-semibold">
+                        เรียบร้อย
+                      </span>
+                    )}
                   </div>
-                  <p className="text-xs text-slate-500 mt-0.5">ถ่ายรูปย่อขนาด 150KB ส่งเข้าโฟลเดอร์โรงพยาบาลพล</p>
+                  <p className="text-xs text-slate-500 mt-0.5">ปรับสถานะ / ปิดงานพร้อมแนบรูป / ดูย้อนหลัง • Google Drive</p>
                 </div>
               </div>
               <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-rose-600 transition-colors" />

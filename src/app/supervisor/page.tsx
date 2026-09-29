@@ -151,6 +151,7 @@ export default function SupervisorPage() {
   const [showRoundsConfigModal, setShowRoundsConfigModal] = useState(false);
   const [tempRounds, setTempRounds] = useState<PatrolRound[]>([]);
   const [selectedPhotoModal, setSelectedPhotoModal] = useState<{ url: string; title: string; timestamp?: string } | null>(null);
+  const [incidentTabFilter, setIncidentTabFilter] = useState<"all" | "active" | "resolved">("all");
 
   // Google Drive Webhook Test State
   const [testDriveLoading, setTestDriveLoading] = useState(false);
@@ -3289,84 +3290,198 @@ export default function SupervisorPage() {
         {/* TAB 7: INCIDENTS */}
         {activeTab === "incidents" && (
           <div className="bg-white border border-sky-100 rounded-3xl p-6 shadow-xs space-y-6">
-            <div>
-              <h2 className="font-bold text-lg text-slate-900">รายการแจ้งเหตุผิดปกติ & รูปหลักฐาน</h2>
-              <p className="text-xs text-slate-500">ภาพถ่ายถูกจัดเก็บในโฟลเดอร์ Google Drive ของโรงพยาบาลพล</p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="font-bold text-lg text-slate-900">🚨 รายการแจ้งเหตุผิดปกติ & รูปหลักฐาน (Google Drive)</h2>
+                <p className="text-xs text-slate-500">ภาพถ่ายเหตุการณ์และภาพปิดงานทั้งหมดถูกอัปโหลดขึ้น Google Drive ของโรงพยาบาลพล</p>
+              </div>
+
+              {/* Filter pills */}
+              <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-2xl shrink-0">
+                <button
+                  onClick={() => setIncidentTabFilter("all")}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    incidentTabFilter === "all"
+                      ? "bg-white text-slate-900 shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  ทั้งหมด ({incidents.length})
+                </button>
+                <button
+                  onClick={() => setIncidentTabFilter("active")}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    incidentTabFilter === "active"
+                      ? "bg-rose-500 text-white shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  🚨 ยังไม่ปิดงาน ({incidents.filter((i) => i.status !== "resolved").length})
+                </button>
+                <button
+                  onClick={() => setIncidentTabFilter("resolved")}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    incidentTabFilter === "resolved"
+                      ? "bg-emerald-600 text-white shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  ✅ ปิดเหตุการณ์แล้ว ({incidents.filter((i) => i.status === "resolved").length})
+                </button>
+              </div>
             </div>
 
             <div className="space-y-4">
-              {incidents.map((incident) => (
-                <div
-                  key={incident.id}
-                  className="p-5 bg-slate-50 border border-slate-200 rounded-3xl flex flex-col md:flex-row gap-5 items-start"
-                >
-                  <div className="w-full md:w-48 h-36 rounded-2xl overflow-hidden bg-slate-200 border border-slate-300 shrink-0">
-                    <img
-                      src={incident.imageUrl || "https://images.unsplash.com/photo-1517646287270-a5a9ca602e5c?w=600&q=80"}
-                      alt="Incident Evidence"
-                      className="w-full h-full object-cover hover:scale-105 transition-transform cursor-pointer"
-                      onClick={() => window.open(incident.imageUrl, "_blank")}
-                    />
-                  </div>
+              {incidents
+                .filter((incident) => {
+                  if (incidentTabFilter === "active") return incident.status !== "resolved";
+                  if (incidentTabFilter === "resolved") return incident.status === "resolved";
+                  return true;
+                })
+                .map((incident) => {
+                  const isResolved = incident.status === "resolved";
+                  const isInvestigating = incident.status === "investigating";
 
-                  <div className="flex-1 space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
-                          incident.severity === "high"
-                            ? "bg-rose-100 text-rose-800 border border-rose-300"
-                            : incident.severity === "medium"
-                            ? "bg-amber-100 text-amber-800 border border-amber-300"
-                            : "bg-sky-100 text-sky-800 border border-sky-300"
-                        }`}
-                      >
-                        ระดับ: {incident.severity === "high" ? "วิกฤต" : incident.severity === "medium" ? "ปานกลาง" : "ปกติ"}
-                      </span>
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-700">
-                        หมวด: {incident.type === "facility" ? "อาคารสถานที่" : incident.type === "suspicious" ? "บุคคลต้องสงสัย" : "การแพทย์"}
-                      </span>
-                      <span className="text-xs text-slate-400 font-mono ml-auto">{incident.timestamp}</span>
+                  return (
+                    <div
+                      key={incident.id}
+                      className={`p-5 rounded-3xl border transition-all ${
+                        isResolved
+                          ? "bg-slate-50/80 border-slate-200"
+                          : isInvestigating
+                          ? "bg-sky-50/40 border-sky-200 ring-1 ring-sky-200"
+                          : "bg-amber-50/30 border-amber-200 ring-1 ring-amber-200"
+                      } flex flex-col md:flex-row gap-5 items-start`}
+                    >
+                      {/* Photo Thumbnail */}
+                      <div className="w-full md:w-48 h-36 rounded-2xl overflow-hidden bg-slate-200 border border-slate-300 shrink-0 relative group">
+                        <img
+                          src={incident.imageUrl || "https://images.unsplash.com/photo-1517646287270-a5a9ca602e5c?w=600&q=80"}
+                          alt="Incident Evidence"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform cursor-pointer"
+                          onClick={() => incident.imageUrl && window.open(incident.imageUrl, "_blank")}
+                        />
+                        <div className="absolute bottom-1 right-1 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded-md backdrop-blur-xs font-mono">
+                          รูปเหตุการณ์
+                        </div>
+                      </div>
+
+                      <div className="flex-1 space-y-2.5 w-full">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                              incident.severity === "high"
+                                ? "bg-rose-100 text-rose-800 border border-rose-300"
+                                : incident.severity === "medium"
+                                ? "bg-amber-100 text-amber-800 border border-amber-300"
+                                : "bg-sky-100 text-sky-800 border border-sky-300"
+                            }`}
+                          >
+                            ระดับ: {incident.severity === "high" ? "วิกฤต" : incident.severity === "medium" ? "ปานกลาง" : "ปกติ"}
+                          </span>
+
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-700">
+                            หมวด: {incident.type === "facility" ? "อาคารสถานที่" : incident.type === "suspicious" ? "บุคคลต้องสงสัย" : "การแพทย์"}
+                          </span>
+
+                          {incident.shiftName && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-sky-100 text-sky-800 border border-sky-200">
+                              {incident.shiftName}
+                            </span>
+                          )}
+
+                          <span className="text-xs text-slate-400 font-mono ml-auto">{incident.timestamp}</span>
+                        </div>
+
+                        <h3 className="text-base font-bold text-slate-900">{incident.title}</h3>
+                        <p className="text-xs text-slate-600">ผู้รายงาน: <strong>{incident.reporterName}</strong> • Google Drive / Incidents</p>
+
+                        {/* Status Switcher */}
+                        <div className="pt-1 flex flex-wrap items-center gap-2">
+                          <span className="text-xs font-semibold text-slate-600 mr-1">สถานะ:</span>
+                          <button
+                            onClick={() => updateIncidentStatus(incident.id, "pending")}
+                            className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                              incident.status === "pending"
+                                ? "bg-amber-400 text-slate-950 ring-2 ring-amber-300"
+                                : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
+                            }`}
+                          >
+                            รอดำเนินการ
+                          </button>
+                          <button
+                            onClick={() => updateIncidentStatus(incident.id, "investigating")}
+                            className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                              incident.status === "investigating"
+                                ? "bg-sky-600 text-white ring-2 ring-sky-300"
+                                : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
+                            }`}
+                          >
+                            ระหว่างดำเนินการ
+                          </button>
+                          <button
+                            onClick={() => updateIncidentStatus(incident.id, "resolved")}
+                            className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                              incident.status === "resolved"
+                                ? "bg-emerald-600 text-white ring-2 ring-emerald-300"
+                                : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
+                            }`}
+                          >
+                            ปิดเหตุการณ์
+                          </button>
+                        </div>
+
+                        {/* Resolution Info Box (If resolved) */}
+                        {isResolved && (
+                          <div className="mt-3 p-3.5 bg-emerald-50/80 border border-emerald-200 rounded-2xl flex flex-col sm:flex-row gap-3 items-start">
+                            {incident.resolutionImageUrl && (
+                              <div className="w-20 h-20 rounded-xl overflow-hidden bg-slate-200 border border-emerald-300 shrink-0 relative group">
+                                <img
+                                  src={incident.resolutionImageUrl}
+                                  alt="Resolution Evidence"
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform cursor-pointer"
+                                  onClick={() => window.open(incident.resolutionImageUrl, "_blank")}
+                                />
+                                <div className="absolute bottom-0 inset-x-0 bg-emerald-900/80 text-white text-[8px] text-center py-0.5 font-bold">
+                                  ภาพปิดงาน
+                                </div>
+                              </div>
+                            )}
+                            <div className="flex-1 space-y-1">
+                              <div className="flex items-center gap-1.5 text-emerald-800 font-bold text-xs">
+                                <span>✅ ข้อมูลการปิดเหตุการณ์</span>
+                                {incident.resolvedAt && (
+                                  <span className="text-[10px] text-emerald-600 font-normal font-mono">
+                                    ({incident.resolvedAt})
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-emerald-900 bg-white/70 p-2 rounded-xl border border-emerald-100">
+                                {incident.resolutionNote || "ปิดเหตุการณ์เรียบร้อย (ไม่มีบันทึกเพิ่มเติม)"}
+                              </p>
+                              {incident.resolvedBy && (
+                                <p className="text-[11px] text-emerald-700">
+                                  ผู้ปิดงาน: <strong>{incident.resolvedBy}</strong>
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
+                  );
+                })}
 
-                    <h3 className="text-base font-bold text-slate-900">{incident.title}</h3>
-                    <p className="text-xs text-slate-500">ผู้รายงาน: <strong>{incident.reporterName}</strong> • Google Drive / Incidents</p>
-
-                    <div className="pt-2 flex items-center gap-2">
-                      <span className="text-xs font-semibold text-slate-600 mr-2">ปรับสถานะ:</span>
-                      <button
-                        onClick={() => updateIncidentStatus(incident.id, "pending")}
-                        className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
-                          incident.status === "pending"
-                            ? "bg-amber-400 text-slate-950 ring-2 ring-amber-300"
-                            : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
-                        }`}
-                      >
-                        รอดำเนินการ
-                      </button>
-                      <button
-                        onClick={() => updateIncidentStatus(incident.id, "investigating")}
-                        className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
-                          incident.status === "investigating"
-                            ? "bg-sky-600 text-white ring-2 ring-sky-300"
-                            : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
-                        }`}
-                      >
-                        กำลังตรวจสอบ
-                      </button>
-                      <button
-                        onClick={() => updateIncidentStatus(incident.id, "resolved")}
-                        className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
-                          incident.status === "resolved"
-                            ? "bg-emerald-600 text-white ring-2 ring-emerald-300"
-                            : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
-                        }`}
-                      >
-                        สิ้นสุดเหตุแล้ว
-                      </button>
-                    </div>
-                  </div>
+              {incidents.filter((incident) => {
+                if (incidentTabFilter === "active") return incident.status !== "resolved";
+                if (incidentTabFilter === "resolved") return incident.status === "resolved";
+                return true;
+              }).length === 0 && (
+                <div className="text-center py-12 text-slate-400">
+                  <AlertTriangle className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                  <p className="text-sm">ไม่พบรายการเหตุการณ์ตามเงื่อนไขที่เลือก</p>
                 </div>
-              ))}
+              )}
             </div>
           </div>
         )}

@@ -27,6 +27,7 @@ import {
   hospitalShifts,
   PatrolRound
 } from "@/lib/patrolSchedule";
+import { uploadImageToDrive } from "@/lib/uploadToDrive";
 
 interface ShiftReportModalProps {
   isOpen: boolean;
@@ -41,7 +42,8 @@ export default function ShiftReportModal({ isOpen, onClose }: ShiftReportModalPr
     patrolLogs, 
     parkingScans,
     incidents,
-    addShiftReportLog 
+    addShiftReportLog,
+    googleDriveWebhookUrl
   } = useStore();
 
   const [handoverNote, setHandoverNote] = useState(
@@ -653,7 +655,21 @@ export default function ShiftReportModal({ isOpen, onClose }: ShiftReportModalPr
 
   if (!isOpen || !currentUser) return null;
 
-  const recordAndGetReportLog = (): ShiftReportLog => {
+  const recordAndGetReportLog = async (imgDataUrl?: string): Promise<ShiftReportLog> => {
+    let driveUrl = imgDataUrl;
+    if (imgDataUrl && imgDataUrl.startsWith("data:image")) {
+      try {
+        driveUrl = (await uploadImageToDrive({
+          image: imgDataUrl,
+          title: `ShiftReport_${currentShift.id}_${todayStr}`,
+          subfolder: "รายงานส่งมอบเวร (Shift Reports)",
+          webhookUrl: googleDriveWebhookUrl,
+        })) || imgDataUrl;
+      } catch (uploadErr) {
+        console.warn("Upload shift report image to Drive fallback:", uploadErr);
+      }
+    }
+
     const report: ShiftReportLog = {
       id: `shift-report-${Date.now()}`,
       shiftId: currentShift.id,
@@ -670,6 +686,7 @@ export default function ShiftReportModal({ isOpen, onClose }: ShiftReportModalPr
       issuesCount: issueLogs.length,
       status: onTimeRate >= 80 ? "on_time" : "late",
       note: handoverNote,
+      exportedImageUrl: driveUrl,
     };
     addShiftReportLog(report);
     return report;
@@ -679,13 +696,14 @@ export default function ShiftReportModal({ isOpen, onClose }: ShiftReportModalPr
     setIsExporting(true);
     try {
       const canvas = await drawReportToCanvas();
+      const imgUrl = canvas.toDataURL("image/png");
       const link = document.createElement("a");
       const filename = `รายงานประจำกะ_${currentShift.name}_${todayStr}_${timeFormatted.replace(":", "")}.png`;
       link.download = filename;
-      link.href = canvas.toDataURL("image/png");
+      link.href = imgUrl;
       link.click();
 
-      recordAndGetReportLog();
+      recordAndGetReportLog(imgUrl);
       setSuccessMessage("บันทึกรูปภาพรายงานสำเร็จ! สามารถเปิดส่งเข้า LINE กลุ่มได้ทันที");
       setTimeout(() => setSuccessMessage(null), 4000);
     } catch (err) {
@@ -700,6 +718,7 @@ export default function ShiftReportModal({ isOpen, onClose }: ShiftReportModalPr
     setIsExporting(true);
     try {
       const canvas = await drawReportToCanvas();
+      const imgUrl = canvas.toDataURL("image/png");
       canvas.toBlob(async (blob) => {
         if (!blob) {
           handleDownloadImage();
@@ -710,7 +729,7 @@ export default function ShiftReportModal({ isOpen, onClose }: ShiftReportModalPr
             await navigator.clipboard.write([
               new (window as any).ClipboardItem({ "image/png": blob })
             ]);
-            recordAndGetReportLog();
+            recordAndGetReportLog(imgUrl);
             setCopiedImage(true);
             setSuccessMessage("คัดลอกรูปภาพลงคลิปบอร์ดแล้ว! สามารถกด Paste (วาง) ลงใน LINE ได้ทันที");
             setTimeout(() => {
@@ -736,6 +755,7 @@ export default function ShiftReportModal({ isOpen, onClose }: ShiftReportModalPr
     setIsExporting(true);
     try {
       const canvas = await drawReportToCanvas();
+      const imgUrl = canvas.toDataURL("image/png");
       const filename = `รายงานประจำกะ_${currentShift.name}_${todayStr}.png`;
 
       canvas.toBlob(async (blob) => {
@@ -751,7 +771,7 @@ export default function ShiftReportModal({ isOpen, onClose }: ShiftReportModalPr
           files: [file],
         };
 
-        recordAndGetReportLog();
+        recordAndGetReportLog(imgUrl);
 
         if (navigator.canShare && navigator.canShare(shareData)) {
           try {

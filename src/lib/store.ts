@@ -77,6 +77,13 @@ export interface Incident {
   reporterName: string;
   timestamp: string;
   status: 'pending' | 'investigating' | 'resolved';
+  shift?: 'morning' | 'afternoon' | 'night';
+  shiftName?: string;
+  dateString?: string;
+  resolutionImageUrl?: string;
+  resolutionNote?: string;
+  resolvedAt?: string;
+  resolvedBy?: string;
 }
 
 export interface StaffVehicle {
@@ -191,8 +198,17 @@ interface AppState {
 
   // Incidents
   incidents: Incident[];
-  addIncident: (incident: Omit<Incident, 'id' | 'status' | 'reporterName' | 'timestamp'>) => void;
-  updateIncidentStatus: (id: string, status: Incident['status']) => void;
+  addIncident: (incident: Omit<Incident, 'id' | 'status' | 'reporterName' | 'timestamp'> & { shift?: 'morning' | 'afternoon' | 'night'; shiftName?: string; dateString?: string }) => void;
+  updateIncidentStatus: (
+    id: string, 
+    status: Incident['status'], 
+    resolution?: {
+      resolutionImageUrl?: string;
+      resolutionNote?: string;
+      resolvedAt?: string;
+      resolvedBy?: string;
+    }
+  ) => void;
 
   // Vehicles
   staffVehicles: StaffVehicle[];
@@ -559,22 +575,37 @@ export const useStore = create<AppState>()(
       incidents: initialIncidents,
       addIncident: (incident) => {
         const user = get().currentUser;
+        const now = new Date();
+        const activeShift = getCurrentShift(now);
         const newIncident: Incident = {
           ...incident,
           id: 'inc-' + Date.now(),
           reporterName: user?.name || 'รปภ. เวร',
           timestamp: new Date().toLocaleString('th-TH', { hour12: false }),
-          status: 'pending'
+          status: 'pending',
+          shift: incident.shift || activeShift.id,
+          shiftName: incident.shiftName || activeShift.name,
+          dateString: incident.dateString || now.toISOString().split('T')[0]
         };
         saveIncidentToCloud(newIncident);
         set((state) => ({
           incidents: [newIncident, ...state.incidents]
         }));
       },
-      updateIncidentStatus: (id, status) => {
+      updateIncidentStatus: (id, status, resolution) => {
         set((state) => {
-          const newIncidents = state.incidents.map(inc => inc.id === id ? { ...inc, status } : inc);
-          const target = newIncidents.find(i => i.id === id);
+          const newIncidents = state.incidents.map((inc) => {
+            if (inc.id === id) {
+              return {
+                ...inc,
+                status,
+                ...(resolution || {}),
+                ...(status === 'resolved' && !resolution?.resolvedAt ? { resolvedAt: new Date().toLocaleString('th-TH', { hour12: false }) } : {})
+              };
+            }
+            return inc;
+          });
+          const target = newIncidents.find((i) => i.id === id);
           if (target) saveIncidentToCloud(target);
           return { incidents: newIncidents };
         });

@@ -11,7 +11,7 @@ export const maxDuration = 12; // Max 12s for Vercel Serverless
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { image, title, webhookUrl } = body;
+    const { image, title, webhookUrl, subfolder } = body;
 
     if (!image || typeof image !== "string") {
       return NextResponse.json({ error: "ไม่พบข้อมูลรูปภาพ" }, { status: 400 });
@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
 
     const targetWebhookUrl = webhookUrl || process.env.GOOGLE_DRIVE_WEBHOOK_URL || process.env.GOOGLE_APPS_SCRIPT_URL;
     const rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID || "1ED0LnFxfSwHVU60fI8LShWiXBDmxFFXT";
+    const targetSubfolder = (subfolder || "รูปภาพเหตุการณ์ (Incidents)").trim();
 
     const now = new Date();
     const dateStr = now.toISOString().slice(0, 10);
@@ -41,7 +42,7 @@ export async function POST(req: NextRequest) {
             image,
             filename,
             folderId: rootFolderId,
-            subfolder: "รูปภาพเหตุการณ์ (Incidents)",
+            subfolder: targetSubfolder,
             mimeType: "image/jpeg"
           }),
           signal: controller.signal
@@ -72,9 +73,9 @@ export async function POST(req: NextRequest) {
           const accessToken = await getGoogleAccessToken(driveConfig);
           const targetFolderId = driveConfig.rootFolderId || rootFolderId;
 
-          // Find or create "รูปภาพเหตุการณ์ (Incidents)" subfolder
+          // Find or create target subfolder
           const incidentFolder = await findOrCreateSubfolder(
-            "รูปภาพเหตุการณ์ (Incidents)",
+            targetSubfolder,
             targetFolderId,
             accessToken
           );
