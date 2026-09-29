@@ -10,6 +10,9 @@ const nextConfig: NextConfig = {
   turbopack: {},
   // @ts-ignore
   allowedDevOrigins: ["192.168.1.111", "10.159.99.19", "localhost:3000", "192.168.1.111:3000", "10.159.99.19:3000"],
+  outputFileTracingIncludes: {
+    "/api/**/*": ["./public/tessdata/**/*"],
+  },
 };
 
 export default withPWA(nextConfig);

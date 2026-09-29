@@ -429,12 +429,17 @@ function VehicleContent() {
       isAutoScanProcessingRef.current = true;
       setIsAutoScanningFrame(true);
 
+      const controller = new AbortController();
+      const abortTimer = setTimeout(() => controller.abort(), 2200);
+
       try {
         const res = await fetch("/api/ocr-plate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ image: frames.cropDataUrl }),
+          signal: controller.signal,
         });
+        clearTimeout(abortTimer);
         const data = await res.json();
 
         if (data.success && data.plateNumber && data.plateNumber.length >= 2) {
@@ -450,13 +455,14 @@ function VehicleContent() {
       } catch {
         // ทำงานต่อเนื่องแบบ Background ไม่บล็อกหน้าจอ
       } finally {
+        clearTimeout(abortTimer);
         isAutoScanProcessingRef.current = false;
         setIsAutoScanningFrame(false);
       }
     };
 
-    // ตรวจจับทุก 1.6 วินาทีขณะเล็งกล้อง
-    autoScanTimerRef.current = setInterval(runAutoScan, 1600);
+    // ตรวจจับทุก 1.1 วินาทีขณะเล็งกล้อง
+    autoScanTimerRef.current = setInterval(runAutoScan, 1100);
 
     return () => {
       if (autoScanTimerRef.current) {
@@ -466,15 +472,20 @@ function VehicleContent() {
     };
   }, [mainTab, cameraActive, autoScanActive, isOcrProcessing]);
 
-  const performOcrOnImage = async (dataUrl: string, targetMode: "lookup" | "patrol") => {
+  const performOcrOnImage = async (dataUrl: string, targetMode: "lookup" | "patrol", fullImageUrl?: string) => {
     setIsOcrProcessing(true);
-    setOcrStatusText("กำลังส่งภาพให้ระบบ AI ตรวจวิเคราะห์เลขทะเบียน...");
+    setOcrStatusText("กำลังตรวจจับเลขทะเบียน...");
+    const controller = new AbortController();
+    const abortTimer = setTimeout(() => controller.abort(), 3500);
+
     try {
       const res = await fetch("/api/ocr-plate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ image: dataUrl }),
+        signal: controller.signal,
       });
+      clearTimeout(abortTimer);
       const data = await res.json();
       if (data.success && data.plateNumber) {
         const plate = data.plateNumber;
@@ -485,13 +496,13 @@ function VehicleContent() {
             plate,
             isStaff: false,
             type: "success",
-            message: `AI ตรวจพบเลขทะเบียน ${plate} จากภาพถ่ายสำเร็จ`,
+            message: `ตรวจพบเลขทะเบียน ${plate} สำเร็จ`,
           });
         } else {
-          await handleContinuousScan(plate, undefined, dataUrl);
+          await handleContinuousScan(plate, undefined, fullImageUrl || dataUrl);
         }
       } else {
-        const msg = "ไม่สามารถอ่านเลขทะเบียนจากภาพได้ชัดเจน กรุณาถ่ายใหม่อีกครั้งให้ใกล้และชัดเจนขึ้น หรือพิมพ์เลขทะเบียน";
+        const msg = "ไม่สามารถอ่านเลขทะเบียนจากภาพได้ชัดเจน กรุณาส่องตรงป้ายอีกครั้ง หรือกดค้นหาด้วยแป้นตัวเลข";
         if (targetMode === "lookup") {
           alert(`⚠️ ${msg}`);
         }
@@ -508,6 +519,7 @@ function VehicleContent() {
         alert("เกิดข้อผิดพลาดในการวิเคราะห์ภาพ กรุณาลองใหม่อีกครั้งหรือพิมพ์เลขทะเบียนด้วยตนเอง");
       }
     } finally {
+      clearTimeout(abortTimer);
       setIsOcrProcessing(false);
       setOcrStatusText(null);
     }
@@ -518,12 +530,17 @@ function VehicleContent() {
       alert("กล้องยังไม่พร้อมใช้งาน กรุณากดปุ่มรีสตาร์ตกล้อง หรือเลือกอัปโหลดรูปภาพ");
       return;
     }
-    const frame = captureVideoFrame();
-    if (!frame) {
-      alert("ไม่สามารถจับภาพจากกล้องได้ กรุณาลองใหม่อีกครั้ง");
-      return;
+    const frames = captureOcrScanArea();
+    if (frames) {
+      await performOcrOnImage(frames.cropDataUrl, targetMode, frames.fullDataUrl);
+    } else {
+      const frame = captureVideoFrame();
+      if (!frame) {
+        alert("ไม่สามารถจับภาพจากกล้องได้ กรุณาลองใหม่อีกครั้ง");
+        return;
+      }
+      await performOcrOnImage(frame, targetMode, frame);
     }
-    await performOcrOnImage(frame, targetMode);
   };
 
   const handleFileInputChange = async (
@@ -1366,8 +1383,8 @@ function VehicleContent() {
                   }`} />
 
                   <div className="absolute -bottom-6 left-0 right-0 text-center">
-                    <span className="text-[10px] font-bold text-white/90 bg-slate-900/85 px-2.5 py-0.5 rounded-full backdrop-blur-xs">
-                      {isAutoScanningFrame ? "⚡ กำลังตรวจจับเลขทะเบียน..." : "นำกรอบนี้ส่องตรงป้ายทะเบียน"}
+                    <span className="text-[10px] font-bold text-white/95 bg-slate-900/90 px-3 py-0.5 rounded-full backdrop-blur-xs border border-white/10 shadow-sm">
+                      ส่องกรอบนี้ตรงป้ายทะเบียน (จับเลขอัตโนมัติทันที)
                     </span>
                   </div>
                 </div>

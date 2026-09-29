@@ -37,7 +37,7 @@ yarn-error.log*
 # vercel
 .vercel
 
-# typescript
 *.tsbuildinfo
 next-env.d.ts
-*.traineddata
+/eng.traineddata
+!public/tessdata/*.traineddata
