@@ -216,6 +216,15 @@ export async function saveShiftReportToCloud(report: ShiftReportLog) {
   }
 }
 
+export async function saveDailyAISummaryToCloud(summary: any) {
+  try {
+    const docRef = doc(db, "dailyAISummaries", summary.id);
+    await setDoc(docRef, summary);
+  } catch (err) {
+    console.warn("Cloud save dailyAISummary failed:", err);
+  }
+}
+
 // ==========================================
 // 3. Database Initial Seeder (If Firestore is Fresh)
 // ==========================================

@@ -118,6 +118,17 @@ export function useFirebaseSync() {
       console.warn("Shift reports sync notice:", err.message);
     });
 
+    // 9. Real-time Listener: Daily AI Summaries
+    const unsubDailyAI = onSnapshot(collection(db, "dailyAISummaries"), (snapshot) => {
+      if (!snapshot.empty) {
+        const cloudAI = snapshot.docs.map(doc => doc.data() as any);
+        cloudAI.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        useStore.setState({ dailyAISummaries: cloudAI });
+      }
+    }, (err) => {
+      console.warn("Daily AI summaries sync notice:", err.message);
+    });
+
     return () => {
       unsubPatrol();
       unsubParking();
@@ -126,6 +137,7 @@ export function useFirebaseSync() {
       unsubArchive();
       unsubVehicles();
       unsubShiftReports();
+      unsubDailyAI();
     };
   }, []);
 

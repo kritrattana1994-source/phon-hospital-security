@@ -27,6 +27,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import HospitalBrand from "@/components/HospitalBrand";
+import { defaultPatrolRounds, getCurrentRound, getCurrentShift } from "@/lib/patrolSchedule";
 
 interface FloatingToast {
   id: string;
@@ -40,9 +41,11 @@ interface FloatingToast {
 
 function VehicleContent() {
   const router = useRouter();
-  const { currentUser, staffVehicles, addParkingScan, parkingScans } = useStore();
+  const { currentUser, staffVehicles, addParkingScan, parkingScans, patrolRounds } = useStore();
+  const hospitalRounds = (patrolRounds && patrolRounds.length > 0) ? patrolRounds : defaultPatrolRounds;
+  const activeHospitalRound = getCurrentRound(hospitalRounds, new Date());
 
-  // Top-level View: "lookup" (ดูว่ารถใคร 24 ชม.) | "patrol" (เดินตรวจรอบเวร 22:00/06:00 น.)
+  // Top-level View: "lookup" (ดูว่ารถใคร 24 ชม.) | "patrol" (เดินตรวจสแกนรถทุกคันใน รพ.)
   const [mainTab, setMainTab] = useState<"lookup" | "patrol">("lookup");
 
   // Read URL query parameter on mount (?mode=lookup or ?mode=patrol)
@@ -68,10 +71,9 @@ function VehicleContent() {
   // Quick issue tag state
   const [reportedIssue, setReportedIssue] = useState<string | null>(null);
 
-  // --- TAB 2: PATROL ROUND (เดินตรวจรอบเวร) STATES ---
-  const currentHour = new Date().getHours();
-  const defaultRound: "22:00" | "06:00" = currentHour >= 18 || currentHour < 5 ? "22:00" : "06:00";
-  const [selectedRound, setSelectedRound] = useState<"22:00" | "06:00">(defaultRound);
+  // --- TAB 2: PATROL ROUND (เดินตรวจสแกนรถทุกคันใน รพ.) STATES ---
+  const [selectedRound, setSelectedRound] = useState<string>(activeHospitalRound.id);
+  const [selectedZone, setSelectedZone] = useState<string>("ลานหน้า OPD");
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -295,12 +297,14 @@ function VehicleContent() {
     });
 
     const isStaff = !!staff;
-    const zone = zoneOverride || (isStaff ? staff.zone : "ลานจอดทั่วไป");
+    const currentRoundObj = hospitalRounds.find(r => r.id === selectedRound) || { id: selectedRound, name: `รอบ ${selectedRound}` };
+    const zone = zoneOverride || selectedZone || (isStaff ? staff.zone : "ลานจอดทั่วไป");
 
     addParkingScan({
       plateNumber: plate,
       province: staff ? staff.province : "ขอนแก่น",
       round: selectedRound,
+      roundName: currentRoundObj.name,
       timestamp: new Date().toISOString(),
       isStaff,
       ownerName: staff ? staff.ownerName : undefined,
@@ -331,7 +335,15 @@ function VehicleContent() {
     setCameraInputPlate("");
   };
 
-  const currentRoundScans = parkingScans.filter((s) => s.round === selectedRound);
+  const todayDateStr = new Date().toISOString().split("T")[0];
+  const todayScans = parkingScans.filter((s) => s.timestamp && s.timestamp.startsWith(todayDateStr));
+  const todayStaffCount = todayScans.filter((s) => s.isStaff).length;
+  const todayOutsideCount = todayScans.filter((s) => !s.isStaff).length;
+
+  const currentRoundScans = parkingScans.filter((s) => {
+    if (!s.timestamp?.startsWith(todayDateStr)) return false;
+    return s.round === selectedRound || (s.roundName && s.roundName.includes(selectedRound));
+  });
   const staffCountInRound = currentRoundScans.filter((s) => s.isStaff).length;
   const outsideCountInRound = currentRoundScans.filter((s) => !s.isStaff).length;
 
@@ -901,66 +913,116 @@ function VehicleContent() {
         )}
 
         {/* ========================================================================= */}
-        {/* MAIN TAB 2: PATROL ROUNDS (เดินตรวจรอบเวรลานจอด 22:00 / 06:00 น.) */}
+        {/* MAIN TAB 2: PATROL ROUNDS (เดินตรวจสแกนรถทุกคันใน รพ.) */}
         {/* ========================================================================= */}
         {mainTab === "patrol" && (
           <div className="space-y-4 animate-in fade-in-50 duration-200">
-            {/* Round Switcher & Flashlight */}
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200 text-xs font-bold flex-1">
+            {/* Round Selector & Flashlight Header */}
+            <div className="p-4 bg-white border border-sky-100 rounded-3xl shadow-xs space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex-1">
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">
+                    เลือกรอบการตรวจสแกนรถ:
+                  </label>
+                  <select
+                    value={selectedRound}
+                    onChange={(e) => setSelectedRound(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-sky-500"
+                  >
+                    {hospitalRounds.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.id}: {r.name}
+                      </option>
+                    ))}
+                    <option value="22:00">🌙 รอบดึกพิเศษ 22:00 น.</option>
+                    <option value="06:00">☀️ รอบเช้าพิเศษ 06:00 น.</option>
+                  </select>
+                </div>
+
                 <button
                   type="button"
-                  onClick={() => setSelectedRound("22:00")}
-                  className={`flex-1 py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 ${
-                    selectedRound === "22:00"
-                      ? "bg-indigo-700 text-white shadow-xs"
-                      : "text-slate-600 hover:text-slate-900"
+                  onClick={toggleTorch}
+                  className={`px-3.5 py-2.5 mt-5 rounded-2xl border flex items-center gap-1.5 text-xs font-bold transition-all active:scale-95 shrink-0 ${
+                    torchOn
+                      ? "bg-amber-400 text-slate-950 border-amber-500 shadow-md shadow-amber-400/30 ring-2 ring-amber-200"
+                      : "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200"
                   }`}
                 >
-                  <span>🌙</span>
-                  <span>รอบดึก 22:00 น.</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedRound("06:00")}
-                  className={`flex-1 py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 ${
-                    selectedRound === "06:00"
-                      ? "bg-amber-500 text-white shadow-xs"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
-                >
-                  <span>☀️</span>
-                  <span>รอบเช้า 06:00 น.</span>
+                  <Flashlight className={`w-4 h-4 ${torchOn ? "fill-current animate-bounce" : ""}`} />
+                  <span>{torchOn ? "เปิดไฟ" : "ไฟฉาย"}</span>
                 </button>
               </div>
 
-              <button
-                type="button"
-                onClick={toggleTorch}
-                className={`px-3.5 py-2.5 rounded-2xl border flex items-center gap-1.5 text-xs font-bold transition-all active:scale-95 shrink-0 ${
-                  torchOn
-                    ? "bg-amber-400 text-slate-950 border-amber-500 shadow-md shadow-amber-400/30 ring-2 ring-amber-200"
-                    : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-                }`}
-              >
-                <Flashlight className={`w-4 h-4 ${torchOn ? "fill-current animate-bounce" : ""}`} />
-                <span>{torchOn ? "เปิดไฟ" : "ไฟฉาย"}</span>
-              </button>
-            </div>
+              {/* 2 Big Live Counters (รอบนี้ vs วันนี้) */}
+              <div className="grid grid-cols-2 gap-2.5 pt-1">
+                {/* Counter 1: รอบนี้ */}
+                <div className="p-3 bg-sky-50/70 border border-sky-200 rounded-2xl space-y-1">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-sky-800">
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-sky-500 animate-ping" />
+                      รอบ {selectedRound}
+                    </span>
+                    <span className="text-[10px] bg-white px-2 py-0.5 rounded-full border border-sky-200 text-sky-700">รอบนี้</span>
+                  </div>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-2xl font-black text-sky-950 font-mono">{currentRoundScans.length}</span>
+                    <span className="text-xs text-sky-600 font-semibold">คัน</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[10px] text-slate-500 pt-0.5 border-t border-sky-100">
+                    <span className="text-emerald-700 font-semibold">รพ. {staffCountInRound}</span>
+                    <span>•</span>
+                    <span className="text-amber-700 font-semibold">นอก {outsideCountInRound}</span>
+                  </div>
+                </div>
 
-            {/* Live Round Statistics */}
-            <div className="p-3 bg-white border border-sky-100 rounded-2xl flex items-center justify-between text-xs shadow-xs">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="font-bold text-slate-700">รอบตรวจ {selectedRound} น.</span>
+                {/* Counter 2: วันนี้ */}
+                <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-2xl space-y-1">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-emerald-800">
+                    <span className="flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      ยอดรวมวันนี้
+                    </span>
+                    <span className="text-[10px] bg-white px-2 py-0.5 rounded-full border border-emerald-200 text-emerald-700">สะสม</span>
+                  </div>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-2xl font-black text-emerald-950 font-mono">{todayScans.length}</span>
+                    <span className="text-xs text-emerald-600 font-semibold">คัน</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[10px] text-slate-500 pt-0.5 border-t border-emerald-100">
+                    <span className="text-emerald-700 font-semibold">รพ. {todayStaffCount}</span>
+                    <span>•</span>
+                    <span className="text-amber-700 font-semibold">นอก {todayOutsideCount}</span>
+                  </div>
+                </div>
               </div>
-              <div className="flex items-center gap-2 font-mono">
-                <span className="text-slate-500">รวม:</span>
-                <span className="font-bold text-sky-800">{currentRoundScans.length} คัน</span>
-                <span className="text-slate-300">|</span>
-                <span className="text-emerald-600 font-bold">{staffCountInRound} รพ.</span>
-                <span className="text-slate-300">|</span>
-                <span className="text-amber-600 font-bold">{outsideCountInRound} นอก</span>
+
+              {/* Quick Zone Selector */}
+              <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                <span className="text-[11px] font-bold text-slate-600 block">
+                  📍 กำลังตรวจ ณ โซน: <strong className="text-sky-700">{selectedZone}</strong>
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    "ลานหน้า OPD",
+                    "ลานแพทย์ A/B",
+                    "แฟลตพยาบาล",
+                    "โซนฉุกเฉิน (ER)",
+                    "ลานหลัง รพ."
+                  ].map((z) => (
+                    <button
+                      key={z}
+                      type="button"
+                      onClick={() => setSelectedZone(z)}
+                      className={`text-[11px] font-semibold px-2.5 py-1 rounded-xl transition-all ${
+                        selectedZone === z
+                          ? "bg-sky-600 text-white shadow-xs font-bold"
+                          : "bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200"
+                      }`}
+                    >
+                      {z}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 

@@ -8,7 +8,8 @@ import {
   deleteCheckpointFromCloud,
   saveStaffVehiclesToCloud,
   deleteStaffVehicleFromCloud,
-  saveShiftReportToCloud
+  saveShiftReportToCloud,
+  saveDailyAISummaryToCloud
 } from './firebaseService';
 import { 
   PatrolRound, 
@@ -95,7 +96,8 @@ export interface ParkingScan {
   id: string;
   plateNumber: string;
   province?: string;
-  round?: '22:00' | '06:00';
+  round?: string;
+  roundName?: string;
   timestamp: string;
   isStaff: boolean;
   ownerName?: string;
@@ -104,6 +106,27 @@ export interface ParkingScan {
   guardName: string;
   synced: boolean;
   expireAt?: string;
+}
+
+export interface DailyAISummary {
+  id: string; // e.g. "ai-2026-09-29"
+  dateString: string; // "2026-09-29"
+  timestamp: string; // ISO
+  reportDateThai: string; // "วันอังคารที่ 29 กันยายน 2569"
+  totalVehiclesScanned: number;
+  staffVehiclesCount: number;
+  outsideVehiclesCount: number;
+  overnightVehiclesCount: number;
+  abandonedCount?: number;
+  zoneViolationsCount?: number;
+  patrolTotalScans: number;
+  patrolComplianceRate: number;
+  patrolOnTimeRate: number;
+  patrolIssuesCount: number;
+  aiSummaryMarkdown: string;
+  lineMessage?: string;
+  actionItems?: string[];
+  generatedBy?: string;
 }
 
 
@@ -193,6 +216,10 @@ interface AppState {
   archiveAuditLogs: ArchiveAuditLog[];
   addArchiveAuditLog: (log: ArchiveAuditLog) => void;
   purgeArchivedRecords: (type: 'patrolLogs' | 'parkingScans' | 'incidents', ids: string[]) => void;
+
+  // Daily AI Summaries (ประวัติข้อความวิเคราะห์รายวัน)
+  dailyAISummaries: DailyAISummary[];
+  addDailyAISummary: (summary: DailyAISummary) => void;
 
   // Google Drive Upload Webhook URL
   googleDriveWebhookUrl: string;
@@ -666,6 +693,21 @@ export const useStore = create<AppState>()(
             incidents: state.incidents.filter((i) => !idSet.has(i.id)),
           }));
         }
+      },
+
+      // Daily AI Summaries (ประวัติข้อความวิเคราะห์รายวัน)
+      dailyAISummaries: [],
+      addDailyAISummary: (summary) => {
+        saveDailyAISummaryToCloud(summary);
+        set((state) => {
+          const idx = state.dailyAISummaries.findIndex((s) => s.dateString === summary.dateString);
+          if (idx >= 0) {
+            const updated = [...state.dailyAISummaries];
+            updated[idx] = summary;
+            return { dailyAISummaries: updated };
+          }
+          return { dailyAISummaries: [summary, ...state.dailyAISummaries] };
+        });
       },
     }),
     {

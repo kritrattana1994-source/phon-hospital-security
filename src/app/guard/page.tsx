@@ -106,6 +106,13 @@ export default function GuardPage() {
   const progressPercent = roundProgress.percent;
   const completedInRound = roundProgress.completedCount;
 
+  const todayStr = now.toISOString().split("T")[0];
+  const todayScansCount = parkingScans.filter((s) => s.timestamp?.startsWith(todayStr)).length;
+  const activeRoundScansCount = parkingScans.filter((s) => {
+    if (!s.timestamp?.startsWith(todayStr)) return false;
+    return s.round === activeRound.id || s.roundName === activeRound.name || s.round === activeRound.name;
+  }).length;
+
   // 1. PIN LOGIN SCREEN FOR GUARDS (LIGHT MEDICAL THEME)
   if (!currentUser) {
     return (
@@ -406,24 +413,26 @@ export default function GuardPage() {
 
           <Link
             href="/vehicle?mode=patrol"
-            className="group block p-4 bg-white hover:bg-sky-50/40 border border-sky-100 hover:border-sky-300 rounded-2xl transition-all shadow-xs active:scale-[0.98]"
+            className="group block p-4 bg-gradient-to-r from-sky-500/10 via-blue-50/80 to-indigo-50/60 hover:from-sky-500/20 border-2 border-sky-300 hover:border-sky-500 rounded-2xl transition-all shadow-sm hover:shadow-md active:scale-[0.98]"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3.5">
-                <div className="w-12 h-12 rounded-2xl bg-sky-100 text-sky-600 flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
+                <div className="w-12 h-12 rounded-2xl bg-sky-600 text-white flex items-center justify-center shadow-md shadow-sky-600/30 group-hover:scale-105 transition-transform">
                   <Car className="w-6 h-6" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-slate-900 text-base">โมดูล 3: เดินตรวจรอบเวรลานจอด</h3>
-                    <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-md font-semibold">
-                      รอบ 22:00 / 06:00 น.
+                    <h3 className="font-black text-slate-900 text-base">🚗 สแกนตรวจรถทุกคันใน รพ.</h3>
+                    <span className="text-[10px] bg-sky-600 text-white px-2.5 py-0.5 rounded-full font-bold">
+                      รอบ {activeRound.id}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-500 mt-0.5">เดินตรวจนับยอดรถกะดึก/กะเช้า • บันทึกส่ง AI วิเคราะห์รถแอบจอด</p>
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    สแกนตรวจรถบุคลากร/คนนอก • รอบนี้: <strong className="text-sky-700">{activeRoundScansCount} คัน</strong> • วันนี้สะสม: <strong className="text-slate-900">{todayScansCount} คัน</strong>
+                  </p>
                 </div>
               </div>
-              <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-sky-600 transition-colors" />
+              <ChevronRight className="w-5 h-5 text-sky-600 group-hover:translate-x-1 transition-transform" />
             </div>
           </Link>
         </div>
