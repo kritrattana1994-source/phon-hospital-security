@@ -176,15 +176,11 @@ interface AppState {
 }
 
 export const initialGuards: Guard[] = [
-  // กะเช้า 3 นาย
   { id: 'g1', name: 'นายสมชาย รักษา', pin: '1234', shift: 'morning', phone: '089-111-2233', role: 'guard' },
   { id: 'g2', name: 'นายประสิทธิ์ คุ้มกัน', pin: '1111', shift: 'morning', phone: '089-222-3344', role: 'guard' },
   { id: 'g3', name: 'นายวิชัย ระวังภัย', pin: '2222', shift: 'morning', phone: '089-333-4455', role: 'guard' },
-  // กะดึก 2 นาย
   { id: 'g4', name: 'นายสมศักดิ์ ปลอดภัย', pin: '5678', shift: 'night', phone: '089-444-5566', role: 'guard' },
   { id: 'g5', name: 'นายสุรชัย มั่นคง', pin: '3333', shift: 'night', phone: '089-555-6677', role: 'guard' },
-  // หัวหน้างาน
-  { id: 's1', name: 'พ.ต.ท. ประพันธ์ (หัวหน้าความปลอดภัย)', pin: '9999', shift: 'morning', phone: '081-999-8888', role: 'supervisor' }
 ];
 
 export const initialCheckpoints: Checkpoint[] = [
@@ -347,7 +343,14 @@ export const useStore = create<AppState>()(
 
       loginSupervisor: (pin: string) => {
         if (pin === '9999') {
-          const sup = get().guards.find(g => g.role === 'supervisor') || initialGuards[5];
+          const sup = get().guards.find(g => g.role === 'supervisor') || {
+            id: 'sup-1',
+            name: 'หัวหน้างานความปลอดภัย',
+            pin: '9999',
+            shift: 'morning' as const,
+            phone: '089-999-8877',
+            role: 'supervisor' as const
+          };
           set({ supervisorUser: sup });
           return true;
         }

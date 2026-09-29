@@ -760,6 +760,8 @@ export default function SupervisorPage() {
     }
     setGuardForm({ name: "", pin: "", shift: "morning", phone: "", role: "guard" });
   };
+
+  const onlyGuards = guards.filter((g) => g.role !== "supervisor" && g.id !== "s1" && !g.name.includes("หัวหน้า"));
   const completedCheckpoints = new Set(patrolLogs.map((l) => l.checkpointId));
   const complianceRate = Math.min(100, Math.round((completedCheckpoints.size / Math.max(checkpoints.length, 1)) * 100));
   const issuesFound = patrolLogs.filter((l) => l.status === "issue").length;
@@ -824,7 +826,7 @@ export default function SupervisorPage() {
 
             <div className="flex items-center gap-2 px-3.5 py-1.5 bg-emerald-50 rounded-xl border border-emerald-200 text-xs text-emerald-800 font-medium">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span>รปภ. เวรเช้า {guards.filter(g => g.shift === "morning" && g.role === "guard").length} นาย</span>
+              <span>เจ้าหน้าที่ รปภ. ทั้งหมด {onlyGuards.length} นาย</span>
             </div>
           </div>
         </div>
@@ -835,7 +837,7 @@ export default function SupervisorPage() {
           {[
             { id: "overview", label: "ภาพรวม & KPI", icon: Award },
             { id: "checkpoints", label: `จัดการจุดตรวจ (${checkpoints.length})`, icon: CheckSquare },
-            { id: "staff", label: `จัดการพนักงาน รปภ. (${guards.length})`, icon: Users },
+            { id: "staff", label: `จัดการพนักงาน รปภ. (${onlyGuards.length})`, icon: Users },
             { id: "vehicles", label: `รถบุคลากร (${staffVehicles.length})`, icon: Car },
             { id: "incidents", label: `แจ้งเหตุด่วน (${incidents.length})`, icon: AlertTriangle },
             { id: "ai", label: "DeepSeek AI (07:00 น.)", icon: Bot },
@@ -907,7 +909,7 @@ export default function SupervisorPage() {
                   <Users className="w-5 h-5 text-indigo-600" />
                 </div>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-black text-slate-900">{guards.length}</span>
+                  <span className="text-4xl font-black text-slate-900">{onlyGuards.length}</span>
                   <span className="text-xs text-slate-500">นาย</span>
                 </div>
                 <p className="text-[11px] text-indigo-600 mt-3 font-medium">จัดการรายชื่อและรหัส PIN ได้ในแท็บพนักงาน</p>
@@ -1175,8 +1177,8 @@ export default function SupervisorPage() {
             <div className="bg-white border border-sky-100 rounded-3xl p-6 shadow-xs space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <h2 className="font-bold text-lg text-slate-900">รายชื่อเจ้าหน้าที่ รปภ. & บุคลากร ({guards.length} นาย)</h2>
-                  <p className="text-xs text-slate-500">สามารถเพิ่ม/ลบ บุคลากร ตั้งรหัส PIN 4 หลัก และกำหนดกะเข้าเวร</p>
+                  <h2 className="font-bold text-lg text-slate-900">รายชื่อเจ้าหน้าที่ รปภ. ({onlyGuards.length} นาย)</h2>
+                  <p className="text-xs text-slate-500">สามารถเพิ่ม/ลบ เจ้าหน้าที่ รปภ. และตั้งรหัส PIN 4 หลักประจำตัว</p>
                 </div>
                 <button
                   onClick={() => {
@@ -1196,26 +1198,20 @@ export default function SupervisorPage() {
                     <tr className="border-b border-slate-200 text-slate-500 font-semibold uppercase">
                       <th className="py-3 px-4">ชื่อ - นามสกุล</th>
                       <th className="py-3 px-4">รหัส PIN (4 หลัก)</th>
-                      <th className="py-3 px-4">กะประจำ</th>
                       <th className="py-3 px-4">เบอร์โทรศัพท์</th>
                       <th className="py-3 px-4">บทบาท</th>
                       <th className="py-3 px-4 text-center">จัดการ</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {guards.map((guard) => (
+                    {onlyGuards.map((guard) => (
                       <tr key={guard.id} className="hover:bg-slate-50 transition-colors">
                         <td className="py-3.5 px-4 font-bold text-slate-900">{guard.name}</td>
                         <td className="py-3.5 px-4 font-mono font-bold text-sky-700">{guard.pin}</td>
-                        <td className="py-3.5 px-4">
-                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${guard.shift === "morning" ? "bg-amber-100 text-amber-800 border border-amber-200" : "bg-indigo-100 text-indigo-800 border border-indigo-200"}`}>
-                            {guard.shift === "morning" ? "☀️ กะเช้า (07:00-19:00)" : "🌙 กะดึก (19:00-07:00)"}
-                          </span>
-                        </td>
                         <td className="py-3.5 px-4 font-mono text-slate-600">{guard.phone || "-"}</td>
                         <td className="py-3.5 px-4">
-                          <span className="px-2 py-0.5 rounded text-[10px] bg-slate-100 text-slate-600 font-semibold">
-                            {guard.role === "supervisor" ? "หัวหน้างาน" : "เจ้าหน้าที่ รปภ."}
+                          <span className="px-2 py-0.5 rounded text-[10px] bg-sky-50 text-sky-700 border border-sky-200 font-semibold">
+                            เจ้าหน้าที่ รปภ.
                           </span>
                         </td>
                         <td className="py-3.5 px-4 text-center">
@@ -1226,9 +1222,9 @@ export default function SupervisorPage() {
                                 setGuardForm({
                                   name: guard.name,
                                   pin: guard.pin,
-                                  shift: guard.shift,
+                                  shift: guard.shift || "morning",
                                   phone: guard.phone,
-                                  role: guard.role
+                                  role: "guard"
                                 });
                                 setShowAddGuardModal(true);
                               }}
@@ -1237,19 +1233,17 @@ export default function SupervisorPage() {
                             >
                               <Edit2 className="w-3.5 h-3.5" />
                             </button>
-                            {guard.role !== "supervisor" && (
-                              <button
-                                onClick={() => {
-                                  if (confirm(`ต้องการลบ ${guard.name} ออกจากระบบ?`)) {
-                                    deleteGuard(guard.id);
-                                  }
-                                }}
-                                className="p-1.5 rounded-lg bg-slate-100 hover:bg-rose-50 text-rose-600"
-                                title="ลบเจ้าหน้าที่"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
+                            <button
+                              onClick={() => {
+                                if (confirm(`ต้องการลบ ${guard.name} ออกจากระบบ?`)) {
+                                  deleteGuard(guard.id);
+                                }
+                              }}
+                              className="p-1.5 rounded-lg bg-slate-100 hover:bg-rose-50 text-rose-600"
+                              title="ลบเจ้าหน้าที่"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -3022,31 +3016,17 @@ export default function SupervisorPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-slate-600 font-bold mb-1">รหัส PIN 4 หลัก *</label>
-                  <input
-                    type="password"
-                    maxLength={4}
-                    required
-                    value={guardForm.pin}
-                    onChange={(e) => setGuardForm({ ...guardForm, pin: e.target.value })}
-                    placeholder="4444"
-                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 font-mono tracking-widest text-center"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-600 font-bold mb-1">กะประจำ *</label>
-                  <select
-                    value={guardForm.shift}
-                    onChange={(e) => setGuardForm({ ...guardForm, shift: e.target.value as any })}
-                    className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900"
-                  >
-                    <option value="morning">☀️ กะเช้า (07:00 - 19:00)</option>
-                    <option value="night">🌙 กะดึก (19:00 - 07:00)</option>
-                  </select>
-                </div>
+              <div>
+                <label className="block text-slate-600 font-bold mb-1">รหัส PIN 4 หลักประจำตัว *</label>
+                <input
+                  type="password"
+                  maxLength={4}
+                  required
+                  value={guardForm.pin}
+                  onChange={(e) => setGuardForm({ ...guardForm, pin: e.target.value })}
+                  placeholder="เช่น 1234 หรือ 5678"
+                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 font-mono tracking-widest text-center text-lg"
+                />
               </div>
 
               <div>
