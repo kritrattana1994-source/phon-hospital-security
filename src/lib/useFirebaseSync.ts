@@ -73,7 +73,14 @@ export function useFirebaseSync() {
           });
         }
 
-        useStore.setState({ checkpoints: cloudCps });
+        const currentBuildings = useStore.getState().buildings || [];
+        const cpBuildings = cloudCps.map((cp) => cp.building?.trim()).filter((b): b is string => Boolean(b));
+        const combinedBuildings = Array.from(new Set([...currentBuildings, ...cpBuildings]));
+        if (combinedBuildings.length > currentBuildings.length) {
+          useStore.setState({ checkpoints: cloudCps, buildings: combinedBuildings });
+        } else {
+          useStore.setState({ checkpoints: cloudCps });
+        }
       }
     }, (err) => {
       console.warn("Checkpoints sync notice:", err.message);

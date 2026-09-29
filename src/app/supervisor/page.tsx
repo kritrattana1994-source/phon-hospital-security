@@ -99,7 +99,10 @@ export default function SupervisorPage() {
     deleteGuard,
     archiveAuditLogs,
     addArchiveAuditLog,
-    purgeArchivedRecords
+    purgeArchivedRecords,
+    buildings,
+    addBuilding,
+    deleteBuilding
   } = useStore();
 
   const { isConnected: isCloudConnected } = useFirebaseSync();
@@ -146,6 +149,9 @@ export default function SupervisorPage() {
   const [newTemplateItemsText, setNewTemplateItemsText] = useState("");
   const [checklistAlert, setChecklistAlert] = useState<string | null>(null);
   const [locatingCpId, setLocatingCpId] = useState<string | null>(null);
+  const [showManageBuildingsModal, setShowManageBuildingsModal] = useState(false);
+  const [newBuildingInput, setNewBuildingInput] = useState("");
+  const [buildingActionAlert, setBuildingActionAlert] = useState<string | null>(null);
 
   // Staff Modals State
   const [showAddGuardModal, setShowAddGuardModal] = useState(false);
@@ -524,6 +530,42 @@ export default function SupervisorPage() {
         "ระบบไฟส่องสว่างและกล้องวงจรปิดทำงานปกติ",
       ],
     });
+  };
+
+  const handleAddBuilding = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const name = newBuildingInput.trim();
+    if (!name) return;
+    if (buildings.includes(name)) {
+      setBuildingActionAlert(`อาคาร "${name}" มีอยู่ในระบบแล้ว`);
+      setTimeout(() => setBuildingActionAlert(null), 3000);
+      return;
+    }
+    addBuilding(name);
+    setCpForm((prev) => ({ ...prev, building: name }));
+    setNewBuildingInput("");
+    setBuildingActionAlert(`เพิ่มอาคาร "${name}" เรียบร้อยแล้ว`);
+    setTimeout(() => setBuildingActionAlert(null), 3000);
+  };
+
+  const handleDeleteBuilding = (bName: string) => {
+    const count = checkpoints.filter((cp) => cp.building === bName).length;
+    if (count > 0) {
+      if (!confirm(`อาคาร "${bName}" มีจุดตรวจใช้งานอยู่ ${count} จุดตรวจ ยืนยันการลบออกจากตัวเลือกอาคารหรือไม่? (ข้อมูลจุดตรวจเดิมจะยังคงชื่อนี้ไว้)`)) {
+        return;
+      }
+    } else {
+      if (!confirm(`ต้องการลบอาคาร "${bName}" ออกจากระบบหรือไม่?`)) {
+        return;
+      }
+    }
+    deleteBuilding(bName);
+    if (cpForm.building === bName) {
+      const remaining = buildings.filter((b) => b !== bName);
+      setCpForm((prev) => ({ ...prev, building: remaining[0] || "" }));
+    }
+    setBuildingActionAlert(`ลบอาคาร "${bName}" เรียบร้อยแล้ว`);
+    setTimeout(() => setBuildingActionAlert(null), 3000);
   };
 
   // Reorder Checkpoint up/down (Supervisor freedom)
@@ -934,13 +976,20 @@ export default function SupervisorPage() {
                   <Printer className="w-4 h-4" /> พิมพ์ป้าย QR ทั้งหมด ({checkpoints.length} จุด)
                 </button>
                 <button
+                  onClick={() => setShowManageBuildingsModal(true)}
+                  className="px-4 py-2.5 bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-900 font-bold text-xs rounded-xl flex items-center gap-2 active:scale-95 transition-all shadow-2xs"
+                  title="จัดการรายชื่ออาคาร (เพิ่ม/ลบ อาคาร)"
+                >
+                  <Building className="w-4 h-4 text-sky-600" /> จัดการอาคาร ({buildings.length})
+                </button>
+                <button
                   onClick={() => {
                     const nextCode = String(checkpoints.length + 1).padStart(2, "0");
                     setEditingCp(null);
                     setCpForm({
                       code: nextCode,
                       name: "",
-                      building: "อาคารเฉลิมพระเกียรติ A",
+                      building: buildings[0] || "อาคารเฉลิมพระเกียรติ A",
                       floor: "ชั้น 1",
                       items: [
                         "ประตูทางเข้า-ออก และหน้าต่างล็อกแน่นหนา",
@@ -2636,16 +2685,31 @@ export default function SupervisorPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-600 font-bold mb-1">อาคาร</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-slate-600 font-bold text-xs">อาคาร *</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowManageBuildingsModal(true)}
+                      className="text-[11px] text-sky-600 hover:text-sky-800 font-bold flex items-center gap-1 active:scale-95 transition-all hover:underline"
+                    >
+                      🏢 เพิ่ม/ลดอาคาร
+                    </button>
+                  </div>
                   <select
                     value={cpForm.building}
-                    onChange={(e) => setCpForm({ ...cpForm, building: e.target.value })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:bg-white"
+                    onChange={(e) => {
+                      if (e.target.value === "__manage__") {
+                        setShowManageBuildingsModal(true);
+                      } else {
+                        setCpForm({ ...cpForm, building: e.target.value });
+                      }
+                    }}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:bg-white text-xs font-medium"
                   >
-                    <option value="อาคารเฉลิมพระเกียรติ A">อาคารเฉลิมพระเกียรติ A</option>
-                    <option value="อาคารบริการผู้ป่วย B">อาคารบริการผู้ป่วย B</option>
-                    <option value="อาคารสนับสนุนเทคนิค C">อาคารสนับสนุนเทคนิค C</option>
-                    <option value="พื้นที่ภายนอก & บริเวณรอบ รพ.">พื้นที่ภายนอก & บริเวณรอบ รพ.</option>
+                    {buildings.map((b) => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                    <option value="__manage__">➕ เพิ่ม / จัดการอาคาร...</option>
                   </select>
                 </div>
 
@@ -3342,6 +3406,119 @@ export default function SupervisorPage() {
                     <Trash2 className="w-4 h-4" /> ยืนยันล้างข้อมูล
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: MANAGE BUILDINGS (เพิ่ม/ลดรายชื่ออาคาร) */}
+      {showManageBuildingsModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 border border-sky-100 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-start">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-sky-100 text-sky-700">
+                  <Building className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-slate-900">
+                    จัดการรายชื่ออาคาร ({buildings.length})
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    เพิ่มหรือลบชื่ออาคาร/โซน สำหรับตั้งค่าจุดตรวจ
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowManageBuildingsModal(false)}
+                className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {buildingActionAlert && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold rounded-xl flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{buildingActionAlert}</span>
+              </div>
+            )}
+
+            {/* Form to add a new building */}
+            <form onSubmit={handleAddBuilding} className="space-y-2">
+              <label className="block text-xs font-bold text-slate-700">
+                ➕ เพิ่มอาคารหรือโซนใหม่
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newBuildingInput}
+                  onChange={(e) => setNewBuildingInput(e.target.value)}
+                  placeholder="เช่น อาคารผู้ป่วยนอก (OPD), ป้อมยาม..."
+                  className="flex-1 p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-sky-500"
+                />
+                <button
+                  type="submit"
+                  disabled={!newBuildingInput.trim()}
+                  className="px-4 py-2.5 bg-sky-600 hover:bg-sky-500 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold text-xs rounded-xl active:scale-95 transition-all shadow-xs shrink-0"
+                >
+                  เพิ่ม
+                </button>
+              </div>
+            </form>
+
+            {/* List of current buildings */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-slate-700">
+                รายชื่ออาคารทั้งหมด ({buildings.length} แห่ง)
+              </label>
+              <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1 divide-y divide-slate-100">
+                {buildings.length === 0 ? (
+                  <p className="text-xs text-slate-400 text-center py-4">ยังไม่มีรายชื่ออาคาร</p>
+                ) : (
+                  buildings.map((b) => {
+                    const count = checkpoints.filter((cp) => cp.building === b).length;
+                    return (
+                      <div
+                        key={b}
+                        className="flex items-center justify-between p-2.5 rounded-xl hover:bg-slate-50 border border-slate-100 text-xs transition-colors"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Building className="w-4 h-4 text-sky-600 shrink-0" />
+                          <span className="font-semibold text-slate-800 truncate" title={b}>
+                            {b}
+                          </span>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 shrink-0">
+                            {count} จุดตรวจ
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteBuilding(b)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors shrink-0"
+                          title={`ลบอาคาร "${b}"`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+              <span className="text-[11px] text-slate-400">
+                * บันทึกและซิงค์ใช้งานร่วมกันทุกจุดตรวจ
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowManageBuildingsModal(false)}
+                className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl active:scale-95 transition-all shadow-xs"
+              >
+                ปิดหน้าต่าง
               </button>
             </div>
           </div>

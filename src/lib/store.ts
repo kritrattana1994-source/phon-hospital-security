@@ -128,6 +128,11 @@ interface AppState {
   updateCheckpointItems: (checkpointId: string, items: string[]) => void;
   copyCheckpointItems: (targetCheckpointId: string, sourceCheckpointId: string) => void;
 
+  // Buildings Management (อาคารที่สามารถเพิ่ม/ลดได้)
+  buildings: string[];
+  addBuilding: (name: string) => void;
+  deleteBuilding: (name: string) => void;
+
   // Checklist Templates (บันทึกรายการเช็คไว้ดึงใช้ง่ายๆ)
   checklistTemplates: ChecklistTemplate[];
   addChecklistTemplate: (tmpl: Omit<ChecklistTemplate, 'id'>) => void;
@@ -305,8 +310,12 @@ export const initialIncidents: Incident[] = [
     imageUrl: 'https://images.unsplash.com/photo-1517646287270-a5a9ca602e5c?w=600&q=80',
   }
 ];
-
-
+export const initialBuildings: string[] = [
+  'อาคารเฉลิมพระเกียรติ A',
+  'อาคารบริการผู้ป่วย B',
+  'อาคารสนับสนุนเทคนิค C',
+  'พื้นที่ภายนอก & บริเวณรอบ รพ.'
+];
 
 export const useStore = create<AppState>()(
   persist(
@@ -422,6 +431,22 @@ export const useStore = create<AppState>()(
       deleteChecklistTemplate: (id) => set((state) => ({
         checklistTemplates: state.checklistTemplates.filter(t => t.id !== id)
       })),
+
+      // Buildings Management (อาคารที่สามารถเพิ่ม/ลดได้)
+      buildings: initialBuildings,
+      addBuilding: (name: string) => {
+        const trimmed = name.trim();
+        if (!trimmed) return;
+        set((state) => {
+          if (state.buildings.includes(trimmed)) return state;
+          return { buildings: [...state.buildings, trimmed] };
+        });
+      },
+      deleteBuilding: (name: string) => {
+        set((state) => ({
+          buildings: state.buildings.filter((b) => b !== name)
+        }));
+      },
 
       // Patrols
       patrolLogs: [],
@@ -583,12 +608,21 @@ export const useStore = create<AppState>()(
     {
       name: 'smart-hospital-security-v5',
       onRehydrateStorage: () => (state) => {
-        if (state && Array.isArray(state.checkpoints)) {
-          const hasLegacyCodes = state.checkpoints.some(
-            (cp) => !/^\d{2,}$/.test(cp.code?.trim() || "")
-          );
-          if (hasLegacyCodes) {
-            state.autoRenumberCheckpoints();
+        if (state) {
+          if (Array.isArray(state.checkpoints)) {
+            const hasLegacyCodes = state.checkpoints.some(
+              (cp) => !/^\d{2,}$/.test(cp.code?.trim() || "")
+            );
+            if (hasLegacyCodes) {
+              state.autoRenumberCheckpoints();
+            }
+          }
+          if (!Array.isArray(state.buildings) || state.buildings.length === 0) {
+            const cpBuildings = Array.isArray(state.checkpoints)
+              ? state.checkpoints.map((cp) => cp.building?.trim()).filter(Boolean)
+              : [];
+            const merged = Array.from(new Set([...initialBuildings, ...cpBuildings]));
+            useStore.setState({ buildings: merged });
           }
         }
       },
