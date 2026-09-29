@@ -169,6 +169,10 @@ interface AppState {
   archiveAuditLogs: ArchiveAuditLog[];
   addArchiveAuditLog: (log: ArchiveAuditLog) => void;
   purgeArchivedRecords: (type: 'patrolLogs' | 'parkingScans' | 'incidents', ids: string[]) => void;
+
+  // Google Drive Upload Webhook URL
+  googleDriveWebhookUrl: string;
+  setGoogleDriveWebhookUrl: (url: string) => void;
 }
 
 export const initialGuards: Guard[] = [
@@ -321,7 +325,16 @@ export const useStore = create<AppState>()(
   persist(
     (set, get) => ({
       currentUser: null,
-      supervisorUser: null,
+      supervisorUser: {
+        id: 'sup-1',
+        name: 'หัวหน้างานความปลอดภัย',
+        pin: '9999',
+        shift: 'morning',
+        phone: '089-999-8877',
+        role: 'supervisor'
+      },
+      googleDriveWebhookUrl: '',
+      setGoogleDriveWebhookUrl: (url: string) => set({ googleDriveWebhookUrl: url }),
 
       loginGuard: (pin: string) => {
         const guard = get().guards.find(g => g.pin === pin && g.role === 'guard');

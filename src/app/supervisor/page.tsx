@@ -21,7 +21,6 @@ import {
   Users, 
   CheckCircle2, 
   Plus, 
-  LogOut, 
   Phone,
   Building,
   Calendar,
@@ -71,8 +70,6 @@ import { getThaiFiscalYear, isOlderThanDays, formatThaiDateTime } from "@/lib/fi
 export default function SupervisorPage() {
   const { 
     supervisorUser, 
-    loginSupervisor, 
-    logoutSupervisor, 
     patrolLogs, 
     parkingScans, 
     checkpoints, 
@@ -102,16 +99,21 @@ export default function SupervisorPage() {
     purgeArchivedRecords,
     buildings,
     addBuilding,
-    deleteBuilding
+    deleteBuilding,
+    googleDriveWebhookUrl,
+    setGoogleDriveWebhookUrl
   } = useStore();
 
   const { isConnected: isCloudConnected } = useFirebaseSync();
 
-  const [pin, setPin] = useState("");
-  const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<"overview" | "checkpoints" | "staff" | "vehicles" | "incidents" | "ai" | "archive">("overview");
   const [lineSent, setLineSent] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
+
+  // Google Drive Webhook Test State
+  const [testDriveLoading, setTestDriveLoading] = useState(false);
+  const [testDriveResult, setTestDriveResult] = useState<{ success: boolean; message: string; url?: string } | null>(null);
+  const [copiedScript, setCopiedScript] = useState(false);
 
   // 365-Day Archival State
   const [archiveCutoffDays, setArchiveCutoffDays] = useState<number>(365);
@@ -454,14 +456,83 @@ export default function SupervisorPage() {
     }
   };
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (loginSupervisor(pin)) {
-      setPin("");
-      setError("");
-    } else {
-      setError("รหัส PIN หัวหน้างานไม่ถูกต้อง (ใช้รหัส: 9999)");
+  const handleTestDriveUpload = async () => {
+    setTestDriveLoading(true);
+    setTestDriveResult(null);
+    try {
+      const res = await fetch("/api/test-drive-upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          webhookUrl: googleDriveWebhookUrl,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setTestDriveResult({
+          success: true,
+          message: data.message || "อัปโหลดรูปทดสอบเข้า Google Drive สำเร็จ!",
+          url: data.url,
+        });
+      } else {
+        setTestDriveResult({
+          success: false,
+          message: data.error || "เกิดข้อผิดพลาดในการอัปโหลดรูปทดสอบ",
+        });
+      }
+    } catch (err: any) {
+      setTestDriveResult({
+        success: false,
+        message: err.message || "เกิดข้อผิดพลาดในการเชื่อมต่อ",
+      });
+    } finally {
+      setTestDriveLoading(false);
     }
+  };
+
+  const appsScriptTemplate = `function doPost(e) {
+  try {
+    var data = JSON.parse(e.postData.contents);
+    var rootFolderId = data.folderId || "1ED0LnFxfSwHVU60fI8LShWiXBDmxFFXT";
+    var rootFolder = DriveApp.getFolderById(rootFolderId);
+    var targetFolder = rootFolder;
+    
+    // สร้างโฟลเดอร์ย่อยถ้ามีการระบุ
+    if (data.subfolder) {
+      var subfolders = rootFolder.getFoldersByName(data.subfolder);
+      if (subfolders.hasNext()) {
+        targetFolder = subfolders.next();
+      } else {
+        targetFolder = rootFolder.createFolder(data.subfolder);
+      }
+    }
+    
+    var base64Data = (data.image || "").replace(/^data:image\\/\\w+;base64,/, "");
+    var decoded = Utilities.base64Decode(base64Data);
+    var filename = data.filename || ("incident_" + Utilities.formatDate(new Date(), "GMT+7", "yyyyMMdd_HHmmss") + ".jpg");
+    var blob = Utilities.newBlob(decoded, data.mimeType || "image/jpeg", filename);
+    
+    var file = targetFolder.createFile(blob);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      fileId: file.getId(),
+      url: file.getUrl(),
+      directLink: "https://lh3.googleusercontent.com/d/" + file.getId()
+    })).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      error: err.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}`;
+
+  const copyAppsScriptToClipboard = () => {
+    navigator.clipboard.writeText(appsScriptTemplate);
+    setCopiedScript(true);
+    setTimeout(() => setCopiedScript(false), 3000);
   };
 
   // Capture GPS on the spot
@@ -725,72 +796,7 @@ export default function SupervisorPage() {
     ])
   ).sort().reverse();
 
-  // 1. LOGIN SCREEN
-  if (!supervisorUser) {
-    return (
-      <main className="min-h-screen bg-[#f0f6fa] text-slate-800 flex items-center justify-center p-4 relative overflow-hidden font-['Sarabun',sans-serif]">
-        <div className="absolute -top-32 -left-32 w-96 h-96 bg-sky-200/50 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-blue-100/60 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="w-full max-w-md bg-white border border-sky-100 rounded-3xl p-8 shadow-xl relative z-10 space-y-6">
-          <div className="flex justify-between items-center">
-            <Link href="/" className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-900 transition-all">
-              <ArrowLeft className="w-4 h-4" /> เลือกบทบาทอื่น
-            </Link>
-            <span className="text-[10px] font-bold px-3 py-1 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
-              SUPERVISOR PORTAL
-            </span>
-          </div>
-
-          <div className="text-center space-y-2">
-            <div className="flex justify-center mb-1">
-              <HospitalBrand badgeText="ศูนย์ควบคุม" />
-            </div>
-            <h1 className="text-2xl font-black text-slate-900">ศูนย์ควบคุมความปลอดภัยหัวหน้างาน</h1>
-            <p className="text-xs text-slate-500">ใส่รหัส PIN 4 หลักเพื่อเข้าสู่ระบบศูนย์สั่งการ</p>
-          </div>
-
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                รหัส PIN หัวหน้างาน (4 หลัก)
-              </label>
-              <input
-                type="password"
-                maxLength={4}
-                value={pin}
-                onChange={(e) => setPin(e.target.value)}
-                placeholder="ใส่รหัส PIN (ค่าเริ่มต้น: 9999)"
-                className="w-full text-center text-2xl tracking-[0.4em] py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white font-mono"
-              />
-            </div>
-            {error && <p className="text-rose-600 text-xs text-center font-medium">{error}</p>}
-            <button
-              type="submit"
-              className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-2xl shadow-md shadow-blue-600/20 active:scale-95 transition-all text-sm"
-            >
-              เข้าสู่ระบบศูนย์ควบคุม
-            </button>
-
-            <div className="text-center pt-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setPin("9999");
-                  loginSupervisor("9999");
-                }}
-                className="text-xs text-blue-600 hover:text-blue-800 underline"
-              >
-                กดที่นี่เพื่อเข้าสู่ระบบทันที (PIN: 9999)
-              </button>
-            </div>
-          </form>
-        </div>
-      </main>
-    );
-  }
-
-  // 2. DASHBOARD MAIN VIEW
+  // DASHBOARD MAIN VIEW
   return (
     <div className="min-h-screen bg-[#f0f6fa] text-slate-800 flex flex-col font-['Sarabun',sans-serif]">
       {/* Top Navbar */}
@@ -820,14 +826,6 @@ export default function SupervisorPage() {
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
               <span>รปภ. เวรเช้า {guards.filter(g => g.shift === "morning" && g.role === "guard").length} นาย</span>
             </div>
-
-            <button
-              onClick={logoutSupervisor}
-              className="p-2.5 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 border border-slate-200 transition-all flex items-center gap-1.5 text-xs font-semibold"
-            >
-              <LogOut className="w-4 h-4" />
-              <span className="hidden md:inline">ออกจากระบบ</span>
-            </button>
           </div>
         </div>
       </header>
@@ -2364,21 +2362,129 @@ export default function SupervisorPage() {
                 </div>
               </div>
 
-              {/* Service Account Setup Guide Alert */}
-              <div className="bg-white p-4 rounded-2xl border border-sky-100 text-xs text-slate-700 space-y-2.5">
-                <div className="font-bold text-slate-900 flex items-center gap-1.5">
-                  <HelpCircle className="w-4 h-4 text-sky-600" />
-                  คำแนะนำในการให้สิทธิ์ Service Account เขียนไฟล์ลง Google Drive ของโรงพยาบาล:
+              {/* Google Apps Script & Service Account Setup */}
+              <div className="bg-white p-5 rounded-2xl border border-sky-100 text-xs text-slate-700 space-y-4">
+                <div className="font-extrabold text-sm text-slate-900 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CloudDownload className="w-5 h-5 text-sky-600" />
+                    <span>ช่องทางส่งรูปภาพเข้าโฟลเดอร์ Google Drive (Folder ID: 1ED0LnFxfSwHVU60fI8LShWiXBDmxFFXT)</span>
+                  </div>
                 </div>
-                <ol className="list-decimal list-inside space-y-1 text-slate-600 leading-relaxed text-[11px] pl-1">
-                  <li>เปิดโฟลเดอร์ Google Drive ปลายทาง (<a href="https://drive.google.com/drive/folders/1ED0LnFxfSwHVU60fI8LShWiXBDmxFFXT" target="_blank" rel="noreferrer" className="text-sky-600 underline font-semibold">คลิกเปิดโฟลเดอร์</a>)</li>
-                  <li>คลิกปุ่ม <strong>"แชร์" (Share)</strong> มุมขวาบน ➔ ใส่อีเมล Service Account จาก Google Cloud Console</li>
-                  <li>ตั้งสิทธิ์ให้เป็น <strong>"ผู้แก้ไข" (Editor)</strong> เพื่อให้บอทสร้างโฟลเดอร์และอัปโหลดไฟล์ได้</li>
-                  <li>นำ Private Key มาบันทึกในไฟล์ <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-slate-800">.env.local</code> หรือ Vercel Environment Variables</li>
-                </ol>
-                <div className="text-[11px] text-amber-700 bg-amber-50 p-2.5 rounded-xl border border-amber-200">
-                  💡 <strong>ทำงานได้ทันทีโดยไม่ต้องรอต่อ Service Account:</strong> คุณสามารถกดปุ่ม <strong>"ดาวน์โหลดไฟล์สำรอง (.JSON / .CSV)"</strong> ด้านล่างนี้เพื่อเก็บไฟล์เข้าคอมพิวเตอร์และนำไปเปิดใช้งานได้ทันที 100%
+
+                {/* Option 1: Google Apps Script Webhook (Recommended) */}
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-sky-50 to-blue-50/50 border border-sky-200 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <h4 className="font-bold text-sky-950 text-xs flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        วิธีที่ 1 (แนะนำ - ง่ายสุด 1 นาที): ผ่าน Google Apps Script Web App
+                      </h4>
+                      <p className="text-[11px] text-slate-600 mt-0.5">
+                        นำโค้ดสคริปต์ไปวางใน Google Apps Script ของบัญชีที่เป็นเจ้าของ Drive เพื่อให้ระบบส่งรูปเข้าโฟลเดอร์ได้ทันที
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={copyAppsScriptToClipboard}
+                      className="px-3 py-1.5 bg-white hover:bg-sky-100 border border-sky-300 text-sky-800 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-2xs shrink-0 self-start sm:self-auto"
+                    >
+                      {copiedScript ? (
+                        <>
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                          <span className="text-emerald-700">คัดลอกโค้ดแล้ว!</span>
+                        </>
+                      ) : (
+                        <>
+                          <FileText className="w-3.5 h-3.5 text-sky-600" />
+                          <span>📋 คัดลอกโค้ด Apps Script</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-[11px] font-bold text-slate-700">
+                      URL ของ Google Apps Script Web App (ขึ้นต้นด้วย https://script.google.com/macros/s/.../exec):
+                    </label>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input
+                        type="url"
+                        value={googleDriveWebhookUrl || ""}
+                        onChange={(e) => setGoogleDriveWebhookUrl(e.target.value.trim())}
+                        placeholder="https://script.google.com/macros/s/.../exec"
+                        className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500 shadow-2xs"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleTestDriveUpload}
+                        disabled={testDriveLoading}
+                        className="px-4 py-2 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-700 hover:to-blue-700 text-white font-bold text-xs rounded-xl shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1.5 shrink-0 disabled:opacity-50"
+                      >
+                        {testDriveLoading ? (
+                          <>
+                            <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            <span>กำลังทดสอบ...</span>
+                          </>
+                        ) : (
+                          <>
+                            <UploadCloud className="w-3.5 h-3.5" />
+                            <span>ทดสอบส่งรูป</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {testDriveResult && (
+                    <div className={`p-3 rounded-xl border text-xs flex flex-col gap-1.5 ${
+                      testDriveResult.success
+                        ? "bg-emerald-50 border-emerald-200 text-emerald-900"
+                        : "bg-rose-50 border-rose-200 text-rose-900"
+                    }`}>
+                      <div className="flex items-center gap-2 font-bold">
+                        {testDriveResult.success ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        ) : (
+                          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                        )}
+                        <span>{testDriveResult.message}</span>
+                      </div>
+                      {testDriveResult.url && (
+                        <a
+                          href={testDriveResult.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs text-sky-700 hover:underline font-semibold flex items-center gap-1 pl-6"
+                        >
+                          <ExternalLink className="w-3 h-3" /> คลิกที่นี่เพื่อเปิดดูรูปตัวอย่างใน Google Drive
+                        </a>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="text-[11px] text-slate-600 bg-white/80 p-3 rounded-xl border border-sky-100 space-y-1">
+                    <p className="font-bold text-slate-800">ขั้นตอนตั้งค่า Apps Script ใน 3 คลิก:</p>
+                    <ol className="list-decimal list-inside space-y-0.5 pl-1">
+                      <li>เปิด <a href="https://script.google.com/home/start" target="_blank" rel="noreferrer" className="text-sky-600 underline font-semibold">script.google.com</a> ➔ กด "โครงการใหม่" (New Project)</li>
+                      <li>ลบโค้ดเดิมออกทั้งหมด ➔ กดปุ่ม <strong>"📋 คัดลอกโค้ด Apps Script"</strong> ด้านบนแล้วนำมาวาง</li>
+                      <li>กดปุ่มสีน้ำเงิน <strong>"ทำให้ใช้งานได้" (Deploy)</strong> ➔ <strong>"การทำให้ใช้งานได้รายการใหม่" (New deployment)</strong> ➔ เลือกประเภทเป็น <strong>เว็บแอป (Web app)</strong></li>
+                      <li>ตั้งค่า <strong>"ผู้ที่มีสิทธิ์เข้าถึง" (Who has access)</strong> ให้เป็น <strong>"ทุกคน" (Anyone)</strong> ➔ กด "ทำให้ใช้งานได้" แล้วคัดลอก URL มาวางในช่องด้านบน</li>
+                    </ol>
+                  </div>
                 </div>
+
+                {/* Option 2: Service Account Guide */}
+                <details className="text-xs text-slate-600 border border-slate-200 rounded-xl p-3 bg-slate-50">
+                  <summary className="font-bold text-slate-800 cursor-pointer hover:text-sky-700">
+                    วิธีที่ 2 (ทางเลือก): ใช้งานผ่าน Google Cloud Service Account
+                  </summary>
+                  <ol className="list-decimal list-inside space-y-1 text-slate-600 leading-relaxed text-[11px] pl-1 pt-2">
+                    <li>เปิดโฟลเดอร์ Google Drive ปลายทาง (<a href="https://drive.google.com/drive/folders/1ED0LnFxfSwHVU60fI8LShWiXBDmxFFXT" target="_blank" rel="noreferrer" className="text-sky-600 underline font-semibold">คลิกเปิดโฟลเดอร์</a>)</li>
+                    <li>คลิกปุ่ม <strong>"แชร์" (Share)</strong> มุมขวาบน ➔ ใส่อีเมล Service Account จาก Google Cloud Console</li>
+                    <li>ตั้งสิทธิ์ให้เป็น <strong>"ผู้แก้ไข" (Editor)</strong></li>
+                    <li>นำ Private Key มาบันทึกในไฟล์ <code className="bg-slate-200 px-1 py-0.5 rounded font-mono text-slate-800">.env.local</code> หรือ Vercel Environment Variables</li>
+                  </ol>
+                </details>
               </div>
             </div>
 

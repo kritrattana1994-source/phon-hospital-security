@@ -20,7 +20,7 @@ import HospitalBrand from "@/components/HospitalBrand";
 
 export default function IncidentPage() {
   const router = useRouter();
-  const { currentUser, addIncident } = useStore();
+  const { currentUser, addIncident, googleDriveWebhookUrl } = useStore();
   const [image, setImage] = useState<string | null>(null);
   const [type, setType] = useState<"facility" | "suspicious" | "medical">("facility");
   const [severity, setSeverity] = useState<"low" | "medium" | "high">("medium");
@@ -79,6 +79,7 @@ export default function IncidentPage() {
             body: JSON.stringify({
               image,
               title,
+              webhookUrl: googleDriveWebhookUrl,
             }),
             signal: controller.signal,
           });

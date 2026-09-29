@@ -1,32 +1,19 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useStore, Guard } from "@/lib/store";
+import { useStore } from "@/lib/store";
 import { 
   ShieldCheck, 
   MapPin, 
   AlertTriangle, 
   Car, 
   LogOut, 
-  Wifi, 
   WifiOff, 
   Delete, 
   Clock, 
   ChevronRight, 
   Radio, 
   CheckCircle2, 
-  ArrowLeft,
-  Calendar,
-  Sun,
-  Moon,
-  Umbrella,
-  Users,
-  Phone,
-  ChevronLeft,
-  X,
-  Sparkles,
-  Coffee,
-  Check,
   Search
 } from "lucide-react";
 import Link from "next/link";
@@ -39,31 +26,12 @@ export default function GuardPage() {
     logoutGuard, 
     patrolLogs, 
     checkpoints, 
-    parkingScans,
-    guards
+    parkingScans
   } = useStore();
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [isOnline, setIsOnline] = useState(true);
   const [currentTime, setCurrentTime] = useState("");
-
-  const thaiMonths = [
-    "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
-    "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"
-  ];
-  const thaiDayNamesFull = ["วันอาทิตย์", "วันจันทร์", "วันอังคาร", "วันพุธ", "วันพฤหัสบดี", "วันศุกร์", "วันเสาร์"];
-
-  const todayObj = new Date();
-  const todayThaiDay = thaiDayNamesFull[todayObj.getDay()];
-  const todayThaiDate = `${todayObj.getDate()} ${thaiMonths[todayObj.getMonth()]} ${todayObj.getFullYear() + 543}`;
-
-  const todayDuty = currentUser ? {
-    type: currentUser.shift as "morning" | "night",
-    label: currentUser.shift === "morning" ? "กะเช้า" : "กะดึก",
-    badge: currentUser.shift === "morning" ? "07:00 - 19:00 น." : "19:00 - 07:00 น.",
-    time: currentUser.shift === "morning" ? "07:00 - 19:00 น. (12 ชั่วโมง)" : "19:00 - 07:00 น. (ตรวจ 22:00/06:00)",
-    coWorkers: guards.filter(g => g.shift === currentUser.shift && g.id !== currentUser.id && g.role === "guard")
-  } : null;
 
   useEffect(() => {
     setIsOnline(navigator.onLine);
@@ -114,14 +82,9 @@ export default function GuardPage() {
       setPin("");
       setError("");
     } else {
-      setError("รหัส PIN รปภ. ไม่ถูกต้อง (ลอง 1234 หรือ 5678)");
+      setError("รหัส PIN รปภ. ไม่ถูกต้อง โปรดลองอีกครั้ง");
       setTimeout(() => setPin(""), 600);
     }
-  };
-
-  const handleQuickLogin = (quickPin: string) => {
-    setPin(quickPin);
-    verifyPin(quickPin);
   };
 
   const completedIds = new Set(patrolLogs.map((log) => log.checkpointId));
@@ -133,13 +96,7 @@ export default function GuardPage() {
       <main className="min-h-screen bg-[#f0f6fa] text-slate-800 flex flex-col justify-between p-4 sm:p-6 select-none relative overflow-hidden max-w-md mx-auto border-x border-sky-100 shadow-xl font-['Sarabun',sans-serif]">
         {/* Top Bar with Hospital Branding */}
         <div className="flex flex-col gap-2 z-10">
-          <div className="flex justify-between items-center">
-            <Link
-              href="/"
-              className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800 px-3 py-1.5 rounded-xl bg-white border border-slate-200 shadow-2xs transition-all"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" /> กลับหน้าหลัก
-            </Link>
+          <div className="flex justify-end items-center">
             <span className="text-[10px] font-bold text-sky-700 bg-sky-100 px-2.5 py-1 rounded-full border border-sky-200">
               GUARD PORTAL
             </span>
@@ -187,7 +144,7 @@ export default function GuardPage() {
         </div>
 
         {/* Keypad */}
-        <div className="w-full max-w-xs mx-auto z-10 pb-2">
+        <div className="w-full max-w-xs mx-auto z-10 pb-6">
           <div className="grid grid-cols-3 gap-2.5 mb-3">
             {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((n) => (
               <button
@@ -217,45 +174,6 @@ export default function GuardPage() {
               <Delete className="w-6 h-6" />
             </button>
           </div>
-
-          {/* Quick Demo Login Chips */}
-          <div className="border-t border-slate-200 pt-3 text-center">
-            <p className="text-[11px] text-slate-400 uppercase tracking-wider mb-2 font-medium">
-              กดเข้าเวรด่วน (ทดสอบดูตารางเวรแต่ละนาย):
-            </p>
-            <div className="flex flex-wrap gap-1.5 justify-center">
-              <button
-                onClick={() => handleQuickLogin("1234")}
-                className="px-2.5 py-1 rounded-full bg-sky-100 hover:bg-sky-200 border border-sky-300 text-sky-800 text-xs font-medium active:scale-95 transition-all"
-              >
-                👮 สมชาย (1234)
-              </button>
-              <button
-                onClick={() => handleQuickLogin("1111")}
-                className="px-2.5 py-1 rounded-full bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 text-emerald-800 text-xs font-medium active:scale-95 transition-all"
-              >
-                👮 ประสิทธิ์ (1111)
-              </button>
-              <button
-                onClick={() => handleQuickLogin("2222")}
-                className="px-2.5 py-1 rounded-full bg-amber-100 hover:bg-amber-200 border border-amber-300 text-amber-800 text-xs font-medium active:scale-95 transition-all"
-              >
-                👮 วิชัย (2222)
-              </button>
-              <button
-                onClick={() => handleQuickLogin("5678")}
-                className="px-2.5 py-1 rounded-full bg-indigo-100 hover:bg-indigo-200 border border-indigo-300 text-indigo-800 text-xs font-medium active:scale-95 transition-all"
-              >
-                👮 สมศักดิ์ (5678)
-              </button>
-              <button
-                onClick={() => handleQuickLogin("3333")}
-                className="px-2.5 py-1 rounded-full bg-purple-100 hover:bg-purple-200 border border-purple-300 text-purple-800 text-xs font-medium active:scale-95 transition-all"
-              >
-                👮 สุรชัย (3333)
-              </button>
-            </div>
-          </div>
         </div>
       </main>
     );
@@ -281,13 +199,6 @@ export default function GuardPage() {
         <div className="flex items-center justify-between pt-1 border-t border-slate-100">
           <div className="flex items-center gap-2">
             <span className="font-bold text-sm text-slate-900">{currentUser.name}</span>
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
-              todayDuty?.type === "morning"
-                ? "bg-amber-100 text-amber-900 border-amber-200"
-                : "bg-indigo-100 text-indigo-900 border-indigo-200"
-            }`}>
-              {todayDuty?.type === "morning" ? "กะเช้า ☀️" : "กะดึก 🌙"}
-            </span>
             <div className="flex items-center gap-1 text-xs text-slate-400 font-mono">
               <Clock className="w-3 h-3 text-slate-400" />
               <span>{currentTime || "--:--:--"}</span>
@@ -327,82 +238,6 @@ export default function GuardPage() {
             </div>
           </div>
         )}
-
-        {/* TODAY'S DUTY WIDGET (เวรวันนี้ของฉัน) */}
-        <div className={`p-4 sm:p-5 rounded-3xl border shadow-sm space-y-3 transition-all ${
-          todayDuty?.type === "morning"
-            ? "bg-gradient-to-br from-amber-500/10 via-amber-50/70 to-orange-50 border-amber-200"
-            : "bg-gradient-to-br from-indigo-500/10 via-indigo-50/70 to-blue-50 border-indigo-200"
-        }`}>
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
-                <Calendar className="w-3.5 h-3.5 text-sky-600" />
-                <span>{todayThaiDay}ที่ {todayThaiDate}</span>
-              </div>
-              <div className="flex items-center gap-2 mt-1">
-                {todayDuty?.type === "morning" ? (
-                  <>
-                    <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
-                      <Sun className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h2 className="text-base font-black text-amber-950 leading-tight">วันนี้เข้ากะเช้า</h2>
-                      <span className="text-[11px] text-amber-700 font-medium">07:00 - 19:00 น. (12 ชั่วโมง)</span>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                      <Moon className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h2 className="text-base font-black text-indigo-950 leading-tight">วันนี้เข้ากะดึก</h2>
-                      <span className="text-[11px] text-indigo-700 font-medium">19:00 - 07:00 น. (ตรวจ 22:00/06:00)</span>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Co-workers on duty today */}
-          {todayDuty && (
-            <div className="pt-2 border-t border-slate-200/60">
-              <div className="flex items-center justify-between text-[11px] text-slate-600 mb-1.5">
-                <span className="font-bold text-slate-700 flex items-center gap-1">
-                  <Users className="w-3.5 h-3.5 text-slate-500" />
-                  เพื่อนร่วม{todayDuty.label}วันนี้ ({todayDuty.coWorkers.length} นาย):
-                </span>
-                <span className="text-[10px] text-slate-400">แตะเพื่อโทร</span>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {todayDuty.coWorkers.length === 0 ? (
-                  <span className="text-xs text-slate-400 italic">ไม่มีเพื่อนร่วมเวรในกะนี้</span>
-                ) : (
-                  todayDuty.coWorkers.map(cw => (
-                    <div
-                      key={cw.id}
-                      className="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-white border border-slate-200 shadow-2xs text-xs font-medium text-slate-800"
-                    >
-                      <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                      <span>{cw.name.replace("นาย", "")}</span>
-                      {cw.phone && (
-                        <a
-                          href={`tel:${cw.phone}`}
-                          className="p-1 rounded-lg text-sky-600 hover:bg-sky-50 transition-colors"
-                          title={`โทรหา ${cw.name} (${cw.phone})`}
-                        >
-                          <Phone className="w-3 h-3" />
-                        </a>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          )}
-        </div>
 
         {/* Patrol Progress Quick Widget */}
         <div className="p-5 bg-white border border-sky-100 rounded-3xl shadow-sm space-y-3">
