@@ -94,50 +94,100 @@ function resizeImageBase64(file: File, maxDimension = 1200): Promise<string> {
   });
 }
 
+const THAI_PROVINCES_LIST = [
+  "กรุงเทพมหานคร", "กรุงเทพฯ", "กรุงเทพ", "กทม.", "กทม",
+  "ขอนแก่น", "นครราชสีมา", "โคราช", "อุดรธานี", "หนองคาย", "มหาสารคาม", "ร้อยเอ็ด",
+  "กาฬสินธุ์", "สกลนคร", "นครพนม", "มุกดาหาร", "บุรีรัมย์", "สุรินทร์", "ศรีสะเกษ",
+  "อุบลราชธานี", "ยโสธร", "ชัยภูมิ", "อำนาจเจริญ", "บึงกาฬ", "หนองบัวลำภู", "เลย",
+  "เชียงใหม่", "เชียงราย", "ลำปาง", "ลำพูน", "แม่ฮ่องสอน", "น่าน", "พะเยา", "แพร่",
+  "อุตรดิตถ์", "ตาก", "สุโขทัย", "พิษณุโลก", "พิจิตร", "กำแพงเพชร", "เพชรบูรณ์",
+  "นครสวรรค์", "อุทัยธานี", "นนทบุรี", "ปทุมธานี", "สมุทรปราการ", "สมุทรสาคร",
+  "สมุทรสงคราม", "นครปฐม", "อยุธยา", "พระนครศรีอยุธยา", "อ่างทอง", "สิงห์บุรี",
+  "ชัยนาท", "ลพบุรี", "สระบุรี", "นครนายก", "ปราจีนบุรี", "สระแก้ว", "ฉะเชิงเทรา",
+  "ชลบุรี", "ระยอง", "จันทบุรี", "ตราด", "กาญจนบุรี", "ราชบุรี", "สุพรรณบุรี",
+  "เพชรบุรี", "ประจวบคีรีขันธ์", "ประจวบฯ", "ชุมพร", "ระนอง", "สุราษฎร์ธานี", "พังงา",
+  "ภูเก็ต", "กระบี่", "ตรัง", "พัทลุง", "นครศรีธรรมราช", "สงขลา", "สตูล", "ปัตตานี",
+  "ยะลา", "นราธิวาส"
+].sort((a, b) => b.length - a.length);
+
+export function decomposePlate(rawPlate: string): {
+  clean: string;
+  letters: string;
+  consonantsOnly: string;
+  digits: string;
+} {
+  if (!rawPlate) return { clean: "", letters: "", consonantsOnly: "", digits: "" };
+  let s = rawPlate.trim();
+  for (const prov of THAI_PROVINCES_LIST) {
+    if (s.includes(prov)) {
+      s = s.replace(prov, "").trim();
+    }
+  }
+  const clean = s.replace(/[\s\-_.,:;()[\]"'{}]/g, "").toUpperCase();
+  const digitMatch = clean.match(/\d+$/);
+  const digits = digitMatch ? digitMatch[0] : "";
+  const letters = digits ? clean.slice(0, clean.length - digits.length) : clean.replace(/\d+/g, "");
+  const consonantsOnly = letters.replace(/[^ก-ฮA-Z]/g, "");
+  return { clean, letters, consonantsOnly, digits };
+}
+
+export interface MatchVehicleOptions {
+  strictLetters?: boolean; // เมื่อเป็น true (เฉพาะการเทียบจอดกลางคืน) หมวดอักษรและตัวเลขต้องตรงกันเท่านั้น
+}
+
 export function findMatchingStaffVehicle(
   scannedPlate: string,
-  staffList: StaffVehicle[]
+  staffList: StaffVehicle[],
+  options?: MatchVehicleOptions
 ): StaffVehicle | undefined {
   if (!scannedPlate || !staffList.length) return undefined;
-  const cleanScanned = scannedPlate.replace(/[\s\-_]/g, "").toUpperCase();
-  if (!cleanScanned) return undefined;
+  const p = decomposePlate(scannedPlate);
+  if (!p.clean) return undefined;
 
-  // 1. Exact match (spaces & dashes removed)
-  const exact = staffList.find((v) => {
-    const vClean = v.plateNumber.replace(/[\s\-_]/g, "").toUpperCase();
-    return vClean === cleanScanned;
-  });
+  const strictLetters = !!options?.strictLetters;
+
+  // 1. เฉพาะการเทียบจอดกลางคืน (strictLetters = true):
+  //    ต้องนำตัวอักษรมาเทียบด้วย และต้องตรงกันทั้งหมวดอักษรและตัวเลขกับข้อมูลคน รพ.
+  //    (ป้องกันไม่ให้เลขซ้ำกับคนในโรงพยาบาล เช่น ป้ายภายนอก 9789 หรือ ฮฮ 9789 จะไม่หลงไปตรงกับ ขน 9789 ของคน รพ.)
+  if (strictLetters) {
+    if (!p.consonantsOnly || !p.digits) return undefined;
+    return staffList.find((v) => {
+      const sv = decomposePlate(v.plateNumber);
+      if (!sv.digits || sv.digits !== p.digits) return false;
+      // หมวดอักษรต้องตรงกัน (ตรงกันแบบเต็ม หรือหมวดพยัญชนะไทยตรงกัน เช่น 1กผ กับ กผ)
+      return sv.letters === p.letters || sv.consonantsOnly === p.consonantsOnly;
+    });
+  }
+
+  // 2. ระบบค้นหารถ (Lookup / Search) ใช้ 4 ตัวเหมือนเดิม (strictLetters = false):
+  // 2.1 Exact match ทั้งก้อน
+  const exact = staffList.find((v) => decomposePlate(v.plateNumber).clean === p.clean);
   if (exact) return exact;
 
-  // 2. Both letters and digits present (e.g. "ขน 9789" or "1กข 1234")
-  const scannedDigits = cleanScanned.match(/\d+$/)?.[0];
-  const scannedLetters = cleanScanned.replace(/\d+$/, "");
-
-  if (scannedDigits && scannedLetters) {
+  // 2.2 หากมีทั้งหมวดอักษรและตัวเลข
+  if (p.consonantsOnly && p.digits) {
     const match = staffList.find((v) => {
-      const vClean = v.plateNumber.replace(/[\s\-_]/g, "").toUpperCase();
-      const vDigits = vClean.match(/\d+$/)?.[0];
-      const vLetters = vClean.replace(/\d+$/, "");
-      return vDigits === scannedDigits && (vLetters.includes(scannedLetters) || scannedLetters.includes(vLetters));
+      const sv = decomposePlate(v.plateNumber);
+      return sv.digits === p.digits && (sv.letters === p.letters || sv.consonantsOnly === p.consonantsOnly || sv.clean.includes(p.clean) || p.clean.includes(sv.clean));
     });
     if (match) return match;
   }
 
-  // 3. Substring match (e.g. "ขน 9789 ขอนแก่น" contains "ขน9789")
-  const subMatch = staffList.find((v) => {
-    const vClean = v.plateNumber.replace(/[\s\-_]/g, "").toUpperCase();
-    return vClean.includes(cleanScanned) || cleanScanned.includes(vClean);
-  });
-  if (subMatch) return subMatch;
-
-  // 4. Numeric-only match (if only digits were detected)
-  if (/^\d+$/.test(cleanScanned)) {
+  // 2.3 ค้นหาด้วยตัวเลข 4 ตัวท้าย (หรือ 2-4 หลัก)
+  if (!p.letters && p.digits) {
     const numMatch = staffList.find((v) => {
-      const vClean = v.plateNumber.replace(/[\s\-_]/g, "").toUpperCase();
-      return vClean.endsWith(cleanScanned) || vClean.includes(cleanScanned);
+      const sv = decomposePlate(v.plateNumber);
+      return sv.digits === p.digits || sv.digits.endsWith(p.digits);
     });
     if (numMatch) return numMatch;
   }
+
+  // 2.4 Substring match ทั่วไป
+  const subMatch = staffList.find((v) => {
+    const sv = decomposePlate(v.plateNumber);
+    return sv.clean.includes(p.clean) || p.clean.includes(sv.clean);
+  });
+  if (subMatch) return subMatch;
 
   return undefined;
 }
@@ -379,6 +429,8 @@ function VehicleContent() {
     if (!query) return;
 
     const clean = query.replace(/[\s\-_]/g, "").toLowerCase();
+    const isOnlyDigits = /^\d+$/.test(clean);
+
     const results = staffVehicles.filter((v) => {
       const vPlateClean = v.plateNumber.replace(/[\s\-_]/g, "").toLowerCase();
       const phoneClean = (v.phone || "").replace(/[^0-9]/g, "");
@@ -389,6 +441,7 @@ function VehicleContent() {
         vPlateClean === clean ||
         vPlateClean.includes(clean) ||
         clean.includes(vPlateClean) ||
+        vPlateClean.endsWith(clean) ||
         phoneClean.includes(clean) ||
         ownerClean.includes(clean) ||
         deptClean.includes(clean)
@@ -400,19 +453,21 @@ function VehicleContent() {
     setMatchedVehicles(results);
     setReportedIssue(null);
 
-    // If query has direct/exact match in staff database, prioritize it
-    const directMatch = findMatchingStaffVehicle(query, staffVehicles);
-    if (directMatch) {
-      setSelectedVehicle(directMatch);
-      playBeep("staff");
-      return;
+    // If query matches an exact full plate (with letters), prioritize it immediately
+    if (!isOnlyDigits || results.length <= 1) {
+      const directMatch = findMatchingStaffVehicle(query, staffVehicles, { strictLetters: false });
+      if (directMatch) {
+        setSelectedVehicle(directMatch);
+        playBeep("staff");
+        return;
+      }
     }
 
     if (results.length === 1) {
       setSelectedVehicle(results[0]);
       playBeep("staff");
     } else if (results.length > 1) {
-      setSelectedVehicle(null); // Show selection list for user to choose!
+      setSelectedVehicle(null); // Show selection list for user to choose between multiple matching vehicles!
       playBeep("staff");
     } else {
       setSelectedVehicle(null);
@@ -761,8 +816,11 @@ function VehicleContent() {
         setScanPulse(true);
         setTimeout(() => setScanPulse(false), 1200);
 
-        // Check if staff vehicle using high-accuracy plate matcher
-        const staff = findMatchingStaffVehicle(plate, staffVehicles);
+        // Check if staff vehicle:
+        // เฉพาะการเทียบจอดกลางคืน (โหมด patrol) ให้เอาหมวดอักษรมาเทียบด้วย เพราะต้องตรงกัน (strictLetters: true)
+        // ระบบค้นหารถ (โหมด lookup) ใช้ 4 ตัวเหมือนเดิม (strictLetters: false)
+        const isPatrolMode = targetMode === "patrol";
+        const staff = findMatchingStaffVehicle(plate, staffVehicles, { strictLetters: isPatrolMode });
 
         const isStaff = !!staff;
         playBeep(isStaff ? "staff" : "outside");
@@ -870,7 +928,9 @@ function VehicleContent() {
 
     lastScannedRef.current[plate] = now;
 
-    const staff = findMatchingStaffVehicle(plate, staffVehicles);
+    // ในโหมดตรวจรถกลางคืน (รอบดึก 22:00 น. และรอบเช้า 06:00 น.)
+    // บังคับเทียบหมวดอักษรและตัวเลขตรงกันเท่านั้น (strictLetters: true) เพื่อป้องกันตัวเลขซ้ำกับคนในโรงพยาบาล
+    const staff = findMatchingStaffVehicle(plate, staffVehicles, { strictLetters: true });
 
     const isStaff = !!staff;
     const roundLabel = selectedRound === "22:00" ? "รอบดึก 22:00 น." : "รอบเช้า 06:00 น.";

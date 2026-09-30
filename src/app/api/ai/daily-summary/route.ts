@@ -22,18 +22,50 @@ export async function POST(req: NextRequest) {
     const dayShiftReports = shiftReports.filter((r: any) => (r.dateString && r.dateString === dateString) || (r.timestamp && r.timestamp.startsWith(dateString)));
 
     // 1. Overnight Detection (Scanned at 22:00 AND 06:00, or night rounds, and is non-staff)
+    const normalizePlateKey = (plate: string) => {
+      if (!plate) return "";
+      return plate.replace(/[\s\-_.,()\[\]]/g, "").toUpperCase();
+    };
+
+    // Helper: ตรวจสอบว่าเป็นรถคน รพ. หรือไม่ โดยต้องเทียบหมวดอักษรและตัวเลขตรงกันสมบูรณ์
+    const isStaffPlateStrict = (plate: string, staffList: any[]) => {
+      if (!plate || !staffList.length) return false;
+      const cleanPlate = normalizePlateKey(plate);
+      const digitMatch = cleanPlate.match(/\d+$/);
+      if (!digitMatch) return false;
+      const digits = digitMatch[0];
+      const letters = cleanPlate.slice(0, cleanPlate.length - digits.length);
+      const consonants = letters.replace(/[^ก-ฮA-Z]/g, "");
+      if (!consonants || !digits) return false;
+
+      return staffList.some((sv: any) => {
+        const svClean = normalizePlateKey(sv.plateNumber);
+        const svDigitMatch = svClean.match(/\d+$/);
+        if (!svDigitMatch || svDigitMatch[0] !== digits) return false;
+        const svLetters = svClean.slice(0, svClean.length - digits.length);
+        const svConsonants = svLetters.replace(/[^ก-ฮA-Z]/g, "");
+        return svLetters === letters || svConsonants === consonants;
+      });
+    };
+
+    const isNonStaffScan = (s: any) => {
+      if (s.isStaff === true) return false;
+      if (staffVehicles.length > 0 && isStaffPlateStrict(s.plateNumber, staffVehicles)) return false;
+      return true;
+    };
+
     const scans22 = scans.filter((s: any) => s.round?.includes("22:") || s.round === "22:00" || (s.timestamp && s.timestamp.includes("22:")));
     const scans06 = scans.filter((s: any) => s.round?.includes("06:") || s.round === "06:00" || (s.timestamp && s.timestamp.includes("06:")));
 
     const plates22NonStaff = new Set(
-      scans22.filter((s: any) => !s.isStaff).map((s: any) => s.plateNumber.toUpperCase())
+      scans22.filter(isNonStaffScan).map((s: any) => normalizePlateKey(s.plateNumber))
     );
 
     const overnightNonStaff: any[] = [];
     scans06.forEach((s: any) => {
-      const plate = s.plateNumber.toUpperCase();
-      if (!s.isStaff && plates22NonStaff.has(plate)) {
-        if (!overnightNonStaff.some((o) => o.plateNumber === plate)) {
+      const plateKey = normalizePlateKey(s.plateNumber);
+      if (isNonStaffScan(s) && plates22NonStaff.has(plateKey)) {
+        if (!overnightNonStaff.some((o) => normalizePlateKey(o.plateNumber) === plateKey)) {
           overnightNonStaff.push(s);
         }
       }
@@ -42,8 +74,8 @@ export async function POST(req: NextRequest) {
     // 2. Abandoned Vehicles (> 3 days)
     const plateDateMap = new Map<string, Set<string>>();
     scans.forEach((s: any) => {
-      if (!s.isStaff) {
-        const p = s.plateNumber.toUpperCase();
+      if (isNonStaffScan(s)) {
+        const p = normalizePlateKey(s.plateNumber);
         const dKey = s.timestamp ? s.timestamp.split("T")[0] : "today";
         if (!plateDateMap.has(p)) {
           plateDateMap.set(p, new Set());
@@ -55,9 +87,9 @@ export async function POST(req: NextRequest) {
     const abandonedVehicles: Array<{ plateNumber: string; days: number; zone?: string }> = [];
     plateDateMap.forEach((dates, plate) => {
       if (dates.size >= 3) {
-        const lastScan = scans.find((s: any) => s.plateNumber.toUpperCase() === plate);
+        const lastScan = scans.find((s: any) => normalizePlateKey(s.plateNumber) === plate);
         abandonedVehicles.push({
-          plateNumber: plate,
+          plateNumber: lastScan?.plateNumber || plate,
           days: dates.size,
           zone: lastScan?.zone || "ลานจอดทั่วไป",
         });
@@ -67,14 +99,14 @@ export async function POST(req: NextRequest) {
     // 3. Zone Violations (ER / Ambulance / Doctor zones)
     const criticalZones = ["ER", "ฉุกเฉิน", "แพทย์", "ลาดรับส่ง"];
     const zoneViolations = dayScans.filter((s: any) => {
-      if (s.isStaff) return false;
+      if (!isNonStaffScan(s)) return false;
       const zoneName = (s.zone || "").toUpperCase();
       return criticalZones.some((cz) => zoneName.includes(cz.toUpperCase()));
     });
 
     // 4. Vehicle Scan Counts
-    const totalStaffCount = dayScans.filter((s: any) => s.isStaff).length;
-    const totalNonStaffCount = dayScans.filter((s: any) => !s.isStaff).length;
+    const totalStaffCount = dayScans.filter((s: any) => !isNonStaffScan(s)).length;
+    const totalNonStaffCount = dayScans.filter((s: any) => isNonStaffScan(s)).length;
 
     // 5. Patrol & Checkpoints Calculations
     const uniqueCheckpointsScanned = new Set(dayPatrolLogs.map((p: any) => p.checkpointId)).size;
