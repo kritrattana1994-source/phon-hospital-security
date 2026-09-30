@@ -562,6 +562,264 @@
       opacity: 0.95;
     }
 
+    /* ========================================================
+       CUSTOM LEAFLET POPUP WITH REAL PHOTO PREVIEW
+       ======================================================== */
+    .leaflet-popup-content-wrapper {
+      background: #0f172a !important;
+      color: #f1f5f9 !important;
+      border: 1.5px solid #334155 !important;
+      border-radius: 16px !important;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75) !important;
+      padding: 0 !important;
+      overflow: hidden;
+    }
+    .leaflet-popup-tip {
+      background: #0f172a !important;
+      border: 1px solid #334155 !important;
+    }
+    .leaflet-popup-content {
+      margin: 0 !important;
+      line-height: 1.35 !important;
+    }
+
+    .popup-card {
+      font-family: var(--font-heading);
+      padding: 12px 14px;
+      min-width: 240px;
+      max-width: 280px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .popup-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .popup-badge {
+      color: #ffffff;
+      font-weight: 900;
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 6px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+      flex-shrink: 0;
+    }
+    .popup-title {
+      font-size: 13.5px;
+      color: #ffffff;
+      font-weight: 800;
+      line-height: 1.2;
+    }
+    .popup-sub {
+      color: #38bdf8;
+      font-size: 11.5px;
+      font-weight: 600;
+      margin-top: -2px;
+    }
+
+    /* Photo container in popup */
+    .popup-img-wrap {
+      position: relative;
+      width: 100%;
+      height: 150px;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #020617;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+    }
+    .popup-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.25s ease;
+    }
+    .popup-img-wrap:hover .popup-img {
+      transform: scale(1.06);
+    }
+    .popup-img-overlay {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 100%);
+      padding: 8px 8px 5px 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      font-size: 11px;
+      font-weight: 700;
+      gap: 4px;
+    }
+    .popup-no-img {
+      background: #1e293b;
+      border: 1px dashed #475569;
+      border-radius: 10px;
+      padding: 24px 10px;
+      text-align: center;
+      font-size: 11px;
+      color: #94a3b8;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+    .popup-gps {
+      background: #1e293b;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 10.5px;
+      color: #94a3b8;
+    }
+    .popup-gps span {
+      color: #cbd5e1;
+    }
+    .popup-hint {
+      font-size: 10px;
+      color: #10b981;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    /* ========================================================
+       FULLSCREEN PHOTO LIGHTBOX MODAL
+       ======================================================== */
+    .photo-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: rgba(0, 0, 0, 0.88);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      animation: fadeIn 0.2s ease;
+    }
+    .photo-modal.show {
+      display: flex;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    .photo-modal-content {
+      background: #0f172a;
+      border: 1.5px solid #334155;
+      border-radius: 18px;
+      max-width: 650px;
+      width: 100%;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.85);
+      position: relative;
+    }
+    .photo-modal-header {
+      padding: 12px 18px;
+      background: #1e293b;
+      border-bottom: 1px solid #334155;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .modal-badge {
+      font-family: var(--font-heading);
+      font-weight: 900;
+      font-size: 12px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      color: white;
+      flex-shrink: 0;
+    }
+    .photo-modal-header h3 {
+      font-family: var(--font-heading);
+      font-size: 15px;
+      font-weight: 800;
+      color: white;
+      line-height: 1.2;
+    }
+    .photo-modal-header p {
+      font-size: 12px;
+      color: #38bdf8;
+      font-weight: 600;
+    }
+    .btn-close-modal {
+      position: absolute;
+      top: 10px;
+      right: 14px;
+      background: rgba(255, 255, 255, 0.15);
+      border: none;
+      color: white;
+      font-family: var(--font-heading);
+      font-weight: 800;
+      font-size: 12.5px;
+      padding: 5px 12px;
+      border-radius: 9999px;
+      cursor: pointer;
+      z-index: 10;
+      transition: all 0.2s;
+    }
+    .btn-close-modal:hover {
+      background: #dc2626;
+    }
+    .photo-modal-body {
+      padding: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #020617;
+      min-height: 280px;
+      max-height: 60vh;
+      overflow: hidden;
+    }
+    .photo-modal-body img {
+      max-width: 100%;
+      max-height: 58vh;
+      object-fit: contain;
+      border-radius: 10px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6);
+    }
+    .photo-modal-nav {
+      padding: 10px 16px;
+      background: #1e293b;
+      border-top: 1px solid #334155;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+    .btn-modal-nav {
+      background: #0f172a;
+      border: 1px solid #475569;
+      color: #f1f5f9;
+      font-family: var(--font-heading);
+      font-size: 12px;
+      font-weight: 700;
+      padding: 6px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-modal-nav:hover {
+      background: #0284c7;
+      border-color: #38bdf8;
+      color: white;
+    }
+    .modal-counter {
+      font-size: 12px;
+      color: #94a3b8;
+      font-weight: 600;
+    }
+
     /* Footer */
     .footer-bar {
       border-top: 1px solid #334155;
@@ -645,7 +903,7 @@
       }
       .header-titles .meta-text {
         font-size: 10.5px;
-        display: none; /* Hide on small screens for cleanliness */
+        display: none;
       }
       .header-badges-col {
         flex-direction: row;
@@ -740,6 +998,25 @@
         font-size: 9px;
       }
 
+      .popup-card {
+        min-width: 210px;
+        max-width: 250px;
+        padding: 10px 12px;
+      }
+      .popup-img-wrap {
+        height: 130px;
+      }
+
+      .photo-modal-content {
+        max-width: 95vw;
+      }
+      .photo-modal-body {
+        max-height: 50vh;
+      }
+      .photo-modal-body img {
+        max-height: 48vh;
+      }
+
       .footer-bar {
         flex-direction: column;
         align-items: center;
@@ -758,6 +1035,7 @@
       }
       .top-control-bar { display: none !important; }
       .pin-editor-bar { display: none !important; }
+      .photo-modal { display: none !important; }
       .infographic-wrapper {
         max-width: 100% !important;
         margin: 0 !important;
@@ -872,7 +1150,7 @@
       <div class="map-section-header">
         <div class="map-title-wrap">
           <h3>🛰️ แผนที่ดาวเทียม GOOGLE MAPS (Leaflet Live)</h3>
-          <p>แสดงพิกัดจริง 7 จุดตรวจพร้อมป้ายชื่อสถานที่ และเส้นทางลาดตระเวน 01 ➔ 07</p>
+          <p>แตะที่หมุดเพื่อดูรูปถ่ายสถานที่จริงของจุดตรวจ และเส้นทางลาดตระเวน 01 ➔ 07</p>
         </div>
         <div class="map-status-tag">● สดแบบเรียลไทม์ (Live Map)</div>
       </div>
@@ -931,6 +1209,28 @@
 
   </main>
 
+  <!-- Fullscreen Photo Lightbox Modal -->
+  <div id="photoModal" class="photo-modal" onclick="closePhotoModal(event)">
+    <div class="photo-modal-content" onclick="event.stopPropagation()">
+      <button type="button" class="btn-close-modal" onclick="closePhotoModal()">✕ ปิด</button>
+      <div class="photo-modal-header">
+        <span id="modalCpBadge" class="modal-badge">จุดที่ 02</span>
+        <div>
+          <h3 id="modalCpTitle">หน้า ER</h3>
+          <p id="modalCpBuilding">อาคารอุบัติเหตุและฉุกเฉิน (เวรเปล)</p>
+        </div>
+      </div>
+      <div class="photo-modal-body">
+        <img id="modalImg" src="" alt="ภาพถ่ายจุดตรวจจริง" />
+      </div>
+      <div class="photo-modal-nav">
+        <button type="button" class="btn-modal-nav" onclick="navPhotoModal(-1)">◀ จุดก่อนหน้า</button>
+        <span id="modalCounter" class="modal-counter">จุด 2 จาก 7</span>
+        <button type="button" class="btn-modal-nav" onclick="navPhotoModal(1)">จุดถัดไป ▶</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     // Real Scanned Ground-Truth Coordinates from Security Guard Mobile Phones (Protected)
     const realCheckpointsData = [
@@ -948,6 +1248,7 @@
     let routePolyline = null;
     let activeCpNum = '01';
     let tapToMoveEnabled = false;
+    let currentModalCpNum = '01';
 
     function getWorkingCoordinates() {
       try {
@@ -1032,7 +1333,7 @@
         }
       });
 
-      // Highlight marker
+      // Highlight active marker on map
       Object.keys(markersMap).forEach(num => {
         const el = markersMap[num].getElement();
         if (el) {
@@ -1051,6 +1352,7 @@
       if (marker && leafletMap) {
         const latlng = marker.getLatLng();
         leafletMap.panTo(latlng, { animate: true, duration: 0.4 });
+        marker.openPopup();
       }
 
       const cp = realCheckpointsData.find(c => c.num === cpNum);
@@ -1060,23 +1362,52 @@
       }
     }
 
+    function handleImgError(img, cpNum) {
+      // First try fallback folder 'checkpoints_photos'
+      if (!img.dataset.triedFallback) {
+        img.dataset.triedFallback = 'true';
+        img.src = './checkpoints_photos/' + cpNum + '.jpg';
+        return;
+      }
+      // If still missing, show polite no-image placeholder
+      const wrap = img.parentElement;
+      if (wrap) wrap.style.display = 'none';
+      const noImgBox = document.getElementById('noImg-' + cpNum);
+      if (noImgBox) noImgBox.style.display = 'flex';
+    }
+
     function updateMarkerPopup(cpNum, lat, lng) {
       const marker = markersMap[cpNum];
       const cp = realCheckpointsData.find(c => c.num === cpNum);
       if (!marker || !cp) return;
 
+      const imgSrc = './รูปจุด/' + cp.num + '.jpg';
+
       marker.setPopupContent(`
-        <div style="font-family:'Prompt',sans-serif; padding:4px 6px; min-width:210px;">
-          <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
-            <span style="background:${cp.color}; color:#fff; font-weight:900; font-size:12px; padding:2px 8px; border-radius:6px;">จุดที่ ${cp.num}</span>
-            <strong style="font-size:13.5px; color:#0f172a;">${cp.name}</strong>
+        <div class="popup-card">
+          <div class="popup-header">
+            <span class="popup-badge" style="background:${cp.color}">จุดที่ ${cp.num}</span>
+            <strong class="popup-title">${cp.name}</strong>
           </div>
-          <div style="color:#0284c7; font-size:12px; font-weight:600;">📍 ${cp.building} (${cp.floor})</div>
-          <div style="margin-top:6px; padding:4px 6px; background:#f1f5f9; border-radius:6px; font-family:monospace; font-size:10.5px; color:#475569;">
-            GPS: ${parseFloat(lat).toFixed(6)}, ${parseFloat(lng).toFixed(6)}
+          <div class="popup-sub">📍 ${cp.building} (${cp.floor})</div>
+
+          <!-- Real Checkpoint Photo Preview from 'รูปจุด' folder -->
+          <div class="popup-img-wrap" onclick="openPhotoModal('${cp.num}')" title="แตะเพื่อดูภาพขนาดใหญ่">
+            <img src="${imgSrc}" alt="${cp.name}" class="popup-img" onerror="handleImgError(this, '${cp.num}')" />
+            <div class="popup-img-overlay">
+              <span>🔍 แตะดูภาพขนาดใหญ่</span>
+            </div>
           </div>
-          <div style="margin-top:6px; font-size:11px; color:#059669; font-weight:bold;">
-            🖐️ ลากหมุดนี้เพื่อขยับจุดได้ทันที
+          <div id="noImg-${cp.num}" class="popup-no-img" style="display:none;">
+            <span>📷 รูปถ่ายจุดตรวจที่ ${cp.num}</span>
+            <span style="font-size:10px; color:#64748b;">(ยังไม่มีไฟล์ ${cp.num}.jpg ในโฟลเดอร์ รูปจุด)</span>
+          </div>
+
+          <div class="popup-gps">
+            <span>GPS:</span> ${parseFloat(lat).toFixed(6)}, ${parseFloat(lng).toFixed(6)}
+          </div>
+          <div class="popup-hint">
+            🖐️ ลากหมุดเพื่อปรับตำแหน่ง หรือแตะภาพเพื่อดูรูปเต็ม
           </div>
         </div>
       `);
@@ -1158,7 +1489,7 @@
         const marker = L.marker([cp.lat, cp.lng], {
           icon: pinIcon,
           draggable: true,
-          title: `จุดที่ ${cp.num}: ${cp.name} (ลากเพื่อปรับตำแหน่ง)`
+          title: `จุดที่ ${cp.num}: ${cp.name} (ลากเพื่อปรับตำแหน่ง หรือแตะดูรูปถ่าย)`
         }).addTo(leafletMap);
 
         marker.on('dragstart', function() {
@@ -1196,6 +1527,68 @@
       const bounds = L.latLngBounds(workingCps.map(c => [c.lat, c.lng]));
       leafletMap.fitBounds(bounds.pad(0.18));
     }
+
+    // ========================================================
+    // LIGHTBOX FULLSCREEN PHOTO VIEWER
+    // ========================================================
+    function openPhotoModal(cpNum) {
+      currentModalCpNum = cpNum;
+      const cp = realCheckpointsData.find(c => c.num === cpNum);
+      if (!cp) return;
+
+      const modal = document.getElementById('photoModal');
+      const badge = document.getElementById('modalCpBadge');
+      const title = document.getElementById('modalCpTitle');
+      const building = document.getElementById('modalCpBuilding');
+      const img = document.getElementById('modalImg');
+      const counter = document.getElementById('modalCounter');
+
+      badge.innerText = 'จุดที่ ' + cp.num;
+      badge.style.background = cp.color;
+      title.innerText = cp.name;
+      building.innerText = cp.building + ' (' + cp.floor + ')';
+      img.src = './รูปจุด/' + cp.num + '.jpg';
+      img.onerror = function() {
+        if (!this.dataset.triedFallback) {
+          this.dataset.triedFallback = 'true';
+          this.src = './checkpoints_photos/' + cp.num + '.jpg';
+        }
+      };
+      img.dataset.triedFallback = '';
+      
+      const idx = realCheckpointsData.findIndex(c => c.num === cpNum);
+      counter.innerText = 'จุดตรวจ ' + (idx + 1) + ' จาก ' + realCheckpointsData.length;
+
+      modal.classList.add('show');
+    }
+
+    function closePhotoModal(e) {
+      if (e && e.target && e.target.closest('.photo-modal-content') && !e.target.classList.contains('btn-close-modal')) {
+        return;
+      }
+      const modal = document.getElementById('photoModal');
+      if (modal) modal.classList.remove('show');
+    }
+
+    function navPhotoModal(direction) {
+      const idx = realCheckpointsData.findIndex(c => c.num === currentModalCpNum);
+      let nextIdx = idx + direction;
+      if (nextIdx < 0) nextIdx = realCheckpointsData.length - 1;
+      if (nextIdx >= realCheckpointsData.length) nextIdx = 0;
+      const nextCp = realCheckpointsData[nextIdx];
+      openPhotoModal(nextCp.num);
+      selectCheckpointForEdit(nextCp.num);
+    }
+
+    // Keyboard support: Escape closes modal, Left/Right navigates
+    window.addEventListener('keydown', (e) => {
+      const modal = document.getElementById('photoModal');
+      if (modal && modal.classList.contains('show')) {
+        if (e.key === 'Escape') closePhotoModal();
+        if (e.key === 'ArrowLeft') navPhotoModal(-1);
+        if (e.key === 'ArrowRight') navPhotoModal(1);
+      }
+    });
 
     // Auto-initialize on page load
     window.addEventListener('DOMContentLoaded', () => {
