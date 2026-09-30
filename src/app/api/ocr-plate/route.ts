@@ -110,11 +110,102 @@ export function extractLicensePlate(rawText: string): ExtractedLicensePlate {
 
 export const extractLicensePlateNumber = extractLicensePlate;
 
+async function recognizeWithGemini(
+  base64Image: string,
+  apiKey: string
+): Promise<{ success: boolean; plateNumber: string; letters: string; digits: string; rawText: string; model: string } | null> {
+  const cleanBase64 = base64Image.replace(/^data:image\/[a-zA-Z]+;base64,/, "").trim();
+  if (!cleanBase64) return null;
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+  const promptText = `
+คุณคือ AI ตรวจจับป้ายทะเบียนรถในประเทศไทย สำหรับระบบรักษาความปลอดภัย โรงพยาบาลพล
+หน้าที่ของคุณ:
+1. วิเคราะห์และอ่านป้ายทะเบียนรถในภาพ (รองรับทั้งรถยนต์ รถกระบะ รถตู้ และรถจักรยานยนต์)
+2. ส่งคืนเฉพาะ "หมวดอักษรและตัวเลข" เท่านั้น เช่น "ขน 9789", "1กข 1234", "7กศ 8888", "AU 9789"
+3. กฎสำคัญมาก (ห้ามผิดเด็ดขาด):
+   - ห้ามระบุชื่อจังหวัดโดยเด็ดขาด (ตัดชื่อจังหวัดทิ้ง 100% ไม่ต้องส่งชื่อจังหวัดกลับมา เช่น คำว่า ขอนแก่น, กรุงเทพมหานคร ให้ตัดทิ้ง)
+   - สำหรับป้ายรถจักรยานยนต์ (ป้าย 2-3 บรรทัด เช่น บรรทัดบน '1กผ' บรรทัดล่าง '1234'): ให้นำหมวดอักษรด้านบนมารวมกับตัวเลขด้านล่าง เป็น "1กผ 1234"
+   - ถ้าบนป้ายมีเฉพาะตัวเลข ให้ส่งเฉพาะตัวเลข เช่น "9789"
+   - ตอบเฉพาะข้อความป้ายทะเบียนสั้นๆ บรรทัดเดียวเท่านั้น ห้ามมีคำอธิบายอื่น ห้ามใส่ Markdown หรือเครื่องหมายคำพูด
+   - หากในภาพไม่มีป้ายทะเบียน หรือมองไม่เห็นตัวอักษร/ตัวเลขเลย ให้ตอบคำเดียวว่า NONE
+  `.trim();
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8500);
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              { text: promptText },
+              {
+                inline_data: {
+                  mime_type: "image/jpeg",
+                  data: cleanBase64,
+                },
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 50,
+        },
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.warn("Gemini Vision API error response:", res.status, errText);
+      return null;
+    }
+
+    const data = await res.json();
+    const rawAiText = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+    if (!rawAiText || rawAiText.toUpperCase().includes("NONE")) {
+      return { success: false, plateNumber: "", letters: "", digits: "", rawText: rawAiText, model: "gemini-1.5-flash" };
+    }
+
+    // Clean any prefix like "ทะเบียน:" or quotes
+    let cleanPlate = rawAiText
+      .replace(/[`"*_#]/g, "")
+      .replace(/\r?\n/g, " ")
+      .trim();
+    cleanPlate = cleanPlate.replace(/^(?:ป้ายทะเบียน|เลขทะเบียน|ทะเบียน|ทะเบียนรถ|รถ|plate|license\s*plate)\s*[:=]?\s*/i, "").trim();
+
+    // Use our canonical parser to ensure clean letters & digits
+    const extracted = extractLicensePlate(cleanPlate);
+    const finalPlate = extracted.fullPlate || cleanPlate;
+
+    return {
+      success: !!finalPlate,
+      plateNumber: finalPlate,
+      letters: extracted.letters,
+      digits: extracted.digits,
+      rawText: rawAiText,
+      model: "gemini-1.5-flash",
+    };
+  } catch (err) {
+    clearTimeout(timeoutId);
+    console.warn("Gemini Vision API call notice:", err);
+    return null;
+  }
+}
+
 export async function POST(req: NextRequest) {
   let worker: any = null;
   try {
     const body = await req.json();
-    const { image } = body;
+    const { image, geminiApiKey: clientKey } = body;
 
     if (!image) {
       return NextResponse.json(
@@ -123,7 +214,31 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Convert dataUrl or base64 to Buffer
+    // 1. Try Gemini 1.5 Flash Vision API first if API key is provided
+    const apiKey = (
+      clientKey ||
+      process.env.GEMINI_API_KEY ||
+      process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
+      ""
+    ).trim();
+
+    if (apiKey) {
+      const geminiResult = await recognizeWithGemini(image, apiKey);
+      if (geminiResult && geminiResult.success && geminiResult.plateNumber) {
+        return NextResponse.json({
+          success: true,
+          engine: "gemini-1.5-flash",
+          rawText: geminiResult.rawText,
+          plateNumber: geminiResult.plateNumber,
+          fullPlate: geminiResult.plateNumber,
+          digits: geminiResult.digits,
+          letters: geminiResult.letters,
+          matches: [geminiResult.plateNumber],
+        });
+      }
+    }
+
+    // 2. Fallback to Tesseract OCR (Local same-origin / CDN)
     let buffer: Buffer;
     if (image.startsWith("data:")) {
       const base64Data = image.split(",")[1];
@@ -157,6 +272,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: !!fullPlate,
+      engine: "tesseract-fallback",
       rawText: cleanText,
       plateNumber: fullPlate,
       fullPlate,

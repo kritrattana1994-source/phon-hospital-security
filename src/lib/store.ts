@@ -10,7 +10,8 @@ import {
   deleteStaffVehicleFromCloud,
   saveShiftReportToCloud,
   saveDailyAISummaryToCloud,
-  saveGoogleDriveWebhookToCloud
+  saveGoogleDriveWebhookToCloud,
+  saveGeminiApiKeyToCloud
 } from './firebaseService';
 import { 
   PatrolRound, 
@@ -242,6 +243,10 @@ interface AppState {
   // Google Drive Upload Webhook URL
   googleDriveWebhookUrl: string;
   setGoogleDriveWebhookUrl: (url: string) => void;
+
+  // Google Gemini Vision API Key (for License Plate OCR)
+  geminiApiKey: string;
+  setGeminiApiKey: (key: string) => void;
 }
 
 export const initialGuards: Guard[] = [
@@ -451,6 +456,11 @@ export const useStore = create<AppState>()(
       setGoogleDriveWebhookUrl: (url: string) => {
         saveGoogleDriveWebhookToCloud(url);
         set({ googleDriveWebhookUrl: url });
+      },
+      geminiApiKey: '',
+      setGeminiApiKey: (key: string) => {
+        saveGeminiApiKeyToCloud(key);
+        set({ geminiApiKey: key });
       },
 
       loginGuard: (pin: string) => {

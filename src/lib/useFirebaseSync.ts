@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { db } from "./firebase";
 import { collection, onSnapshot, doc } from "firebase/firestore";
 import { useStore, PatrolLog, ParkingScan, Incident, Checkpoint, StaffVehicle } from "./store";
-import { seedFirestoreIfEmpty, saveCheckpointToCloud, saveIncidentToCloud, saveGoogleDriveWebhookToCloud } from "./firebaseService";
+import { seedFirestoreIfEmpty, saveCheckpointToCloud, saveIncidentToCloud, saveGoogleDriveWebhookToCloud, saveGeminiApiKeyToCloud } from "./firebaseService";
 
 export function useFirebaseSync() {
   const [isConnected, setIsConnected] = useState(false);
@@ -165,6 +165,28 @@ export function useFirebaseSync() {
       console.warn("Drive config sync notice:", err.message);
     });
 
+    // 11. Real-time Listener: Google Gemini 1.5 Flash Vision Config
+    const unsubGeminiConfig = onSnapshot(doc(db, "systemSettings", "gemini"), (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        if (data && typeof data.apiKey === "string" && data.apiKey.trim()) {
+          useStore.setState({ geminiApiKey: data.apiKey.trim() });
+        } else {
+          const localKey = useStore.getState().geminiApiKey;
+          if (localKey && localKey.trim()) {
+            saveGeminiApiKeyToCloud(localKey.trim());
+          }
+        }
+      } else {
+        const localKey = useStore.getState().geminiApiKey;
+        if (localKey && localKey.trim()) {
+          saveGeminiApiKeyToCloud(localKey.trim());
+        }
+      }
+    }, (err) => {
+      console.warn("Gemini config sync notice:", err.message);
+    });
+
     return () => {
       unsubPatrol();
       unsubParking();
@@ -175,6 +197,7 @@ export function useFirebaseSync() {
       unsubShiftReports();
       unsubDailyAI();
       unsubDriveConfig();
+      unsubGeminiConfig();
     };
   }, []);
 

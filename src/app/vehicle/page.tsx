@@ -144,7 +144,7 @@ export function findMatchingStaffVehicle(
 
 function VehicleContent() {
   const router = useRouter();
-  const { currentUser, staffVehicles, addParkingScan, parkingScans, googleDriveWebhookUrl } = useStore();
+  const { currentUser, staffVehicles, addParkingScan, parkingScans, googleDriveWebhookUrl, geminiApiKey } = useStore();
 
   // OCR Processing States
   const [isOcrProcessing, setIsOcrProcessing] = useState(false);
@@ -577,47 +577,51 @@ function VehicleContent() {
     try {
       let detectedPlate = "";
 
-      // 1. ลองใช้ Client-Side WebAssembly OCR ทันทีหากมี canvas
-      if (canvasElement) {
+      // 1. ส่งตรวจจับผ่าน Server API (Gemini 1.5 Flash Vision API)
+      const controller = new AbortController();
+      const abortTimer = setTimeout(() => controller.abort(), 9500);
+      try {
+        const res = await fetch("/api/ocr-plate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            image: dataUrl,
+            geminiApiKey: geminiApiKey || undefined
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(abortTimer);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.plateNumber) {
+            detectedPlate = data.plateNumber;
+          }
+        }
+      } catch (apiErr) {
+        console.warn("API OCR error:", apiErr);
+      } finally {
+        clearTimeout(abortTimer);
+      }
+
+      // 2. ถ้ายังไม่พบ และมี canvas ให้ลองใช้ Client-Side WebAssembly OCR สำรอง
+      if (!detectedPlate && canvasElement) {
         const clientRes = await recognizePlateFromCanvas(canvasElement);
         if (clientRes.success && clientRes.plateNumber) {
           detectedPlate = clientRes.plateNumber;
         }
       }
 
-      // 2. ถ้ายังไม่พบ ส่งตรวจจับผ่าน Server API
-      if (!detectedPlate) {
-        const controller = new AbortController();
-        const abortTimer = setTimeout(() => controller.abort(), 12000);
-        try {
-          const res = await fetch("/api/ocr-plate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ image: dataUrl }),
-            signal: controller.signal,
-          });
-          clearTimeout(abortTimer);
-          if (res.ok) {
-            const data = await res.json();
-            if (data.success && data.plateNumber) {
-              detectedPlate = data.plateNumber;
-            }
-          }
-        } catch (apiErr) {
-          console.warn("API OCR error:", apiErr);
-        } finally {
-          clearTimeout(abortTimer);
-        }
-      }
-
-      // 3. หากตัดกรอบกลางแล้วไม่พบ ลองสแกนภาพเต็มมุมกว้างสำรองทันที
+      // 3. หากตัดกรอบกลางแล้วไม่พบ ลองสแกนภาพเต็มมุมกว้างสำรอง
       if (!detectedPlate && fullImageUrl && fullImageUrl !== dataUrl) {
         setOcrStatusText("กำลังตรวจจับภาพมุมกว้างสำรอง...");
         try {
           const fallbackRes = await fetch("/api/ocr-plate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ image: fullImageUrl }),
+            body: JSON.stringify({ 
+              image: fullImageUrl,
+              geminiApiKey: geminiApiKey || undefined
+            }),
           });
           if (fallbackRes.ok) {
             const fallbackData = await fallbackRes.json();
@@ -697,44 +701,50 @@ function VehicleContent() {
     try {
       let detectedPlate = "";
 
-      // 1. Try Client-side WebAssembly OCR first (~150ms)
-      const clientRes = await recognizePlateFromCanvas(frames.cropCanvas);
-      if (clientRes.success && clientRes.plateNumber) {
-        detectedPlate = clientRes.plateNumber;
+      // 1. Try Gemini 1.5 Flash Vision API via /api/ocr-plate (High accuracy, reads 2-line bike & car plates)
+      const controller = new AbortController();
+      const abortTimer = setTimeout(() => controller.abort(), 9500);
+      try {
+        const res = await fetch("/api/ocr-plate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            image: frames.cropDataUrl,
+            geminiApiKey: geminiApiKey || undefined
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(abortTimer);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.plateNumber) {
+            detectedPlate = data.plateNumber;
+          }
+        }
+      } catch (apiErr) {
+        console.warn("API / Gemini OCR error:", apiErr);
+      } finally {
+        clearTimeout(abortTimer);
       }
 
-      // 2. If client-side didn't find plate, try Server API fallback
+      // 2. Fallback to Client-side WebAssembly OCR if API didn't detect plate
       if (!detectedPlate) {
-        const controller = new AbortController();
-        const abortTimer = setTimeout(() => controller.abort(), 12000);
-        try {
-          const res = await fetch("/api/ocr-plate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ image: frames.cropDataUrl }),
-            signal: controller.signal,
-          });
-          clearTimeout(abortTimer);
-          if (res.ok) {
-            const data = await res.json();
-            if (data.success && data.plateNumber) {
-              detectedPlate = data.plateNumber;
-            }
-          }
-        } catch (apiErr) {
-          console.warn("API OCR fallback error:", apiErr);
-        } finally {
-          clearTimeout(abortTimer);
+        const clientRes = await recognizePlateFromCanvas(frames.cropCanvas);
+        if (clientRes.success && clientRes.plateNumber) {
+          detectedPlate = clientRes.plateNumber;
         }
       }
 
-      // 3. If still not found, try full wide image
+      // 3. Fallback to wide full frame if still not found
       if (!detectedPlate && frames.fullDataUrl) {
         try {
           const fallbackRes = await fetch("/api/ocr-plate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ image: frames.fullDataUrl }),
+            body: JSON.stringify({ 
+              image: frames.fullDataUrl,
+              geminiApiKey: geminiApiKey || undefined
+            }),
           });
           if (fallbackRes.ok) {
             const fallbackData = await fallbackRes.json();

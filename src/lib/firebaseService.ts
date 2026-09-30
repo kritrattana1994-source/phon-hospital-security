@@ -73,6 +73,29 @@ export async function fetchGoogleDriveWebhookFromCloud(): Promise<string> {
   return "";
 }
 
+// System Settings (Google Gemini 1.5 Flash Vision OCR Config)
+export async function saveGeminiApiKeyToCloud(apiKey: string) {
+  try {
+    const docRef = doc(db, "systemSettings", "gemini");
+    await setDoc(docRef, { apiKey: apiKey.trim(), updatedAt: new Date().toISOString() }, { merge: true });
+  } catch (err) {
+    console.warn("Cloud save gemini apiKey failed:", err);
+  }
+}
+
+export async function fetchGeminiApiKeyFromCloud(): Promise<string> {
+  try {
+    const docRef = doc(db, "systemSettings", "gemini");
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      return snap.data()?.apiKey || "";
+    }
+  } catch (err) {
+    console.warn("Fetch gemini apiKey notice:", err);
+  }
+  return "";
+}
+
 // ==========================================
 // 1.5 Helper: Sanitize objects for Firestore (strip undefined)
 // ==========================================
