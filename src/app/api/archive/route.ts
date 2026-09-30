@@ -29,13 +29,17 @@ export async function GET(req: NextRequest) {
     const incidents = incidentSnap.docs.map((d) => d.data() as Incident);
 
     // 2. Calculate Cutoff Stats
-    const expiredPatrol365 = patrolLogs.filter((p) => isOlderThanDays(p.timestamp, 365));
-    const expiredParking365 = parkingScans.filter((s) => isOlderThanDays(s.timestamp, 365));
-    const expiredIncidents365 = incidents.filter((i) => isOlderThanDays(i.timestamp, 365));
+    const expiredPatrol90 = patrolLogs.filter((p) => isOlderThanDays(p.timestamp, 90));
+    const expiredParking90 = parkingScans.filter((s) => isOlderThanDays(s.timestamp, 90));
+    const expiredIncidents90 = incidents.filter((i) => isOlderThanDays(i.timestamp, 90));
 
     const expiredPatrol180 = patrolLogs.filter((p) => isOlderThanDays(p.timestamp, 180));
     const expiredParking180 = parkingScans.filter((s) => isOlderThanDays(s.timestamp, 180));
     const expiredIncidents180 = incidents.filter((i) => isOlderThanDays(i.timestamp, 180));
+
+    const expiredPatrol365 = patrolLogs.filter((p) => isOlderThanDays(p.timestamp, 365));
+    const expiredParking365 = parkingScans.filter((s) => isOlderThanDays(s.timestamp, 365));
+    const expiredIncidents365 = incidents.filter((i) => isOlderThanDays(i.timestamp, 365));
 
     // 3. Group by Fiscal Year
     const fyMap: Record<string, { label: string; patrolCount: number; parkingCount: number; incidentCount: number }> = {};
@@ -74,17 +78,23 @@ export async function GET(req: NextRequest) {
           incidents: incidents.length,
           sum: patrolLogs.length + parkingScans.length + incidents.length,
         },
-        olderThan365Days: {
-          patrolLogs: expiredPatrol365.length,
-          parkingScans: expiredParking365.length,
-          incidents: expiredIncidents365.length,
-          sum: expiredPatrol365.length + expiredParking365.length + expiredIncidents365.length,
+        olderThan90Days: {
+          patrolLogs: expiredPatrol90.length,
+          parkingScans: expiredParking90.length,
+          incidents: expiredIncidents90.length,
+          sum: expiredPatrol90.length + expiredParking90.length + expiredIncidents90.length,
         },
         olderThan180Days: {
           patrolLogs: expiredPatrol180.length,
           parkingScans: expiredParking180.length,
           incidents: expiredIncidents180.length,
           sum: expiredPatrol180.length + expiredParking180.length + expiredIncidents180.length,
+        },
+        olderThan365Days: {
+          patrolLogs: expiredPatrol365.length,
+          parkingScans: expiredParking365.length,
+          incidents: expiredIncidents365.length,
+          sum: expiredPatrol365.length + expiredParking365.length + expiredIncidents365.length,
         },
         byFiscalYear: fyMap,
       },
@@ -101,7 +111,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const cutoffDays = typeof body.cutoffDays === "number" ? body.cutoffDays : 365;
+    const cutoffDays = typeof body.cutoffDays === "number" ? body.cutoffDays : 90;
     const targetFiscalYear = body.targetFiscalYear || "ALL"; // "ALL" or "FY2567"
     const purgeFromFirestore = Boolean(body.purgeFromFirestore);
     const dryRun = Boolean(body.dryRun);

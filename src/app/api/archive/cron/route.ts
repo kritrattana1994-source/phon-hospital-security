@@ -48,7 +48,8 @@ async function handleCronArchival(req: NextRequest) {
       }
     }
 
-    const cutoffDays = 365;
+    const queryCutoff = req.nextUrl?.searchParams?.get("cutoffDays");
+    const cutoffDays = queryCutoff ? parseInt(queryCutoff, 10) : 90; // นโยบาย รพ.พล: คงข้อมูลสด 3 เดือน (90 วัน)
     const operator = "ระบบอัตโนมัติ (Vercel Daily Cron 07:00 น.)";
 
     // 2. ดึงข้อมูลจาก Cloud Firestore
@@ -60,7 +61,7 @@ async function handleCronArchival(req: NextRequest) {
     const parkingScans = parkingSnap.docs.map((d) => d.data() as ParkingScan);
     const incidents = incidentSnap.docs.map((d) => d.data() as Incident);
 
-    // 3. กรองเฉพาะข้อมูลที่อายุเกิน 365 วัน
+    // 3. กรองเฉพาะข้อมูลที่อายุเกิน 90 วัน (3 เดือน)
     const eligiblePatrol = patrolLogs.filter((p) => isOlderThanDays(p.timestamp, cutoffDays));
     const eligibleParking = parkingScans.filter((s) => isOlderThanDays(s.timestamp, cutoffDays));
     const eligibleIncidents = incidents.filter((i) => isOlderThanDays(i.timestamp, cutoffDays));
@@ -68,12 +69,13 @@ async function handleCronArchival(req: NextRequest) {
     const totalToArchive =
       eligiblePatrol.length + eligibleParking.length + eligibleIncidents.length;
 
-    // ถ้าไม่มีข้อมูลที่อายุเกิน 365 วัน ให้จบงานอย่างปลอดภัย
+    // ถ้าไม่มีข้อมูลที่อายุเกินเกณฑ์ ให้จบงานอย่างปลอดภัย
     if (totalToArchive === 0) {
       return NextResponse.json({
         success: true,
         cronRunAt: new Date().toISOString(),
-        message: "ตรวจสอบเรียบร้อย: ไม่พบข้อมูลที่อายุเกิน 365 วัน (ไม่ต้องจัดเก็บ)",
+        cutoffDays,
+        message: `ตรวจสอบเรียบร้อย: ไม่พบข้อมูลที่อายุเกิน ${cutoffDays} วัน (3 เดือน - ไม่ต้องจัดเก็บ)`,
         archivedCount: 0,
         totalChecked: {
           patrolLogs: patrolLogs.length,
@@ -256,7 +258,7 @@ async function handleCronArchival(req: NextRequest) {
       status: isDriveConnected ? "success" : "partial",
       notes: isDriveConnected
         ? `รันอัตโนมัติสำเร็จ: อัปโหลดเข้า Google Drive ${uploadedFiles.length} ไฟล์ และล้างข้อมูล Firestore แล้ว`
-        : "รันอัตโนมัติ: ตรวจพบข้อมูลเกิน 365 วัน แต่ยังไม่ได้ต่อ Google Drive จึงยังไม่ล้างข้อมูลจาก Cloud",
+        : `รันอัตโนมัติ: ตรวจพบข้อมูลเกิน ${cutoffDays} วัน แต่ยังไม่ได้ต่อ Google Drive จึงยังไม่ล้างข้อมูลจาก Cloud`,
     };
 
     await setDoc(doc(db, "archiveAuditLogs", auditLog.id), auditLog);

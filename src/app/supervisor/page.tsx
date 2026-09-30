@@ -169,8 +169,8 @@ export default function SupervisorPage() {
   const [testGeminiResult, setTestGeminiResult] = useState<{ success: boolean; message: string } | null>(null);
   const [showGeminiKey, setShowGeminiKey] = useState(false);
 
-  // 365-Day Archival State
-  const [archiveCutoffDays, setArchiveCutoffDays] = useState<number>(365);
+  // 90-Day (3-Month) Archival State (นโยบายคงข้อมูลสด 3 เดือน)
+  const [archiveCutoffDays, setArchiveCutoffDays] = useState<number>(90);
   const [archiveSelectedFiscalYear, setArchiveSelectedFiscalYear] = useState<string>("ALL");
   const [archiveLoading, setArchiveLoading] = useState(false);
   const [archiveError, setArchiveError] = useState<string | null>(null);
@@ -523,9 +523,9 @@ export default function SupervisorPage() {
         throw new Error(data.error || "เกิดข้อผิดพลาดในการรัน Cron");
       }
       if (data.archivedCounts?.total > 0) {
-        setArchiveSuccess(`รันคำสั่งอัตโนมัติสำเร็จ: จัดเก็บข้อมูลเกิน 365 วัน จำนวน ${data.archivedCounts.total} รายการ เรียบร้อยแล้ว`);
+        setArchiveSuccess(`รันคำสั่งอัตโนมัติสำเร็จ: จัดเก็บข้อมูลเกิน ${data.cutoffDays || archiveCutoffDays} วัน จำนวน ${data.archivedCounts.total} รายการ เรียบร้อยแล้ว`);
       } else {
-        setArchiveSuccess(`รันคำสั่งอัตโนมัติสำเร็จ: ตรวจสอบแล้วไม่พบข้อมูลอายุเกิน 365 วัน (ระบบสะอาดปกติ 100%)`);
+        setArchiveSuccess(`รันคำสั่งอัตโนมัติสำเร็จ: ตรวจสอบแล้วไม่พบข้อมูลอายุเกิน ${data.cutoffDays || archiveCutoffDays} วัน (3 เดือน - ระบบสะอาดปกติ 100%)`);
       }
       fetchArchiveStats();
     } catch (err: any) {
@@ -921,6 +921,10 @@ export default function SupervisorPage() {
   const previewTotal = previewEligiblePatrol.length + previewEligibleParking.length + previewEligibleIncidents.length;
 
   const totalCloudRecords = patrolLogs.length + parkingScans.length + incidents.length;
+  const expired90Total =
+    patrolLogs.filter((p) => isOlderThanDays(p.timestamp, 90)).length +
+    parkingScans.filter((s) => isOlderThanDays(s.timestamp, 90)).length +
+    incidents.filter((i) => isOlderThanDays(i.timestamp, 90)).length;
   const expired365Total =
     patrolLogs.filter((p) => isOlderThanDays(p.timestamp, 365)).length +
     parkingScans.filter((s) => isOlderThanDays(s.timestamp, 365)).length +
@@ -4023,17 +4027,16 @@ export default function SupervisorPage() {
                     ? `มีข้อมูลอายุเกิน ${archiveCutoffDays} วัน พร้อมจัดเก็บเข้าคลัง`
                     : "ข้อมูลทั้งหมดอยู่ในเกณฑ์สดใหม่"}
                 </p>
-                <div className="pt-2 border-t border-slate-100">
-                  <span className="text-[10px] text-slate-500">
-                    เกิน 365 วัน (1 ปี): <strong className="text-slate-800">{expired365Total}</strong> รายการ
-                  </span>
+                <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500">
+                  <span>เกิน 90 วัน (3 ด.): <strong className="text-amber-700 font-bold">{expired90Total}</strong></span>
+                  <span>เกิน 1 ปี: <strong className="text-slate-700 font-bold">{expired365Total}</strong></span>
                 </div>
               </div>
 
               {/* Card 3: Google Drive Destination */}
               <div className="bg-white border border-sky-100 rounded-3xl p-5 shadow-xs space-y-2">
                 <div className="flex justify-between items-start text-slate-500">
-                  <span className="text-xs font-semibold">โฟลเดอร์ Google Drive</span>
+                  <span className="text-xs font-semibold">Google Drive (คลัง 2 TB)</span>
                   <UploadCloud className="w-5 h-5 text-blue-600" />
                 </div>
                 <div className="truncate text-xs font-mono font-bold text-slate-800 bg-slate-50 p-1.5 rounded-lg border border-slate-200">
@@ -4042,7 +4045,7 @@ export default function SupervisorPage() {
                 <p className="text-[11px] text-slate-500 truncate">
                   {archiveStats?.driveStatus?.connected
                     ? `เชื่อมต่อ Service Account แล้ว`
-                    : `โฟลเดอร์สำรองข้อมูลหลัก รพ.พล`}
+                    : `โฟลเดอร์สำรองข้อมูลหลัก 2 TB รพ.พล`}
                 </p>
                 <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
@@ -4092,7 +4095,7 @@ export default function SupervisorPage() {
                     </span>
                   </div>
                   <p className="text-xs text-slate-600 mt-0.5">
-                    ทุกวันเวลา 07:00 น. (ช่วงส่งมอบเวรเช้า) ระบบจะตรวจสอบบันทึกที่อายุเกิน 365 วัน ➔ อัปโหลดเข้า Google Drive ➔ ล้าง Cloud Firestore เพื่อรักษาโควตาฟรีตลอดชีพ
+                    ทุกวันเวลา 07:00 น. (ช่วงส่งมอบเวรเช้า) ระบบจะตรวจสอบบันทึกที่อายุเกิน 90 วัน (3 เดือน) ➔ อัปโหลดเข้า Google Drive (ความจุ 2 TB) ➔ ล้าง Cloud Firestore เพื่อรักษาความเร็วและคงข้อมูลสด 3 เดือน
                   </p>
                 </div>
               </div>
@@ -4381,9 +4384,9 @@ export default function SupervisorPage() {
                     onChange={(e) => setArchiveCutoffDays(Number(e.target.value))}
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:ring-1 focus:ring-sky-500"
                   >
-                    <option value={365}>อายุเกิน 365 วัน (1 ปี - มาตรฐานแนะนำ)</option>
+                    <option value={90}>อายุเกิน 90 วัน (3 เดือน - นโยบายมาตรฐาน รพ.พล)</option>
                     <option value={180}>อายุเกิน 180 วัน (6 เดือน)</option>
-                    <option value={90}>อายุเกิน 90 วัน (3 เดือน)</option>
+                    <option value={365}>อายุเกิน 365 วัน (1 ปี)</option>
                     <option value={0}>ทั้งหมดในระบบ (ไม่จำกัดอายุวัน)</option>
                   </select>
                 </div>
