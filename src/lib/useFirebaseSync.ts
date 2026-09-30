@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { db } from "./firebase";
 import { collection, onSnapshot } from "firebase/firestore";
 import { useStore, PatrolLog, ParkingScan, Incident, Checkpoint, StaffVehicle } from "./store";
-import { seedFirestoreIfEmpty, saveCheckpointToCloud } from "./firebaseService";
+import { seedFirestoreIfEmpty, saveCheckpointToCloud, saveIncidentToCloud } from "./firebaseService";
 
 export function useFirebaseSync() {
   const [isConnected, setIsConnected] = useState(false);
@@ -50,7 +50,20 @@ export function useFirebaseSync() {
     const unsubIncidents = onSnapshot(collection(db, "incidents"), (snapshot) => {
       setIsConnected(true);
       const cloudIncidents = snapshot.docs.map(doc => doc.data() as Incident);
-      useStore.setState({ incidents: cloudIncidents });
+      // Sort incidents by timestamp or ID descending (newest first)
+      cloudIncidents.sort((a, b) => {
+        const timeA = new Date(a.dateString || a.timestamp || 0).getTime();
+        const timeB = new Date(b.dateString || b.timestamp || 0).getTime();
+        if (timeA && timeB && !isNaN(timeA) && !isNaN(timeB)) return timeB - timeA;
+        return (b.id || "").localeCompare(a.id || "");
+      });
+      useStore.setState((state) => {
+        const cloudIds = new Set(cloudIncidents.map(i => i.id));
+        const unsyncedLocals = state.incidents.filter(i => !cloudIds.has(i.id) && i.id !== 'inc-1');
+        // If there are unsynced locals, persist them to Firestore so all guards see them
+        unsyncedLocals.forEach(i => saveIncidentToCloud(i));
+        return { incidents: [...cloudIncidents, ...unsyncedLocals] };
+      });
     }, (err) => {
       console.warn("Incidents sync notice:", err.message);
     });

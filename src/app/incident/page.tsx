@@ -175,7 +175,7 @@ export default function IncidentPage() {
         }
       }
 
-      addIncident({
+      await addIncident({
         type,
         severity,
         title,
@@ -192,7 +192,7 @@ export default function IncidentPage() {
       setActiveTab("active");
     } catch (err) {
       console.warn("Submit fallback:", err);
-      addIncident({
+      await addIncident({
         type,
         severity,
         title,
@@ -208,8 +208,8 @@ export default function IncidentPage() {
   };
 
   // Quick Status update to "investigating" (ระหว่างดำเนินการ)
-  const handleSetInvestigating = (incidentId: string) => {
-    updateIncidentStatus(incidentId, "investigating");
+  const handleSetInvestigating = async (incidentId: string) => {
+    await updateIncidentStatus(incidentId, "investigating");
     setToastMessage("🔵 ปรับสถานะเป็น 'ระหว่างดำเนินการ' เรียบร้อยแล้ว");
     setTimeout(() => setToastMessage(null), 3000);
   };
@@ -241,10 +241,11 @@ export default function IncidentPage() {
         }
       }
 
-      updateIncidentStatus(resolvingIncident.id, "resolved", {
+      const closerName = currentUser?.name || "เจ้าหน้าที่ รปภ.";
+      await updateIncidentStatus(resolvingIncident.id, "resolved", {
         resolutionImageUrl: finalResolutionUrl || undefined,
         resolutionNote: resolutionNote.trim(),
-        resolvedBy: currentUser.name,
+        resolvedBy: closerName,
         resolvedAt: new Date().toLocaleString("th-TH", { hour12: false }),
       });
 
@@ -843,9 +844,21 @@ export default function IncidentPage() {
             </div>
 
             {/* Target Incident Mini Info */}
-            <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-0.5">
-              <span className="text-[10px] font-bold text-slate-400">เหตุการณ์:</span>
-              <p className="font-bold text-slate-900 line-clamp-2">{resolvingIncident.title}</p>
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs space-y-1.5">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-slate-500 font-bold">ผู้รายงานเหตุ:</span>
+                <span className="text-slate-800 font-bold bg-white px-2 py-0.5 rounded-lg border border-slate-200">{resolvingIncident.reporterName}</span>
+              </div>
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-emerald-700 font-bold">ผู้ดำเนินการปิดงาน:</span>
+                <span className="text-emerald-800 font-bold bg-emerald-100/80 px-2 py-0.5 rounded-lg border border-emerald-300">
+                  {currentUser?.name || "เจ้าหน้าที่ รปภ."}
+                </span>
+              </div>
+              <div className="pt-1.5 border-t border-slate-200">
+                <span className="text-[10px] text-slate-400 font-bold block">รายละเอียดเหตุการณ์:</span>
+                <p className="font-bold text-slate-900 line-clamp-2 text-xs mt-0.5">{resolvingIncident.title}</p>
+              </div>
             </div>
 
             {/* Resolution Photo Upload */}

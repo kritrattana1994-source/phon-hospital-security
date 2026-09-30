@@ -199,7 +199,7 @@ interface AppState {
 
   // Incidents
   incidents: Incident[];
-  addIncident: (incident: Omit<Incident, 'id' | 'status' | 'reporterName' | 'timestamp'> & { shift?: 'morning' | 'afternoon' | 'night'; shiftName?: string; dateString?: string }) => void;
+  addIncident: (incident: Omit<Incident, 'id' | 'status' | 'reporterName' | 'timestamp'> & { shift?: 'morning' | 'afternoon' | 'night'; shiftName?: string; dateString?: string }) => Promise<Incident> | void;
   updateIncidentStatus: (
     id: string, 
     status: Incident['status'], 
@@ -209,7 +209,7 @@ interface AppState {
       resolvedAt?: string;
       resolvedBy?: string;
     }
-  ) => void;
+  ) => Promise<void> | void;
 
   // Vehicles
   staffVehicles: StaffVehicle[];
@@ -563,7 +563,7 @@ export const useStore = create<AppState>()(
 
       // Incidents
       incidents: initialIncidents,
-      addIncident: (incident) => {
+      addIncident: async (incident) => {
         const user = get().currentUser;
         const now = new Date();
         const activeShift = getCurrentShift(now);
@@ -577,28 +577,33 @@ export const useStore = create<AppState>()(
           shiftName: incident.shiftName || activeShift.name,
           dateString: incident.dateString || now.toISOString().split('T')[0]
         };
-        saveIncidentToCloud(newIncident);
         set((state) => ({
           incidents: [newIncident, ...state.incidents]
         }));
+        await saveIncidentToCloud(newIncident);
+        return newIncident;
       },
-      updateIncidentStatus: (id, status, resolution) => {
+      updateIncidentStatus: async (id, status, resolution) => {
+        let target: Incident | undefined;
         set((state) => {
           const newIncidents = state.incidents.map((inc) => {
             if (inc.id === id) {
-              return {
+              const updated: Incident = {
                 ...inc,
                 status,
                 ...(resolution || {}),
                 ...(status === 'resolved' && !resolution?.resolvedAt ? { resolvedAt: new Date().toLocaleString('th-TH', { hour12: false }) } : {})
               };
+              target = updated;
+              return updated;
             }
             return inc;
           });
-          const target = newIncidents.find((i) => i.id === id);
-          if (target) saveIncidentToCloud(target);
           return { incidents: newIncidents };
         });
+        if (target) {
+          await saveIncidentToCloud(target);
+        }
       },
 
       // Vehicles

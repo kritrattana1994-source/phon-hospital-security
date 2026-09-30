@@ -58,6 +58,24 @@ export async function uploadIncidentImage(dataUrl: string, incidentId?: string):
 }
 
 // ==========================================
+// 1.5 Helper: Sanitize objects for Firestore (strip undefined)
+// ==========================================
+export function sanitizeForFirestore<T>(data: T): any {
+  if (data === null || data === undefined) return null;
+  if (Array.isArray(data)) return data.map(item => sanitizeForFirestore(item));
+  if (typeof data === "object" && !(data instanceof Date)) {
+    const clean: Record<string, any> = {};
+    for (const [key, value] of Object.entries(data as Record<string, any>)) {
+      if (value !== undefined) {
+        clean[key] = sanitizeForFirestore(value);
+      }
+    }
+    return clean;
+  }
+  return data;
+}
+
+// ==========================================
 // 2. Firestore: Real-time Sync & Persistence
 // ==========================================
 
@@ -65,7 +83,7 @@ export async function uploadIncidentImage(dataUrl: string, incidentId?: string):
 export async function savePatrolLogToCloud(log: PatrolLog) {
   try {
     const docRef = doc(db, "patrolLogs", log.id);
-    await setDoc(docRef, log);
+    await setDoc(docRef, sanitizeForFirestore(log), { merge: true });
   } catch (err) {
     console.warn("Cloud save patrolLog failed:", err);
   }
@@ -75,7 +93,7 @@ export async function savePatrolLogToCloud(log: PatrolLog) {
 export async function saveParkingScanToCloud(scan: ParkingScan) {
   try {
     const docRef = doc(db, "parkingScans", scan.id);
-    await setDoc(docRef, scan);
+    await setDoc(docRef, sanitizeForFirestore(scan), { merge: true });
   } catch (err) {
     console.warn("Cloud save parkingScan failed:", err);
   }
@@ -85,7 +103,7 @@ export async function saveParkingScanToCloud(scan: ParkingScan) {
 export async function saveIncidentToCloud(incident: Incident) {
   try {
     const docRef = doc(db, "incidents", incident.id);
-    await setDoc(docRef, incident);
+    await setDoc(docRef, sanitizeForFirestore(incident), { merge: true });
   } catch (err) {
     console.warn("Cloud save incident failed:", err);
   }
@@ -95,7 +113,7 @@ export async function saveIncidentToCloud(incident: Incident) {
 export async function saveCheckpointToCloud(checkpoint: Checkpoint) {
   try {
     const docRef = doc(db, "checkpoints", checkpoint.id);
-    await setDoc(docRef, checkpoint);
+    await setDoc(docRef, sanitizeForFirestore(checkpoint), { merge: true });
   } catch (err) {
     console.warn("Cloud save checkpoint failed:", err);
   }
@@ -113,7 +131,7 @@ export async function deleteCheckpointFromCloud(checkpointId: string) {
 export async function saveGuardToCloud(guard: Guard) {
   try {
     const docRef = doc(db, "guards", guard.id);
-    await setDoc(docRef, guard);
+    await setDoc(docRef, sanitizeForFirestore(guard), { merge: true });
   } catch (err) {
     console.warn("Cloud save guard failed:", err);
   }
@@ -186,7 +204,7 @@ export async function batchDeleteRecordsFromCloud(
 export async function saveArchiveAuditLogToCloud(log: ArchiveAuditLog) {
   try {
     const docRef = doc(db, "archiveAuditLogs", log.id);
-    await setDoc(docRef, log);
+    await setDoc(docRef, sanitizeForFirestore(log), { merge: true });
   } catch (err) {
     console.warn("Cloud save archiveAuditLog failed:", err);
   }
@@ -210,7 +228,7 @@ export async function fetchArchiveAuditLogsFromCloud(): Promise<ArchiveAuditLog[
 export async function saveShiftReportToCloud(report: ShiftReportLog) {
   try {
     const docRef = doc(db, "shiftReports", report.id);
-    await setDoc(docRef, report);
+    await setDoc(docRef, sanitizeForFirestore(report), { merge: true });
   } catch (err) {
     console.warn("Cloud save shiftReport failed:", err);
   }
@@ -219,7 +237,7 @@ export async function saveShiftReportToCloud(report: ShiftReportLog) {
 export async function saveDailyAISummaryToCloud(summary: any) {
   try {
     const docRef = doc(db, "dailyAISummaries", summary.id);
-    await setDoc(docRef, summary);
+    await setDoc(docRef, sanitizeForFirestore(summary), { merge: true });
   } catch (err) {
     console.warn("Cloud save dailyAISummary failed:", err);
   }
