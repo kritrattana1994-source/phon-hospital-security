@@ -511,7 +511,7 @@ export default function GuardPage() {
                       </span>
                     </div>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      สแกนป้าย / กด 4 ตัวท้าย • รู้ชื่อ แผนก โทรหาเจ้าของรถได้ทันที
+                      พิมพ์หรือกดเลข 4 ตัวท้าย • รู้ชื่อ แผนก โทรหาเจ้าของรถได้ทันที
                     </p>
                   </div>
                 </div>

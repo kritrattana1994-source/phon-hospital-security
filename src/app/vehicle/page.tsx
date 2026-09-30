@@ -200,7 +200,6 @@ function VehicleContent() {
   const [isOcrProcessing, setIsOcrProcessing] = useState(false);
   const [ocrStatusText, setOcrStatusText] = useState<string | null>(null);
   const patrolFileInputRef = useRef<HTMLInputElement | null>(null);
-  const lookupFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Top-level View: "lookup" (ดูว่ารถใคร 24 ชม.) | "patrol" (เดินตรวจสแกนรถทุกคันใน รพ.)
   const [mainTab, setMainTab] = useState<"lookup" | "patrol">("lookup");
@@ -1208,37 +1207,6 @@ function VehicleContent() {
 
               </form>
             </div>
-
-            {/* Hidden file input for native camera in Lookup mode */}
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              ref={lookupFileInputRef}
-              onChange={(e) => handleFileInputChange(e, "lookup")}
-              className="hidden"
-            />
-
-            {/* AI Camera OCR Button */}
-            <button
-              type="button"
-              onClick={() => lookupFileInputRef.current?.click()}
-              disabled={isOcrProcessing}
-              className="w-full py-3.5 px-4 bg-gradient-to-r from-emerald-600 via-teal-600 to-sky-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-2xl font-bold text-xs sm:text-sm shadow-md shadow-emerald-600/25 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-            >
-              {isOcrProcessing ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin text-white" />
-                  <span>{ocrStatusText || "กำลังวิเคราะห์ป้ายทะเบียนด้วย AI..."}</span>
-                </>
-              ) : (
-                <>
-                  <Camera className="w-4 h-4 text-emerald-100" />
-                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                  <span>ถ่ายรูปสแกนป้ายด้วยกล้อง AI (ไม่ต้องพิมพ์)</span>
-                </>
-              )}
-            </button>
 
             {/* QUICK NUMERIC DIALPAD */}
             <div className="p-3 bg-white border border-slate-200 rounded-3xl shadow-xs space-y-2.5">
