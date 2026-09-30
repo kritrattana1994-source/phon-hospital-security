@@ -383,13 +383,110 @@
       width: 100%;
       height: 100%;
       object-fit: cover;
-      display: block;
+      display: none;
     }
 
     #leafletMapContainer {
       width: 100%;
       height: 100%;
-      display: none;
+      display: block;
+    }
+
+    /* Pin Editor Toolbar */
+    .pin-editor-bar {
+      background: #1e293b;
+      border-top: 1px solid #334155;
+      padding: 14px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .editor-header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+    .editor-title {
+      font-family: var(--font-heading);
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #38bdf8;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .editor-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .editor-hint {
+      font-size: 12px;
+      color: #94a3b8;
+    }
+    .btn-reset-pins {
+      background: #334155;
+      color: #f1f5f9;
+      border: 1px solid #475569;
+      border-radius: 8px;
+      padding: 5px 12px;
+      font-size: 11.5px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-reset-pins:hover {
+      background: #475569;
+      color: white;
+    }
+    .cp-selector-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .cp-pill {
+      background: #0f172a;
+      border: 1.5px solid #334155;
+      color: #cbd5e1;
+      padding: 6px 12px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+      user-select: none;
+    }
+    .cp-pill:hover {
+      border-color: #38bdf8;
+      color: white;
+    }
+    .cp-pill.active {
+      background: #0284c7;
+      border-color: #38bdf8;
+      color: white;
+      box-shadow: 0 0 12px rgba(2, 132, 199, 0.4);
+    }
+    .cp-pill .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      border: 1.5px solid #ffffff;
+      flex-shrink: 0;
+    }
+    .safety-guarantee {
+      background: rgba(6, 78, 59, 0.45);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 11.5px;
+      color: #a7f3d0;
+      line-height: 1.4;
     }
 
     /* Checkpoints Grid Matrix */
@@ -795,20 +892,43 @@
       <div class="map-section-header">
         <div class="map-title-wrap">
           <h3>🛰️ แผนที่ภาพถ่ายดาวเทียม GOOGLE MAPS ปักหมุดจุดตรวจทั้ง 7 จุด</h3>
-          <p>พิกัดแม่นยำตามข้อมูลในโปรแกรม พร้อมเส้นทางเดินตรวจมาตรฐาน 01 ➔ 02 ➔ 03 ➔ 04 ➔ 05 ➔ 06 ➔ 07 ➔ 01</p>
+          <p>พิกัดจริงตามที่เดินสแกนด้วยโทรศัพท์ พร้อมเส้นทางลาดตระเวน 01 ➔ 02 ➔ 03 ➔ 04 ➔ 05 ➔ 06 ➔ 07 ➔ 01</p>
         </div>
         <div class="map-tabs">
-          <button id="tabPoster" class="map-tab-btn active" onclick="toggleMapMode('poster')">ภาพโปสเตอร์ความละเอียดสูง (HD)</button>
-          <button id="tabLeaflet" class="map-tab-btn" onclick="toggleMapMode('interactive')">แผนที่ดาวเทียมโต้ตอบได้ (Leaflet Live)</button>
+          <button id="tabLeaflet" class="map-tab-btn active" onclick="toggleMapMode('interactive')">🗺️ แผนที่ดาวเทียมโต้ตอบได้ (Leaflet Live)</button>
+          <button id="tabPoster" class="map-tab-btn" onclick="toggleMapMode('poster')">🖼️ ภาพโปสเตอร์ (HD)</button>
+        </div>
+      </div>
+
+      <!-- Interactive Pin Adjustment Toolbar -->
+      <div class="pin-editor-bar">
+        <div class="editor-header">
+          <span class="editor-title">🎯 ปรับหมุดภาพถ่ายดาวเทียม (ลากหมุด หรือกด Ctrl + คลิกบนแผนที่):</span>
+          <div class="editor-actions">
+            <span id="moveHint" class="editor-hint">💡 เลือกจุดตรวจด้านล่าง ➔ สามารถคลิกลากหมุด หรือกด Ctrl+คลิก เพื่อขยับจุดบนแผนที่ได้ทันที</span>
+            <button type="button" class="btn-reset-pins" onclick="resetPinsToScanned()">🔄 รีเซ็ตพิกัดตามที่สแกนด้วยมือถือ</button>
+          </div>
+        </div>
+        <div class="cp-selector-pills">
+          <button type="button" class="cp-pill active" data-cp="01" onclick="selectCheckpointForEdit('01')"><span class="dot" style="background:#0284c7"></span>01 หน้าห้องสุขาภิบาล (OPD เก่า)</button>
+          <button type="button" class="cp-pill" data-cp="02" onclick="selectCheckpointForEdit('02')"><span class="dot" style="background:#dc2626"></span>02 หน้า ER (ฉุกเฉิน)</button>
+          <button type="button" class="cp-pill" data-cp="03" onclick="selectCheckpointForEdit('03')"><span class="dot" style="background:#059669"></span>03 ตึกชาย</button>
+          <button type="button" class="cp-pill" data-cp="04" onclick="selectCheckpointForEdit('04')"><span class="dot" style="background:#7c3aed"></span>04 ตึกหญิง</button>
+          <button type="button" class="cp-pill" data-cp="05" onclick="selectCheckpointForEdit('05')"><span class="dot" style="background:#d97706"></span>05 หน้าห้องเครื่องสำรองไฟฟ้า (OPD ใหม่)</button>
+          <button type="button" class="cp-pill" data-cp="06" onclick="selectCheckpointForEdit('06')"><span class="dot" style="background:#0891b2"></span>06 หน้าห้อง งานยานพาหนะ</button>
+          <button type="button" class="cp-pill" data-cp="07" onclick="selectCheckpointForEdit('07')"><span class="dot" style="background:#4f46e5"></span>07 หน้าอาคารโอสถศาลา</button>
+        </div>
+        <div class="safety-guarantee">
+          🔒 <strong>ปลอดภัย 100%:</strong> การปรับตำแหน่งหมุดบนหน้าแผนที่นี้เป็นการแสดงผลแผนที่ภาพถ่ายดาวเทียมเท่านั้น โดย<strong>ไม่กระทบหรือเปลี่ยนแปลงพิกัดจุดตรวจจริงในระบบโทรศัพท์ของ รปภ.</strong> ตามที่ท่านระบุ
         </div>
       </div>
 
       <div class="map-viewport">
-        <!-- High-Resolution Pinned Poster Image -->
-        <img id="staticMapPoster" src="./hospital_patrol_map_satellite_pinned.jpg" alt="Google Maps Satellite Hospital Patrol Map" />
-
-        <!-- Live Interactive Leaflet Map -->
+        <!-- Live Interactive Leaflet Map (Default) -->
         <div id="leafletMapContainer"></div>
+
+        <!-- High-Resolution Pinned Poster Image (Alternative) -->
+        <img id="staticMapPoster" src="./hospital_patrol_map_satellite_pinned.jpg" alt="Google Maps Satellite Hospital Patrol Map" />
       </div>
     </section>
 
@@ -825,8 +945,142 @@
   </main>
 
   <script>
-    // Toggle between Static Poster and Live Leaflet Map
+    // Real Scanned Ground-Truth Coordinates from Security Guard Mobile Phones (Protected)
+    const realCheckpointsData = [
+      { num: '01', name: 'หน้าห้องสุขาภิบาล', building: 'OPD เก่า', floor: 'ชั้น 1', lat: 15.816506, lng: 102.6082934, color: '#0284c7' },
+      { num: '02', name: 'หน้า ER', building: 'อาคารอุบัติเหตุและฉุกเฉิน', floor: 'เวรเปล', lat: 15.8158327, lng: 102.6084876, color: '#dc2626' },
+      { num: '03', name: 'ตึกชาย', building: 'ตึกชาย', floor: 'ชั้น 1', lat: 15.8164286, lng: 102.6086471, color: '#059669' },
+      { num: '04', name: 'ตึกหญิง', building: 'ตึกหญิง', floor: 'ชั้น 1', lat: 15.8166671, lng: 102.608697, color: '#7c3aed' },
+      { num: '05', name: 'หน้าห้องเครื่องสำรองไฟฟ้า', building: 'อาคาร OPD ใหม่', floor: 'ชั้น 1', lat: 15.8163985, lng: 102.6097491, color: '#d97706' },
+      { num: '06', name: 'หน้าห้อง งานยานพาหนะ', building: 'อาคารงานยานพาหนะ', floor: 'ชั้น 1', lat: 15.8170281, lng: 102.6098412, color: '#0891b2' },
+      { num: '07', name: 'หน้าอาคารโอสถศาลา', building: 'หน้าอาคารโอสถศาลา', floor: 'ชั้น 1', lat: 15.8166813, lng: 102.6091408, color: '#4f46e5' }
+    ];
+
     let leafletMap = null;
+    let markersMap = {};
+    let routePolyline = null;
+    let activeCpNum = '01';
+
+    function getWorkingCoordinates() {
+      try {
+        const saved = localStorage.getItem('phon_map_visual_pins');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          return realCheckpointsData.map(cp => {
+            if (parsed[cp.num]) {
+              return { ...cp, lat: parsed[cp.num].lat, lng: parsed[cp.num].lng, isCustom: true };
+            }
+            return cp;
+          });
+        }
+      } catch (e) {
+        console.warn('Error reading saved pins:', e);
+      }
+      return JSON.parse(JSON.stringify(realCheckpointsData));
+    }
+
+    function saveVisualCoordinate(cpNum, lat, lng) {
+      try {
+        let currentSaved = {};
+        const existing = localStorage.getItem('phon_map_visual_pins');
+        if (existing) currentSaved = JSON.parse(existing);
+        currentSaved[cpNum] = { lat: parseFloat(lat), lng: parseFloat(lng) };
+        localStorage.setItem('phon_map_visual_pins', JSON.stringify(currentSaved));
+      } catch (e) {
+        console.warn('Error saving pin coordinate:', e);
+      }
+      updateRouteLine();
+      updateMarkerPopup(cpNum, lat, lng);
+      const hint = document.getElementById('moveHint');
+      if (hint) {
+        hint.innerHTML = `<span style="color:#38bdf8; font-weight:bold;">✅ บันทึกตำแหน่งแสดงผลจุดที่ ${cpNum} แล้ว</span> (พิกัดจริงในแอปไม่ถูกแตะต้อง)`;
+      }
+    }
+
+    function resetPinsToScanned() {
+      if (confirm('ต้องการรีเซ็ตตำแหน่งหมุดทั้งหมดบนแผนที่กลับสู่ "พิกัดจริงตามมือถือ" หรือไม่?')) {
+        localStorage.removeItem('phon_map_visual_pins');
+        realCheckpointsData.forEach(cp => {
+          if (markersMap[cp.num]) {
+            markersMap[cp.num].setLatLng([cp.lat, cp.lng]);
+            updateMarkerPopup(cp.num, cp.lat, cp.lng);
+          }
+        });
+        updateRouteLine();
+        const hint = document.getElementById('moveHint');
+        if (hint) {
+          hint.innerHTML = `<span style="color:#10b981; font-weight:bold;">🔄 รีเซ็ตตำแหน่งหมุดกลับสู่พิกัดจริงตามโทรศัพท์มือถือเรียบร้อยแล้ว</span>`;
+        }
+        leafletMap.setView([15.8165, 102.6089], 19);
+      }
+    }
+
+    function selectCheckpointForEdit(cpNum) {
+      activeCpNum = cpNum;
+      document.querySelectorAll('.cp-pill').forEach(btn => {
+        if (btn.getAttribute('data-cp') === cpNum) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+
+      const marker = markersMap[cpNum];
+      if (marker && leafletMap) {
+        const latlng = marker.getLatLng();
+        leafletMap.panTo(latlng, { animate: true, duration: 0.5 });
+        marker.openPopup();
+      }
+
+      const cp = realCheckpointsData.find(c => c.num === cpNum);
+      const hint = document.getElementById('moveHint');
+      if (hint && cp) {
+        hint.innerHTML = `📍 กำลังปรับตำแหน่ง: <strong>จุดที่ ${cp.num} ${cp.name}</strong> ➔ คลิกลากหมุด หรือกด Ctrl + คลิกตรงจุดที่ต้องการบนแผนที่`;
+      }
+    }
+
+    function updateMarkerPopup(cpNum, lat, lng) {
+      const marker = markersMap[cpNum];
+      const cp = realCheckpointsData.find(c => c.num === cpNum);
+      if (!marker || !cp) return;
+
+      marker.setPopupContent(`
+        <div style="font-family:'Prompt',sans-serif; padding:6px; min-width:200px;">
+          <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+            <span style="background:${cp.color}; color:#fff; font-weight:900; font-size:11px; padding:2px 6px; border-radius:6px;">จุดที่ ${cp.num}</span>
+            <strong style="font-size:13px; color:#0f172a;">${cp.name}</strong>
+          </div>
+          <div style="color:#0284c7; font-size:11.5px; font-weight:600;">📍 ${cp.building} (${cp.floor})</div>
+          <div style="margin-top:6px; padding:4px 6px; background:#f1f5f9; border-radius:6px; font-family:monospace; font-size:10.5px; color:#475569;">
+            GPS: ${parseFloat(lat).toFixed(6)}, ${parseFloat(lng).toFixed(6)}
+          </div>
+          <div style="margin-top:6px; font-size:10.5px; color:#059669; font-weight:bold;">
+            🖐️ ลากหมุดนี้ หรือกด Ctrl+คลิก เพื่อขยับจุด
+          </div>
+        </div>
+      `);
+    }
+
+    function updateRouteLine() {
+      if (!leafletMap) return;
+      const order = ['01', '02', '03', '04', '05', '06', '07', '01'];
+      const latlngs = order.map(num => {
+        if (markersMap[num]) return markersMap[num].getLatLng();
+        const cp = realCheckpointsData.find(c => c.num === num);
+        return [cp.lat, cp.lng];
+      });
+
+      if (routePolyline) {
+        routePolyline.setLatLngs(latlngs);
+      } else {
+        routePolyline = L.polyline(latlngs, {
+          color: '#10b981',
+          weight: 4,
+          dashArray: '8, 6',
+          opacity: 0.95
+        }).addTo(leafletMap);
+      }
+    }
 
     function toggleMapMode(mode) {
       const poster = document.getElementById('staticMapPoster');
@@ -834,7 +1088,12 @@
       const tabPoster = document.getElementById('tabPoster');
       const tabLeaflet = document.getElementById('tabLeaflet');
 
-      if (mode === 'interactive') {
+      if (mode === 'poster') {
+        poster.style.display = 'block';
+        leafletContainer.style.display = 'none';
+        tabPoster.classList.add('active');
+        tabLeaflet.classList.remove('active');
+      } else {
         poster.style.display = 'none';
         leafletContainer.style.display = 'block';
         tabPoster.classList.remove('active');
@@ -845,18 +1104,12 @@
         } else {
           leafletMap.invalidateSize();
         }
-      } else {
-        poster.style.display = 'block';
-        leafletContainer.style.display = 'none';
-        tabPoster.classList.add('active');
-        tabLeaflet.classList.remove('active');
       }
     }
 
     function initLeafletMap() {
-      // Phon Hospital Coordinates
-      const centerLat = 15.8162;
-      const centerLng = 102.6085;
+      const centerLat = 15.8165;
+      const centerLng = 102.6089;
 
       leafletMap = L.map('leafletMapContainer', {
         center: [centerLat, centerLng],
@@ -865,75 +1118,83 @@
         minZoom: 16
       });
 
-      // Google Maps Satellite Hybrid Tile Layer
+      // Google Maps Satellite Hybrid Tile Layer (Default)
       const googleHybrid = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
         maxZoom: 21,
-        attribution: 'Map data &copy; Google Maps'
+        attribution: 'Google Maps Satellite'
       }).addTo(leafletMap);
 
       const googleRoadmap = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
         maxZoom: 21,
-        attribution: 'Map data &copy; Google Maps'
+        attribution: 'Google Maps Roadmap'
       });
 
       const googleSatClean = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
         maxZoom: 21,
-        attribution: 'Map data &copy; Google Maps'
+        attribution: 'Google Maps Satellite Clean'
       });
 
-      // Base layer switcher
       L.control.layers({
         'Google ภาพถ่ายดาวเทียม (Hybrid)': googleHybrid,
         'Google แผนที่ลายเส้น (Roadmap)': googleRoadmap,
         'Google ภาพถ่ายดาวเทียมล้วน (Satellite)': googleSatClean
       }, null, { position: 'topright' }).addTo(leafletMap);
 
-      // Checkpoint points
-      const checkpointsData = [
-        { num: '01', name: 'ป้อม รปภ. ประตูทางเข้าหลัก', lat: 15.815876, lng: 102.608102, color: '#0284c7', desc: 'ประตูทางเข้า-ออกหลัก ถ.มิตรภาพ AH12 (ชั้น 1)' },
-        { num: '02', name: 'โถงทางเข้าหลัก & จุดคัดกรองผู้ป่วยนอก', lat: 15.815992, lng: 102.608625, color: '#059669', desc: 'อาคารเฉลิมพระเกียรติ A (ชั้น 1)' },
-        { num: '03', name: 'ห้องอุบัติเหตุ-ฉุกเฉิน (ER)', lat: 15.816108, lng: 102.608464, color: '#dc2626', desc: 'ทางลาดรับส่งผู้ป่วยฉุกเฉิน อาคาร A (ชั้น 1)' },
-        { num: '04', name: 'ห้องคลังยาหลัก & วัตถุเสพติดทางการแพทย์', lat: 15.816237, lng: 102.608692, color: '#7c3aed', desc: 'อาคารเฉลิมพระเกียรติ A (ชั้น 2)' },
-        { num: '05', name: 'อาคารบริการผู้ป่วยใน & บันไดหนีไฟ', lat: 15.816534, lng: 102.608893, color: '#d97706', desc: 'อาคารบริการผู้ป่วย B (ชั้น 1)' },
-        { num: '06', name: 'สถานีก๊าซออกซิเจนการแพทย์ & หม้อแปลงไฟฟ้า', lat: 15.816715, lng: 102.609429, color: '#0891b2', desc: 'อาคารสนับสนุนเทคนิค C (ชั้น 1)' },
-        { num: '07', name: 'ลานจอดรถเจ้าหน้าที่และญาติ & ประตูรั้ว', lat: 15.816250, lng: 102.608115, color: '#4f46e5', desc: 'พื้นที่ภายนอก & บริเวณรอบ รพ. (ชั้น 1)' }
-      ];
-
-      // Add pins
-      checkpointsData.forEach(cp => {
+      // Render Checkpoints
+      const workingCps = getWorkingCoordinates();
+      workingCps.forEach(cp => {
         const pinIcon = L.divIcon({
           className: 'custom-pin-marker',
-          html: '<div style="background:' + cp.color + '; width:28px; height:28px; border-radius:50%; border:2.5px solid #fff; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:900; font-size:12px; font-family:sans-serif; box-shadow:0 3px 10px rgba(0,0,0,0.6);">' + cp.num + '</div>',
-          iconSize: [28, 28],
-          iconAnchor: [14, 14]
+          html: `<div style="background:${cp.color}; width:30px; height:30px; border-radius:50%; border:2.5px solid #fff; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:900; font-size:12px; font-family:'Prompt',sans-serif; box-shadow:0 4px 12px rgba(0,0,0,0.8); cursor:grab;">${cp.num}</div>`,
+          iconSize: [30, 30],
+          iconAnchor: [15, 15]
         });
 
-        L.marker([cp.lat, cp.lng], { icon: pinIcon })
-          .bindPopup('<div style="font-family:sans-serif; padding:4px;"><strong>จุดที่ ' + cp.num + ': ' + cp.name + '</strong><br><span style="color:#0284c7; font-size:11px;">' + cp.desc + '</span><br><code style="font-size:10px; color:#64748b;">GPS: ' + cp.lat.toFixed(6) + ', ' + cp.lng.toFixed(6) + '</code></div>')
-          .addTo(leafletMap);
+        const marker = L.marker([cp.lat, cp.lng], {
+          icon: pinIcon,
+          draggable: true,
+          title: `จุดที่ ${cp.num}: ${cp.name} (ลากเพื่อปรับตำแหน่ง)`
+        }).addTo(leafletMap);
+
+        marker.on('dragstart', function() {
+          selectCheckpointForEdit(cp.num);
+        });
+
+        marker.on('dragend', function(e) {
+          const pos = e.target.getLatLng();
+          saveVisualCoordinate(cp.num, pos.lat, pos.lng);
+        });
+
+        marker.on('click', function() {
+          selectCheckpointForEdit(cp.num);
+        });
+
+        markersMap[cp.num] = marker;
+        updateMarkerPopup(cp.num, cp.lat, cp.lng);
       });
 
-      // Add route polyline
-      const routeLatLngs = [
-        [15.815876, 102.608102], // 01
-        [15.815992, 102.608625], // 02
-        [15.816108, 102.608464], // 03
-        [15.816237, 102.608692], // 04
-        [15.816534, 102.608893], // 05
-        [15.816715, 102.609429], // 06
-        [15.816800, 102.608900], // rear road
-        [15.816250, 102.608115], // 07
-        [15.815876, 102.608102]  // back to 01
-      ];
+      updateRouteLine();
 
-      L.polyline(routeLatLngs, {
-        color: '#10b981',
-        weight: 3.5,
-        dashArray: '8, 6',
-        opacity: 0.9
-      }).addTo(leafletMap);
+      // Ctrl + Click to move selected marker
+      leafletMap.on('click', function(e) {
+        if (e.originalEvent && e.originalEvent.ctrlKey) {
+          if (activeCpNum && markersMap[activeCpNum]) {
+            markersMap[activeCpNum].setLatLng(e.latlng);
+            saveVisualCoordinate(activeCpNum, e.latlng.lat, e.latlng.lng);
+            markersMap[activeCpNum].openPopup();
+          }
+        }
+      });
+
+      // Fit bounds to checkpoints
+      const bounds = L.latLngBounds(workingCps.map(c => [c.lat, c.lng]));
+      leafletMap.fitBounds(bounds.pad(0.15));
     }
-  </script>
 
+    // Auto-initialize on page load
+    window.addEventListener('DOMContentLoaded', () => {
+      initLeafletMap();
+    });
+  </script>
 </body>
 </html>
