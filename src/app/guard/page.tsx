@@ -276,7 +276,7 @@ export default function GuardPage() {
         )}
 
         {/* Patrol Progress Quick Widget (เฉพาะรอบปัจจุบัน ไม่ทะลุ 100%) */}
-        <div className="p-5 bg-white border border-sky-100 rounded-3xl shadow-sm space-y-3">
+        <div className="p-4 bg-white border border-slate-200/80 rounded-2xl shadow-xs space-y-3">
           <div className="flex justify-between items-start">
             <div>
               <div className="flex items-center gap-1.5">
@@ -302,7 +302,7 @@ export default function GuardPage() {
               </p>
             </div>
           </div>
-          <div className="w-full bg-slate-100 rounded-full h-3 p-0.5 border border-slate-200">
+          <div className="w-full bg-slate-100 rounded-full h-2.5 p-0.5 border border-slate-200">
             <div
               className={`h-full rounded-full transition-all duration-700 shadow-xs ${
                 progressPercent === 100
@@ -324,7 +324,7 @@ export default function GuardPage() {
         </div>
 
         {/* Guard Task Menu */}
-        <div className="space-y-3">
+        <div className="space-y-4">
 
           {/* URGENT INCIDENT ALERT BANNER FOR CURRENT SHIFT */}
           {currentShiftIncidents.length > 0 && (
@@ -352,171 +352,211 @@ export default function GuardPage() {
             </Link>
           )}
 
-          {/* DEDICATED FEATURE: SHIFT HANDOVER REPORT (LINE GROUP) */}
-          <button
-            onClick={() => setShowShiftReportModal(true)}
-            className="w-full text-left p-4 bg-gradient-to-r from-emerald-600 via-teal-600 to-sky-700 hover:from-emerald-500 hover:to-sky-600 text-white rounded-2xl transition-all shadow-md shadow-emerald-700/20 active:scale-[0.98] border border-emerald-400/40 cursor-pointer"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3.5">
-                <div className="w-12 h-12 rounded-2xl bg-white/20 text-white flex items-center justify-center shadow-xs">
-                  <Send className="w-6 h-6" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-black text-white text-base">📤 รายงานผลการเดินตรวจ & ส่งมอบเวร (LINE กลุ่ม)</h3>
-                    <span className="text-[10px] bg-white text-emerald-800 px-2 py-0.5 rounded-full font-bold">
-                      ช่วงต่อกะ
-                    </span>
+          {/* SECTION 1: งานตรวจการณ์ลาดตระเวน */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[11px] font-bold tracking-wider uppercase text-slate-400">
+                งานตรวจการณ์ลาดตระเวน
+              </span>
+              <span className="text-[11px] font-semibold text-sky-600">7 จุดตรวจ</span>
+            </div>
+
+            {/* Card 1: เดินตรวจ 7 จุด */}
+            <Link
+              href="/patrol"
+              className="group block p-4 bg-white hover:bg-sky-50/40 border border-slate-200/80 hover:border-sky-300 rounded-2xl transition-all shadow-xs active:scale-[0.99]"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-12 h-12 rounded-2xl bg-sky-50 text-sky-600 border border-sky-100 flex items-center justify-center shadow-xs shrink-0 group-hover:scale-105 transition-transform">
+                    <MapPin className="w-6 h-6" />
                   </div>
-                  <p className="text-xs text-emerald-100 mt-0.5">
-                    บันทึกภาพสรุปผลงานส่งเข้ากลุ่มไลน์ รปภ. • ระบุชื่อและผลัดปฏิบัติงานอัตโนมัติ
-                  </p>
-                </div>
-              </div>
-              <ChevronRight className="w-5 h-5 text-white/80 group-hover:translate-x-1 transition-transform" />
-            </div>
-          </button>
-
-          <Link
-            href="/patrol"
-            className="group block p-4 bg-white hover:bg-sky-50/40 border border-sky-100 hover:border-sky-300 rounded-2xl transition-all shadow-xs active:scale-[0.98]"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3.5">
-                <div className="w-12 h-12 rounded-2xl bg-sky-100 text-sky-600 flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
-                  <MapPin className="w-6 h-6" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-slate-900 text-base">โมดูล 1: เดินตรวจ {checkpoints.length} จุด</h3>
-                    <span className="text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-md font-semibold">
-                      สแกน QR
-                    </span>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-bold text-slate-900 text-[15px]">โมดูล 1: เดินตรวจ {checkpoints.length} จุด</h3>
+                      <span className="text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full font-bold">
+                        สแกน QR
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">สแกนป้ายยืนยันจุดตรวจ + บันทึกเช็กลิสต์ความปลอดภัย</p>
                   </div>
-                  <p className="text-xs text-slate-500 mt-0.5">สแกนป้ายยืนยันจุดตรวจ + บันทึกเช็กลิสต์ความปลอดภัย</p>
                 </div>
+                <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-sky-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
               </div>
-              <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-sky-600 transition-colors" />
-            </div>
-          </Link>
+            </Link>
 
-          {/* Quick Link: 7 Checkpoints Map Infographic */}
-          <a
-            href="/patrol_map_7_checkpoints.html"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="group block p-3.5 bg-gradient-to-r from-sky-50 to-indigo-50 hover:from-sky-100 hover:to-indigo-100 border border-sky-200/90 rounded-2xl transition-all shadow-2xs active:scale-[0.98]"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-sky-600 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
-                  <Compass className="w-5 h-5" />
+            {/* Card 2: แผนผังเส้นทางลาดตระเวน 7 จุด */}
+            <a
+              href="/patrol_map_7_checkpoints.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group block p-4 bg-white hover:bg-indigo-50/40 border border-slate-200/80 hover:border-indigo-300 rounded-2xl transition-all shadow-xs active:scale-[0.99]"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center shadow-xs shrink-0 group-hover:scale-105 transition-transform">
+                    <Compass className="w-6 h-6" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-bold text-slate-900 text-[15px]">
+                        แผนผังเส้นทางลาดตระเวน 7 จุด
+                      </h3>
+                      <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-bold">
+                        แผนที่ดาวเทียม
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      เปิดดูแผนที่ภาพถ่ายดาวเทียม จุดตรวจ 01 - 07 พร้อมภาพสถานที่จริง
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
-                    🗺️ แผนผังเส้นทางลาดตระเวน 7 จุด
-                    <span className="text-[10px] bg-sky-200/80 text-sky-800 px-1.5 py-0.2 rounded font-bold">Infographic</span>
-                  </h4>
-                  <p className="text-[11px] text-slate-500">เปิดดูแผนที่ รพ.พล จุดตรวจ 01 - 07 และคู่มือ SOP</p>
-                </div>
+                <ExternalLink className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
               </div>
-              <ExternalLink className="w-4 h-4 text-sky-600 group-hover:translate-x-0.5 transition-transform" />
-            </div>
-          </a>
+            </a>
+          </div>
 
-          <Link
-            href="/incident"
-            className={`group block p-4 bg-white hover:bg-rose-50/40 border ${
-              currentShiftIncidents.length > 0
-                ? "border-rose-400 ring-2 ring-rose-200 bg-rose-50/20"
-                : "border-rose-100 hover:border-rose-300"
-            } rounded-2xl transition-all shadow-xs active:scale-[0.98]`}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3.5">
-                <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform relative">
-                  <AlertTriangle className="w-6 h-6" />
-                  {currentShiftIncidents.length > 0 && (
-                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-600 text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-white animate-bounce">
-                      {currentShiftIncidents.length}
-                    </span>
-                  )}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-slate-900 text-base">โมดูล 2: จัดการเหตุการณ์ & แจ้งเหตุด่วน</h3>
-                    {currentShiftIncidents.length > 0 ? (
-                      <span className="text-[10px] bg-rose-600 text-white px-2 py-0.5 rounded-md font-bold animate-pulse">
-                        กะนี้ {currentShiftIncidents.length} เคส
-                      </span>
-                    ) : unresolvedIncidents.length > 0 ? (
-                      <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md font-semibold">
-                        ค้างกะก่อน {unresolvedIncidents.length} เคส
-                      </span>
-                    ) : (
-                      <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-md font-semibold">
-                        เรียบร้อย
+          {/* SECTION 2: จัดการเหตุการณ์ & งานยานพาหนะ */}
+          <div className="space-y-2 pt-1">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[11px] font-bold tracking-wider uppercase text-slate-400">
+                เหตุการณ์ & งานยานพาหนะ
+              </span>
+            </div>
+
+            {/* Card 3: จัดการเหตุการณ์ & แจ้งเหตุด่วน */}
+            <Link
+              href="/incident"
+              className={`group block p-4 bg-white hover:bg-rose-50/40 border ${
+                currentShiftIncidents.length > 0
+                  ? "border-rose-400 ring-2 ring-rose-200 bg-rose-50/20"
+                  : "border-slate-200/80 hover:border-rose-300"
+              } rounded-2xl transition-all shadow-xs active:scale-[0.99]`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 border border-rose-100 flex items-center justify-center shadow-xs shrink-0 group-hover:scale-105 transition-transform relative">
+                    <AlertTriangle className="w-6 h-6" />
+                    {currentShiftIncidents.length > 0 && (
+                      <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-600 text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-white animate-bounce">
+                        {currentShiftIncidents.length}
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-slate-500 mt-0.5">ปรับสถานะ / ปิดงานพร้อมแนบรูป / ดูย้อนหลัง • Google Drive</p>
-                </div>
-              </div>
-              <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-rose-600 transition-colors" />
-            </div>
-          </Link>
-
-          {/* DEDICATED FEATURE: VEHICLE OWNER LOOKUP (ดูว่ารถใคร 24 ชม.) */}
-          <Link
-            href="/vehicle?mode=lookup"
-            className="group block p-4 bg-gradient-to-r from-emerald-500/15 via-teal-50/80 to-sky-50/70 hover:from-emerald-500/25 border-2 border-emerald-400 hover:border-emerald-500 rounded-2xl transition-all shadow-sm hover:shadow-md active:scale-[0.98]"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3.5">
-                <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-600/30 group-hover:scale-105 transition-transform">
-                  <Search className="w-6 h-6" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-black text-slate-900 text-base">🔍 ตรวจสอบเจ้าของรถ (ดูว่ารถใคร)</h3>
-                    <span className="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded-full font-bold">
-                      24 ชม.
-                    </span>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-bold text-slate-900 text-[15px]">โมดูล 2: จัดการเหตุการณ์ & แจ้งเหตุด่วน</h3>
+                      {currentShiftIncidents.length > 0 ? (
+                        <span className="text-[10px] bg-rose-600 text-white px-2 py-0.5 rounded-full font-bold animate-pulse">
+                          กะนี้ {currentShiftIncidents.length} เคส
+                        </span>
+                      ) : unresolvedIncidents.length > 0 ? (
+                        <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold">
+                          ค้างกะก่อน {unresolvedIncidents.length} เคส
+                        </span>
+                      ) : (
+                        <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">
+                          เรียบร้อย
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">ปรับสถานะ / ปิดงานพร้อมแนบรูป / ดูย้อนหลัง • Google Drive</p>
                   </div>
-                  <p className="text-xs text-slate-600 mt-0.5">
-                    สแกนป้าย / กด 4 ตัวท้าย • รู้ชื่อ แผนก โทรหาเจ้าของรถได้ทันที
-                  </p>
                 </div>
+                <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-rose-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
               </div>
-              <ChevronRight className="w-5 h-5 text-emerald-600 group-hover:translate-x-1 transition-transform" />
-            </div>
-          </Link>
+            </Link>
 
-          <Link
-            href="/vehicle?mode=patrol"
-            className="group block p-4 bg-gradient-to-r from-sky-500/10 via-blue-50/80 to-indigo-50/60 hover:from-sky-500/20 border-2 border-sky-300 hover:border-sky-500 rounded-2xl transition-all shadow-sm hover:shadow-md active:scale-[0.98]"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3.5">
-                <div className="w-12 h-12 rounded-2xl bg-sky-600 text-white flex items-center justify-center shadow-md shadow-sky-600/30 group-hover:scale-105 transition-transform">
-                  <Car className="w-6 h-6" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-black text-slate-900 text-base">🚗 สแกนตรวจรถทุกคันใน รพ.</h3>
-                    <span className="text-[10px] bg-sky-600 text-white px-2.5 py-0.5 rounded-full font-bold">
-                      รอบ {activeRound.id}
-                    </span>
+            {/* Card 4: สแกนตรวจรถทุกคันใน รพ. */}
+            <Link
+              href="/vehicle?mode=patrol"
+              className="group block p-4 bg-white hover:bg-sky-50/40 border border-slate-200/80 hover:border-sky-300 rounded-2xl transition-all shadow-xs active:scale-[0.99]"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-12 h-12 rounded-2xl bg-sky-50 text-sky-600 border border-sky-100 flex items-center justify-center shadow-xs shrink-0 group-hover:scale-105 transition-transform">
+                    <Car className="w-6 h-6" />
                   </div>
-                  <p className="text-xs text-slate-600 mt-0.5">
-                    สแกนตรวจรถบุคลากร/คนนอก • รอบนี้: <strong className="text-sky-700">{activeRoundScansCount} คัน</strong> • วันนี้สะสม: <strong className="text-slate-900">{todayScansCount} คัน</strong>
-                  </p>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-bold text-slate-900 text-[15px]">สแกนตรวจรถทุกคันใน รพ.</h3>
+                      <span className="text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full font-bold">
+                        รอบ {activeRound.id}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      ตรวจรถบุคลากร/คนนอก • รอบนี้: <strong className="text-sky-700 font-bold">{activeRoundScansCount} คัน</strong> • วันนี้: <strong className="text-slate-800 font-bold">{todayScansCount} คัน</strong>
+                    </p>
+                  </div>
                 </div>
+                <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-sky-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
               </div>
-              <ChevronRight className="w-5 h-5 text-sky-600 group-hover:translate-x-1 transition-transform" />
+            </Link>
+
+            {/* Card 5: ตรวจสอบเจ้าของรถ (ดูว่ารถใคร) */}
+            <Link
+              href="/vehicle?mode=lookup"
+              className="group block p-4 bg-white hover:bg-emerald-50/40 border border-slate-200/80 hover:border-emerald-300 rounded-2xl transition-all shadow-xs active:scale-[0.99]"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center shadow-xs shrink-0 group-hover:scale-105 transition-transform">
+                    <Search className="w-6 h-6" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-bold text-slate-900 text-[15px]">ตรวจสอบเจ้าของรถ (ดูว่ารถใคร)</h3>
+                      <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">
+                        24 ชม.
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      สแกนป้าย / กด 4 ตัวท้าย • รู้ชื่อ แผนก โทรหาเจ้าของรถได้ทันที
+                    </p>
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+              </div>
+            </Link>
+          </div>
+
+          {/* SECTION 3: ส่งมอบเวรและรายงานผล */}
+          <div className="space-y-2 pt-1 pb-1">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[11px] font-bold tracking-wider uppercase text-slate-400">
+                สรุปผล & ส่งมอบเวร
+              </span>
+              <span className="text-[11px] font-medium text-emerald-600">LINE รปภ.</span>
             </div>
-          </Link>
+
+            {/* Card 6: รายงานผลการเดินตรวจ & ส่งมอบเวร */}
+            <button
+              onClick={() => setShowShiftReportModal(true)}
+              className="w-full group block p-4 bg-gradient-to-r from-emerald-50/90 via-teal-50/50 to-sky-50/40 hover:from-emerald-100/70 hover:to-sky-100/60 border border-emerald-200/90 hover:border-emerald-300 rounded-2xl transition-all shadow-xs active:scale-[0.99] text-left cursor-pointer"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-xs shrink-0 group-hover:scale-105 transition-transform">
+                    <Send className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-bold text-slate-900 text-[15px]">
+                        รายงานผลการเดินตรวจ & ส่งมอบเวร
+                      </h3>
+                      <span className="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded-full font-bold">
+                        ช่วงต่อกะ
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">
+                      สรุปผลงานอัตโนมัติ พร้อมส่งภาพเข้ากลุ่มไลน์ รปภ.
+                    </p>
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5 text-emerald-600/70 group-hover:text-emerald-700 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+              </div>
+            </button>
+          </div>
         </div>
       </main>
 
