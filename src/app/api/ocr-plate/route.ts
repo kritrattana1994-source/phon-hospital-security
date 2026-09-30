@@ -14,7 +14,7 @@ function getLocalTessdataDir(): string | null {
 
   for (const candidate of candidates) {
     try {
-      const targetFile = path.join(candidate, "eng.traineddata");
+      const targetFile = path.join(candidate, "tha.traineddata");
       if (fs.existsSync(targetFile)) {
         return candidate;
       }
@@ -23,19 +23,67 @@ function getLocalTessdataDir(): string | null {
   return null;
 }
 
-export function extractLicensePlateNumber(rawText: string): { plateNumber: string; candidates: string[]; cleanText: string } {
-  const cleanText = rawText.replace(/\r?\n/g, " ").trim();
+export interface ExtractedLicensePlate {
+  fullPlate: string;
+  plateNumber: string;
+  digits: string;
+  letters: string;
+  candidates: string[];
+  cleanText: string;
+}
+
+export function extractLicensePlate(rawText: string): ExtractedLicensePlate {
+  const cleanLine = rawText
+    .replace(/[\|\[\]\(\)\{\}\:\;\*\_\"\'\<\>\=\-\–]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
   const candidates: string[] = [];
 
-  // Pattern 1: Spaced 4 digits e.g. "9 789", "97 89", "9 7 8 9", "9789"
-  const spaced4 = cleanText.match(/\b(\d)\s*(\d)\s*(\d)\s*(\d)\b/);
+  // 1. Thai Plate: Optional leading digit 1-9, 1 to 3 Thai consonants, 1 to 4 digits
+  const thaiMatch = cleanLine.match(/(?:^|[^\u0E01-\u0E2E])([1-9]?\s*[\u0E01-\u0E2E]\s*[\u0E01-\u0E2E](?:\s*[\u0E01-\u0E2E])?)\s*([0-9]{1,4})/);
+  if (thaiMatch) {
+    const letters = thaiMatch[1].replace(/\s+/g, "");
+    const digits = thaiMatch[2];
+    const fullPlate = `${letters} ${digits}`;
+    candidates.push(fullPlate);
+    candidates.push(digits);
+    return {
+      fullPlate,
+      plateNumber: fullPlate,
+      digits,
+      letters,
+      candidates,
+      cleanText: cleanLine,
+    };
+  }
+
+  // 2. English Plate: 1 to 3 English letters, 1 to 4 digits
+  const engMatch = cleanLine.match(/(?:^|[^A-Za-z])([A-Za-z]{1,3})\s*([0-9]{1,4})/);
+  if (engMatch) {
+    const letters = engMatch[1].toUpperCase();
+    const digits = engMatch[2];
+    const fullPlate = `${letters} ${digits}`;
+    candidates.push(fullPlate);
+    candidates.push(digits);
+    return {
+      fullPlate,
+      plateNumber: fullPlate,
+      digits,
+      letters,
+      candidates,
+      cleanText: cleanLine,
+    };
+  }
+
+  // 3. Fallback: Digit sequences
+  const spaced4 = cleanLine.match(/\b(\d)\s*(\d)\s*(\d)\s*(\d)\b/);
   if (spaced4) {
     const p4 = spaced4[1] + spaced4[2] + spaced4[3] + spaced4[4];
     candidates.push(p4);
   }
 
-  // Pattern 2: Normal digit chunks
-  const digitChunks = cleanText.match(/\d+/g) || [];
+  const digitChunks = cleanLine.match(/\d+/g) || [];
   for (const chunk of digitChunks) {
     if (chunk.length >= 2 && chunk.length <= 4) {
       if (!candidates.includes(chunk)) candidates.push(chunk);
@@ -45,14 +93,22 @@ export function extractLicensePlateNumber(rawText: string): { plateNumber: strin
     }
   }
 
-  // Prioritize 4-digit numbers, then 3-digit, then 2-digit
   const four = candidates.find((c) => c.length === 4);
   const three = candidates.find((c) => c.length === 3);
   const two = candidates.find((c) => c.length === 2);
+  const bestDigits = four || three || two || candidates[0] || "";
 
-  const bestPlate = four || three || two || candidates[0] || "";
-  return { plateNumber: bestPlate, candidates, cleanText };
+  return {
+    fullPlate: bestDigits,
+    plateNumber: bestDigits,
+    digits: bestDigits,
+    letters: "",
+    candidates,
+    cleanText: cleanLine,
+  };
 }
+
+export const extractLicensePlateNumber = extractLicensePlate;
 
 export async function POST(req: NextRequest) {
   let worker: any = null;
@@ -78,13 +134,13 @@ export async function POST(req: NextRequest) {
 
     const localDir = getLocalTessdataDir();
     if (localDir) {
-      worker = await createWorker("eng", 1, {
+      worker = await createWorker(["tha", "eng"], 1, {
         langPath: localDir,
         gzip: false,
         cacheMethod: "none",
       });
     } else {
-      worker = await createWorker("eng", 1, {
+      worker = await createWorker(["tha", "eng"], 1, {
         langPath: "https://raw.githubusercontent.com/naptha/tessdata/gh-pages/4.0.0",
         gzip: true,
         cacheMethod: "readOnly",
@@ -93,17 +149,19 @@ export async function POST(req: NextRequest) {
 
     await worker.setParameters({
       tessedit_pageseg_mode: PSM.AUTO,
-      tessedit_char_whitelist: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ- ",
     });
 
     const { data } = await worker.recognize(buffer);
     const rawText = data?.text || "";
-    const { plateNumber, candidates, cleanText } = extractLicensePlateNumber(rawText);
+    const { fullPlate, plateNumber, digits, letters, candidates, cleanText } = extractLicensePlate(rawText);
 
     return NextResponse.json({
-      success: !!plateNumber,
+      success: !!fullPlate,
       rawText: cleanText,
-      plateNumber,
+      plateNumber: fullPlate,
+      fullPlate,
+      digits,
+      letters,
       matches: candidates,
     });
   } catch (error: any) {

@@ -94,6 +94,54 @@ function resizeImageBase64(file: File, maxDimension = 1200): Promise<string> {
   });
 }
 
+export function findMatchingStaffVehicle(
+  scannedPlate: string,
+  staffList: StaffVehicle[]
+): StaffVehicle | undefined {
+  if (!scannedPlate || !staffList.length) return undefined;
+  const cleanScanned = scannedPlate.replace(/[\s\-_]/g, "").toUpperCase();
+  if (!cleanScanned) return undefined;
+
+  // 1. Exact match (spaces & dashes removed)
+  const exact = staffList.find((v) => {
+    const vClean = v.plateNumber.replace(/[\s\-_]/g, "").toUpperCase();
+    return vClean === cleanScanned;
+  });
+  if (exact) return exact;
+
+  // 2. Both letters and digits present (e.g. "ขน 9789" or "1กข 1234")
+  const scannedDigits = cleanScanned.match(/\d+$/)?.[0];
+  const scannedLetters = cleanScanned.replace(/\d+$/, "");
+
+  if (scannedDigits && scannedLetters) {
+    const match = staffList.find((v) => {
+      const vClean = v.plateNumber.replace(/[\s\-_]/g, "").toUpperCase();
+      const vDigits = vClean.match(/\d+$/)?.[0];
+      const vLetters = vClean.replace(/\d+$/, "");
+      return vDigits === scannedDigits && (vLetters.includes(scannedLetters) || scannedLetters.includes(vLetters));
+    });
+    if (match) return match;
+  }
+
+  // 3. Substring match (e.g. "ขน 9789 ขอนแก่น" contains "ขน9789")
+  const subMatch = staffList.find((v) => {
+    const vClean = v.plateNumber.replace(/[\s\-_]/g, "").toUpperCase();
+    return vClean.includes(cleanScanned) || cleanScanned.includes(vClean);
+  });
+  if (subMatch) return subMatch;
+
+  // 4. Numeric-only match (if only digits were detected)
+  if (/^\d+$/.test(cleanScanned)) {
+    const numMatch = staffList.find((v) => {
+      const vClean = v.plateNumber.replace(/[\s\-_]/g, "").toUpperCase();
+      return vClean.endsWith(cleanScanned) || vClean.includes(cleanScanned);
+    });
+    if (numMatch) return numMatch;
+  }
+
+  return undefined;
+}
+
 function VehicleContent() {
   const router = useRouter();
   const { currentUser, staffVehicles, addParkingScan, parkingScans, googleDriveWebhookUrl } = useStore();
@@ -330,14 +378,15 @@ function VehicleContent() {
     const query = (queryOverride !== undefined ? queryOverride : dialQuery).trim();
     if (!query) return;
 
-    const clean = query.replace(/\s+/g, "").toLowerCase();
+    const clean = query.replace(/[\s\-_]/g, "").toLowerCase();
     const results = staffVehicles.filter((v) => {
-      const vPlateClean = v.plateNumber.replace(/\s+/g, "").toLowerCase();
+      const vPlateClean = v.plateNumber.replace(/[\s\-_]/g, "").toLowerCase();
       const phoneClean = (v.phone || "").replace(/[^0-9]/g, "");
       const ownerClean = (v.ownerName || "").toLowerCase();
       const deptClean = (v.department || "").toLowerCase();
 
       return (
+        vPlateClean === clean ||
         vPlateClean.includes(clean) ||
         clean.includes(vPlateClean) ||
         phoneClean.includes(clean) ||
@@ -350,6 +399,14 @@ function VehicleContent() {
     setHasSearched(true);
     setMatchedVehicles(results);
     setReportedIssue(null);
+
+    // If query has direct/exact match in staff database, prioritize it
+    const directMatch = findMatchingStaffVehicle(query, staffVehicles);
+    if (directMatch) {
+      setSelectedVehicle(directMatch);
+      playBeep("staff");
+      return;
+    }
 
     if (results.length === 1) {
       setSelectedVehicle(results[0]);
@@ -694,12 +751,8 @@ function VehicleContent() {
         setScanPulse(true);
         setTimeout(() => setScanPulse(false), 1200);
 
-        // Check if staff vehicle
-        const cleanScan = plate.replace(/\s+/g, "").toUpperCase();
-        const staff = staffVehicles.find((v) => {
-          const vClean = v.plateNumber.replace(/\s+/g, "").toUpperCase();
-          return vClean === cleanScan || vClean.includes(cleanScan) || cleanScan.includes(vClean);
-        });
+        // Check if staff vehicle using high-accuracy plate matcher
+        const staff = findMatchingStaffVehicle(plate, staffVehicles);
 
         const isStaff = !!staff;
         playBeep(isStaff ? "staff" : "outside");
@@ -807,15 +860,7 @@ function VehicleContent() {
 
     lastScannedRef.current[plate] = now;
 
-    const cleanScanPlate = plate.replace(/\s+/g, "").toUpperCase();
-    const staff = staffVehicles.find((v) => {
-      const vClean = v.plateNumber.replace(/\s+/g, "").toUpperCase();
-      return (
-        vClean === cleanScanPlate ||
-        vClean.includes(cleanScanPlate) ||
-        cleanScanPlate.includes(vClean)
-      );
-    });
+    const staff = findMatchingStaffVehicle(plate, staffVehicles);
 
     const isStaff = !!staff;
     const roundLabel = selectedRound === "22:00" ? "รอบดึก 22:00 น." : "รอบเช้า 06:00 น.";
@@ -1027,7 +1072,7 @@ function VehicleContent() {
             <div className="p-4 bg-white border border-sky-100 rounded-3xl shadow-sm space-y-3">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-slate-700">
-                  ใส่เลขทะเบียน 4 ตัวท้าย (หรือพิมพ์ค้นหา)
+                  ใส่เลขทะเบียน (เช่น ขน 9789 หรือกดเลข 4 ตัวท้าย)
                 </label>
                 {dialQuery && (
                   <button
@@ -1052,7 +1097,7 @@ function VehicleContent() {
                     type="text"
                     value={dialQuery}
                     onChange={(e) => setDialQuery(e.target.value)}
-                    placeholder="กดเลขบนแป้นด้านล่าง..."
+                    placeholder="พิมพ์หมวดอักษร+เลข หรือกดเลขด้านล่าง..."
                     className="w-full pl-4 pr-10 py-3.5 bg-slate-50 border-2 border-slate-200 rounded-2xl text-slate-900 placeholder-slate-400 font-mono text-xl font-bold tracking-widest text-center focus:outline-none focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-200 transition-all"
                   />
                   {dialQuery && (
@@ -1606,7 +1651,7 @@ function VehicleContent() {
                         <Loader2 className="w-7 h-7 text-sky-400 animate-spin" />
                       </div>
                       <span className="text-sm font-bold text-white tracking-wide">กำลังวิเคราะห์ป้ายทะเบียน...</span>
-                      <span className="text-[11px] text-slate-300 mt-1">AI กำลังอ่านตัวเลขบนป้าย (เสี้ยววินาที)</span>
+                      <span className="text-[11px] text-slate-300 mt-1">AI กำลังอ่านตัวอักษรและตัวเลขบนป้าย (เสี้ยววินาที)</span>
                     </div>
                   )}
 
@@ -1650,9 +1695,9 @@ function VehicleContent() {
                       <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-400/40 text-amber-400 flex items-center justify-center mb-2 shadow-lg">
                         <AlertOctagon className="w-7 h-7 stroke-[2.5]" />
                       </div>
-                      <span className="text-sm font-bold text-amber-300">อ่านตัวเลขไม่ชัดเจน</span>
+                      <span className="text-sm font-bold text-amber-300">อ่านป้ายทะเบียนไม่ชัดเจน</span>
                       <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                        {capturedResult.message || "กรุณาเล็งให้ป้ายทะเบียนอยู่ตรงกลางกรอบสีเขียว แล้วกดจับภาพใหม่อีกครั้ง"}
+                        {capturedResult.message || "กรุณาเล็งให้ป้ายทะเบียน (ตัวอักษรและตัวเลข) อยู่ตรงกลางกรอบสีเขียว แล้วกดจับภาพใหม่อีกครั้ง"}
                       </p>
 
                       <button
