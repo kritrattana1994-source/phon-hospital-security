@@ -7,11 +7,10 @@ import path from "path";
 let cachedWorker: any = null;
 let isInitializing = false;
 
-function getLocalTessdataPath(): string | undefined {
+function getTessdataConfig(): { langPath: string; gzip: boolean; cacheMethod: "none" | "readOnly" } {
   const candidates = [
     path.join(process.cwd(), "public", "tessdata"),
     path.join(process.cwd(), "tessdata"),
-    process.cwd(),
     path.join(__dirname, "..", "..", "..", "..", "public", "tessdata"),
     path.join(__dirname, "..", "..", "..", "..", "tessdata"),
   ];
@@ -20,37 +19,41 @@ function getLocalTessdataPath(): string | undefined {
     try {
       const targetFile = path.join(candidate, "eng.traineddata");
       if (fs.existsSync(targetFile)) {
-        return candidate;
+        return { langPath: candidate, gzip: false, cacheMethod: "none" };
       }
     } catch {}
   }
-  return undefined;
+
+  // Reliable remote CDN with HTTP 200 OK (never returns 404 like jsdelivr)
+  return {
+    langPath: "https://raw.githubusercontent.com/naptha/tessdata/gh-pages/4.0.0",
+    gzip: true,
+    cacheMethod: "readOnly",
+  };
 }
 
 async function getOcrWorker() {
   if (cachedWorker) return cachedWorker;
 
   if (isInitializing) {
-    while (isInitializing) {
+    let waitCount = 0;
+    while (isInitializing && waitCount < 100) {
       await new Promise((resolve) => setTimeout(resolve, 50));
+      waitCount++;
     }
     if (cachedWorker) return cachedWorker;
   }
 
   isInitializing = true;
   try {
-    const langPath = getLocalTessdataPath();
-    const options: any = {
-      cacheMethod: "none",
-      gzip: false,
-    };
-    if (langPath) {
-      options.langPath = langPath;
-    }
-
-    const worker = await createWorker("eng", 1, options);
+    const config = getTessdataConfig();
+    const worker = await createWorker("eng", 1, {
+      langPath: config.langPath,
+      gzip: config.gzip,
+      cacheMethod: config.cacheMethod,
+    });
     await worker.setParameters({
-      tessedit_pageseg_mode: PSM.SPARSE_TEXT,
+      tessedit_pageseg_mode: PSM.AUTO,
       tessedit_char_whitelist: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ- ",
     });
     cachedWorker = worker;
@@ -58,6 +61,37 @@ async function getOcrWorker() {
   } finally {
     isInitializing = false;
   }
+}
+
+function extractLicensePlateNumber(rawText: string): { plateNumber: string; candidates: string[]; cleanText: string } {
+  const cleanText = rawText.replace(/\r?\n/g, " ").trim();
+  const candidates: string[] = [];
+
+  // Pattern 1: Spaced 4 digits e.g. "9 789", "97 89", "9 7 8 9", "9789"
+  const spaced4 = cleanText.match(/\b(\d)\s*(\d)\s*(\d)\s*(\d)\b/);
+  if (spaced4) {
+    const p4 = spaced4[1] + spaced4[2] + spaced4[3] + spaced4[4];
+    candidates.push(p4);
+  }
+
+  // Pattern 2: Normal digit chunks
+  const digitChunks = cleanText.match(/\d+/g) || [];
+  for (const chunk of digitChunks) {
+    if (chunk.length >= 2 && chunk.length <= 4) {
+      if (!candidates.includes(chunk)) candidates.push(chunk);
+    } else if (chunk.length > 4) {
+      const last4 = chunk.slice(-4);
+      if (!candidates.includes(last4)) candidates.push(last4);
+    }
+  }
+
+  // Prioritize 4-digit numbers, then 3-digit, then 2-digit
+  const four = candidates.find((c) => c.length === 4);
+  const three = candidates.find((c) => c.length === 3);
+  const two = candidates.find((c) => c.length === 2);
+
+  const bestPlate = four || three || two || candidates[0] || "";
+  return { plateNumber: bestPlate, candidates, cleanText };
 }
 
 export async function POST(req: NextRequest) {
@@ -96,15 +130,15 @@ export async function POST(req: NextRequest) {
         } catch {}
         cachedWorker = null;
 
-        // Fallback: create fresh worker with local langPath
-        const langPath = getLocalTessdataPath();
+        // Fallback: create fresh worker with safe CDN config
+        const config = getTessdataConfig();
         const oneTimeWorker = await createWorker("eng", 1, {
-          ...(langPath ? { langPath } : {}),
-          cacheMethod: "none",
-          gzip: false,
+          langPath: config.langPath,
+          gzip: config.gzip,
+          cacheMethod: config.cacheMethod,
         });
         await oneTimeWorker.setParameters({
-          tessedit_pageseg_mode: PSM.SPARSE_TEXT,
+          tessedit_pageseg_mode: PSM.AUTO,
           tessedit_char_whitelist: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ- ",
         });
         const { data } = await oneTimeWorker.recognize(buffer);
@@ -114,7 +148,7 @@ export async function POST(req: NextRequest) {
     })();
 
     const timeoutPromise = new Promise<string>((_, reject) =>
-      setTimeout(() => reject(new Error("OCR timeout")), 3500)
+      setTimeout(() => reject(new Error("OCR timeout")), 8500)
     );
 
     let rawText = "";
@@ -130,47 +164,12 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Clean text and extract numbers
-    const cleanText = rawText.replace(/\r?\n/g, " ").trim();
-    const digitChunks = cleanText.match(/\d+/g) || [];
-
-    const candidates: string[] = [];
-    for (const chunk of digitChunks) {
-      if (chunk.length >= 1 && chunk.length <= 4) {
-        candidates.push(chunk);
-      } else if (chunk.length === 5) {
-        // If 5 digits, check for duplicate adjacent digits (e.g. 56113 -> 5613)
-        const dedup = chunk.replace(/(.)\1+/g, "$1");
-        if (dedup.length >= 2 && dedup.length <= 4) {
-          candidates.push(dedup);
-        }
-        // Or strip leading motorcycle code digit (e.g. 15613 -> 5613)
-        candidates.push(chunk.slice(-4));
-      } else if (chunk.length > 5) {
-        candidates.push(chunk.slice(-4));
-      }
-    }
-
-    // Prioritize 4-digit numbers, then 3-digit, then 2-digit
-    let bestPlate = "";
-    const fourDigits = candidates.filter((d) => d.length === 4);
-    const threeDigits = candidates.filter((d) => d.length === 3);
-    const twoDigits = candidates.filter((d) => d.length === 2);
-
-    if (fourDigits.length > 0) {
-      bestPlate = fourDigits[0];
-    } else if (threeDigits.length > 0) {
-      bestPlate = threeDigits[0];
-    } else if (twoDigits.length > 0) {
-      bestPlate = twoDigits[0];
-    } else if (candidates.length > 0) {
-      bestPlate = candidates[0];
-    }
+    const { plateNumber, candidates, cleanText } = extractLicensePlateNumber(rawText);
 
     return NextResponse.json({
-      success: !!bestPlate,
+      success: !!plateNumber,
       rawText: cleanText,
-      plateNumber: bestPlate,
+      plateNumber,
       matches: candidates,
     });
   } catch (error: any) {

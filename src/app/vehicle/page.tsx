@@ -139,6 +139,8 @@ function VehicleContent() {
   // --- Auto-Scan & Floating Scan Alert States ---
   const [autoScanActive, setAutoScanActive] = useState(true);
   const [isAutoScanningFrame, setIsAutoScanningFrame] = useState(false);
+  const [lastDetectedPlate, setLastDetectedPlate] = useState<string | null>(null);
+  const [scanPulse, setScanPulse] = useState(false);
   const [floatingNotification, setFloatingNotification] = useState<{
     id: string;
     plate: string;
@@ -356,7 +358,7 @@ function VehicleContent() {
     }
   };
 
-  // ตัดภาพเฉพาะโซนกรอบเล็งเป้า (Viewfinder HUD) ตรงกลาง เพื่อให้ OCR วิเคราะห์เลขทะเบียนได้แม่นยำและเร็วที่สุด (เสี้ยววินาที)
+  // ตัดภาพเฉพาะโซนกรอบเล็งเป้า (Viewfinder HUD) ตรงกลาง เพื่อให้ OCR วิเคราะห์เลขทะเบียนได้แม่นยำและเร็วที่สุด
   const captureOcrScanArea = (): { cropDataUrl: string; fullDataUrl: string } | null => {
     if (!videoRef.current) return null;
     try {
@@ -373,36 +375,23 @@ function VehicleContent() {
       const fullCtx = fullCanvas.getContext("2d");
       if (!fullCtx) return null;
       fullCtx.drawImage(video, 0, 0, fullCanvas.width, fullCanvas.height);
-      const fullDataUrl = fullCanvas.toDataURL("image/jpeg", 0.80);
+      const fullDataUrl = fullCanvas.toDataURL("image/jpeg", 0.85);
 
-      // ตัดเฉพาะกรอบกลาง (ความกว้าง 72% ความสูง 38% ตรงเป้าเล็ง)
-      const cropW = Math.round(vw * 0.72);
-      const cropH = Math.round(vh * 0.38);
+      // ตัดเฉพาะกรอบกลาง (ความกว้าง 78% ความสูง 45% ตรงเป้าเล็ง เผื่อขอบรอบป้ายทะเบียนเพื่อความแม่นยำสูงสุด)
+      const cropW = Math.round(vw * 0.78);
+      const cropH = Math.round(vh * 0.45);
       const cropX = Math.round((vw - cropW) / 2);
       const cropY = Math.round((vh - cropH) / 2);
 
+      const targetWidth = Math.min(cropW, 768);
       const cropCanvas = document.createElement("canvas");
-      cropCanvas.width = 480;
-      cropCanvas.height = Math.round((480 * cropH) / cropW);
+      cropCanvas.width = targetWidth;
+      cropCanvas.height = Math.round((targetWidth * cropH) / cropW);
       const cropCtx = cropCanvas.getContext("2d");
       if (!cropCtx) return null;
 
       cropCtx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropCanvas.width, cropCanvas.height);
-
-      // เพิ่มความคมชัด (Contrast Enhancement) เพื่อให้อ่านตัวเลขอัตโนมัติได้เฉียบคม
-      const imgData = cropCtx.getImageData(0, 0, cropCanvas.width, cropCanvas.height);
-      const d = imgData.data;
-      for (let i = 0; i < d.length; i += 4) {
-        const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-        const contrastGray = ((gray - 128) * 1.35) + 128;
-        const clamped = Math.min(255, Math.max(0, contrastGray));
-        d[i] = clamped;
-        d[i + 1] = clamped;
-        d[i + 2] = clamped;
-      }
-      cropCtx.putImageData(imgData, 0, 0);
-
-      const cropDataUrl = cropCanvas.toDataURL("image/jpeg", 0.85);
+      const cropDataUrl = cropCanvas.toDataURL("image/jpeg", 0.88);
       return { cropDataUrl, fullDataUrl };
     } catch (err) {
       console.warn("captureOcrScanArea notice:", err);
@@ -431,7 +420,7 @@ function VehicleContent() {
       setIsAutoScanningFrame(true);
 
       const controller = new AbortController();
-      const abortTimer = setTimeout(() => controller.abort(), 2200);
+      const abortTimer = setTimeout(() => controller.abort(), 6500);
 
       try {
         const res = await fetch("/api/ocr-plate", {
@@ -445,6 +434,10 @@ function VehicleContent() {
 
         if (data.success && data.plateNumber && data.plateNumber.length >= 2) {
           const plate = data.plateNumber.trim().toUpperCase();
+          setLastDetectedPlate(plate);
+          setScanPulse(true);
+          setTimeout(() => setScanPulse(false), 1200);
+
           const lastTime = lastScannedRef.current[plate] || 0;
           const now = Date.now();
 
@@ -462,8 +455,8 @@ function VehicleContent() {
       }
     };
 
-    // ตรวจจับทุก 1.1 วินาทีขณะเล็งกล้อง
-    autoScanTimerRef.current = setInterval(runAutoScan, 1100);
+    // ตรวจจับทุก 1.2 วินาทีขณะเล็งกล้อง
+    autoScanTimerRef.current = setInterval(runAutoScan, 1200);
 
     return () => {
       if (autoScanTimerRef.current) {
@@ -475,9 +468,9 @@ function VehicleContent() {
 
   const performOcrOnImage = async (dataUrl: string, targetMode: "lookup" | "patrol", fullImageUrl?: string) => {
     setIsOcrProcessing(true);
-    setOcrStatusText("กำลังตรวจจับเลขทะเบียน...");
+    setOcrStatusText("กำลังตรวจจับเลขทะเบียนด้วย AI...");
     const controller = new AbortController();
-    const abortTimer = setTimeout(() => controller.abort(), 3500);
+    const abortTimer = setTimeout(() => controller.abort(), 12000);
 
     try {
       const res = await fetch("/api/ocr-plate", {
@@ -490,6 +483,9 @@ function VehicleContent() {
       const data = await res.json();
       if (data.success && data.plateNumber) {
         const plate = data.plateNumber;
+        setLastDetectedPlate(plate);
+        setScanPulse(true);
+        setTimeout(() => setScanPulse(false), 1200);
         if (targetMode === "lookup") {
           setDialQuery(plate);
           handlePerformSearch(plate);
@@ -503,6 +499,38 @@ function VehicleContent() {
           await handleContinuousScan(plate, undefined, fullImageUrl || dataUrl);
         }
       } else {
+        // หากตัดกรอบกลางแล้วไม่พบ ลองสแกนภาพเต็มมุมกว้างสำรองทันที
+        if (fullImageUrl && fullImageUrl !== dataUrl) {
+          setOcrStatusText("กำลังตรวจจับภาพมุมกว้างสำรอง...");
+          try {
+            const fallbackRes = await fetch("/api/ocr-plate", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ image: fullImageUrl }),
+            });
+            const fallbackData = await fallbackRes.json();
+            if (fallbackData.success && fallbackData.plateNumber) {
+              const plate = fallbackData.plateNumber;
+              setLastDetectedPlate(plate);
+              setScanPulse(true);
+              setTimeout(() => setScanPulse(false), 1200);
+              if (targetMode === "lookup") {
+                setDialQuery(plate);
+                handlePerformSearch(plate);
+                addToast({
+                  plate,
+                  isStaff: false,
+                  type: "success",
+                  message: `ตรวจพบเลขทะเบียน ${plate} สำเร็จ`,
+                });
+              } else {
+                await handleContinuousScan(plate, undefined, fullImageUrl);
+              }
+              return;
+            }
+          } catch {}
+        }
+
         const msg = "ไม่สามารถอ่านเลขทะเบียนจากภาพได้ชัดเจน กรุณาส่องตรงป้ายอีกครั้ง หรือกดค้นหาด้วยแป้นตัวเลข";
         if (targetMode === "lookup") {
           alert(`⚠️ ${msg}`);
@@ -1371,7 +1399,11 @@ function VehicleContent() {
               {/* Viewfinder HUD */}
               <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-6 z-10">
                 <div className={`w-full max-w-[280px] h-28 border-2 rounded-2xl relative shadow-2xl transition-all duration-300 ${
-                  isAutoScanningFrame ? "border-emerald-400 ring-2 ring-emerald-400/50 shadow-emerald-500/30" : "border-sky-400/80"
+                  scanPulse
+                    ? "border-emerald-300 ring-4 ring-emerald-400/80 shadow-emerald-400/50 scale-105"
+                    : isAutoScanningFrame
+                    ? "border-emerald-400 ring-2 ring-emerald-400/50 shadow-emerald-500/30"
+                    : "border-sky-400/80"
                 }`}>
                   <div className="absolute -top-1 -left-1 w-4 h-4 border-t-4 border-l-4 border-emerald-400 rounded-tl-lg" />
                   <div className="absolute -top-1 -right-1 w-4 h-4 border-t-4 border-r-4 border-emerald-400 rounded-tr-lg" />
@@ -1382,6 +1414,23 @@ function VehicleContent() {
                   <div className={`w-full h-0.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent absolute top-1/2 -translate-y-1/2 ${
                     isAutoScanningFrame ? "animate-ping opacity-100" : "animate-pulse opacity-70"
                   }`} />
+
+                  {/* Live OCR detection badge inside HUD */}
+                  {lastDetectedPlate ? (
+                    <div className="absolute -top-9 left-0 right-0 text-center animate-in zoom-in-95 duration-200">
+                      <span className="text-xs font-black text-slate-950 bg-emerald-400 px-3.5 py-1 rounded-full shadow-lg border border-emerald-200 font-mono tracking-wider inline-flex items-center gap-1.5">
+                        <Check className="w-3.5 h-3.5 stroke-[3]" />
+                        <span>พบเลขทะเบียน: {lastDetectedPlate}</span>
+                      </span>
+                    </div>
+                  ) : isAutoScanningFrame ? (
+                    <div className="absolute -top-7 left-0 right-0 text-center">
+                      <span className="text-[10px] font-bold text-emerald-300 bg-slate-900/80 px-2.5 py-0.5 rounded-full border border-emerald-500/30 inline-flex items-center gap-1">
+                        <Loader2 className="w-2.5 h-2.5 animate-spin text-emerald-400" />
+                        <span>AI กำลังอ่านป้าย...</span>
+                      </span>
+                    </div>
+                  ) : null}
 
                   <div className="absolute -bottom-6 left-0 right-0 text-center">
                     <span className="text-[10px] font-bold text-white/95 bg-slate-900/90 px-3 py-0.5 rounded-full backdrop-blur-xs border border-white/10 shadow-sm">
