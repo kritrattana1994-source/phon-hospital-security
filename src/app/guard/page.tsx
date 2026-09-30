@@ -16,7 +16,9 @@ import {
   CheckCircle2, 
   Search,
   Send,
-  FileText
+  FileText,
+  Compass,
+  ExternalLink
 } from "lucide-react";
 import Link from "next/link";
 import HospitalBrand from "@/components/HospitalBrand";
@@ -398,6 +400,30 @@ export default function GuardPage() {
               <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-sky-600 transition-colors" />
             </div>
           </Link>
+
+          {/* Quick Link: 7 Checkpoints Map Infographic */}
+          <a
+            href="/patrol_map_7_checkpoints.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group block p-3.5 bg-gradient-to-r from-sky-50 to-indigo-50 hover:from-sky-100 hover:to-indigo-100 border border-sky-200/90 rounded-2xl transition-all shadow-2xs active:scale-[0.98]"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-sky-600 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
+                  <Compass className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                    🗺️ แผนผังเส้นทางลาดตระเวน 7 จุด
+                    <span className="text-[10px] bg-sky-200/80 text-sky-800 px-1.5 py-0.2 rounded font-bold">Infographic</span>
+                  </h4>
+                  <p className="text-[11px] text-slate-500">เปิดดูแผนที่ รพ.พล จุดตรวจ 01 - 07 และคู่มือ SOP</p>
+                </div>
+              </div>
+              <ExternalLink className="w-4 h-4 text-sky-600 group-hover:translate-x-0.5 transition-transform" />
+            </div>
+          </a>
 
           <Link
             href="/incident"

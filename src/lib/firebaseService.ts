@@ -1,8 +1,9 @@
-import { db, storage } from "./firebase";
+import { db } from "./firebase";
 import { 
   collection, 
   doc, 
   setDoc, 
+  getDoc,
   getDocs, 
   onSnapshot, 
   deleteDoc,
@@ -11,7 +12,7 @@ import {
   orderBy,
   limit
 } from "firebase/firestore";
-import { ref, uploadString, getDownloadURL } from "firebase/storage";
+import { uploadImageToDrive } from "./uploadToDrive";
 import { 
   PatrolLog, 
   ParkingScan, 
@@ -30,31 +31,46 @@ import {
 } from "./store";
 
 // ==========================================
-// 1. Firebase Storage: Image Upload
+// 1. Google Drive Image Upload (Zero Firebase Storage usage)
 // ==========================================
 export async function uploadIncidentImage(dataUrl: string, incidentId?: string): Promise<string> {
-  try {
-    if (!dataUrl || !dataUrl.startsWith("data:image")) {
-      return dataUrl; // Return as-is if already a remote URL
-    }
-    const filename = `incident_${incidentId || Date.now()}_${Math.random().toString(36).substring(2, 7)}.jpg`;
-    const storageRef = ref(storage, `incidents/${filename}`);
-    
-    // Upload with strict 2.5s timeout to prevent hanging on slow network or missing storage rules
-    const uploadTask = (async () => {
-      await uploadString(storageRef, dataUrl, "data_url");
-      return await getDownloadURL(storageRef);
-    })();
-
-    const timeoutTask = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Storage timeout")), 2500)
-    );
-
-    return await Promise.race([uploadTask, timeoutTask]);
-  } catch (error) {
-    console.warn("Firebase Storage upload fallback to local dataUrl:", error);
-    return dataUrl; // fallback to compressed dataUrl immediately
+  if (!dataUrl || !dataUrl.startsWith("data:image")) {
+    return dataUrl;
   }
+  try {
+    const driveUrl = await uploadImageToDrive({
+      image: dataUrl,
+      title: `incident_${incidentId || Date.now()}`,
+      subfolder: "รูปภาพเหตุการณ์ (Incidents)",
+    });
+    return driveUrl || dataUrl;
+  } catch (error) {
+    console.warn("Google Drive upload fallback notice:", error);
+    return dataUrl;
+  }
+}
+
+// System Settings (Google Drive Webhook Config)
+export async function saveGoogleDriveWebhookToCloud(webhookUrl: string) {
+  try {
+    const docRef = doc(db, "systemSettings", "googleDrive");
+    await setDoc(docRef, { webhookUrl: webhookUrl.trim(), updatedAt: new Date().toISOString() }, { merge: true });
+  } catch (err) {
+    console.warn("Cloud save googleDrive webhook failed:", err);
+  }
+}
+
+export async function fetchGoogleDriveWebhookFromCloud(): Promise<string> {
+  try {
+    const docRef = doc(db, "systemSettings", "googleDrive");
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      return snap.data()?.webhookUrl || "";
+    }
+  } catch (err) {
+    console.warn("Fetch googleDrive webhook notice:", err);
+  }
+  return "";
 }
 
 // ==========================================

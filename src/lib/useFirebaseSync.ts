@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { db } from "./firebase";
-import { collection, onSnapshot } from "firebase/firestore";
+import { collection, onSnapshot, doc } from "firebase/firestore";
 import { useStore, PatrolLog, ParkingScan, Incident, Checkpoint, StaffVehicle } from "./store";
 import { seedFirestoreIfEmpty, saveCheckpointToCloud, saveIncidentToCloud } from "./firebaseService";
 
@@ -142,6 +142,18 @@ export function useFirebaseSync() {
       console.warn("Daily AI summaries sync notice:", err.message);
     });
 
+    // 10. Real-time Listener: Google Drive Webhook Config
+    const unsubDriveConfig = onSnapshot(doc(db, "systemSettings", "googleDrive"), (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        if (data && typeof data.webhookUrl === "string") {
+          useStore.setState({ googleDriveWebhookUrl: data.webhookUrl });
+        }
+      }
+    }, (err) => {
+      console.warn("Drive config sync notice:", err.message);
+    });
+
     return () => {
       unsubPatrol();
       unsubParking();
@@ -151,6 +163,7 @@ export function useFirebaseSync() {
       unsubVehicles();
       unsubShiftReports();
       unsubDailyAI();
+      unsubDriveConfig();
     };
   }, []);
 

@@ -2527,6 +2527,15 @@ export default function SupervisorPage() {
                 >
                   <Printer className="w-4 h-4" /> พิมพ์ป้าย QR ทั้งหมด ({checkpoints.length} จุด)
                 </button>
+                <a
+                  href="/patrol_map_7_checkpoints.html"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2.5 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl flex items-center gap-2 active:scale-95 transition-all shadow-xs no-underline"
+                  title="เปิดแผนที่และอินโฟกราฟิกจุดตรวจทั้ง 7 จุด (A4 / Interactive Map)"
+                >
+                  <MapPin className="w-4 h-4" /> แผนที่อินโฟกราฟิก 7 จุดตรวจ
+                </a>
                 <button
                   onClick={() => setShowManageBuildingsModal(true)}
                   className="px-4 py-2.5 bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-900 font-bold text-xs rounded-xl flex items-center gap-2 active:scale-95 transition-all shadow-2xs"

@@ -5,13 +5,25 @@ import {
   findOrCreateSubfolder, 
   uploadFileToGoogleDrive 
 } from "@/lib/googleDrive";
+import { db } from "@/lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
 
 export const maxDuration = 15;
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
-    const targetWebhookUrl = body.webhookUrl || process.env.GOOGLE_DRIVE_WEBHOOK_URL || process.env.GOOGLE_APPS_SCRIPT_URL;
+    let targetWebhookUrl = body.webhookUrl || process.env.GOOGLE_DRIVE_WEBHOOK_URL || process.env.GOOGLE_APPS_SCRIPT_URL;
+    if (!targetWebhookUrl) {
+      try {
+        const snap = await getDoc(doc(db, "systemSettings", "googleDrive"));
+        if (snap.exists()) {
+          targetWebhookUrl = snap.data()?.webhookUrl;
+        }
+      } catch (e: any) {
+        console.warn("Fetch systemSettings webhook in test notice:", e?.message);
+      }
+    }
     const rootFolderId = body.folderId || process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID || "1ED0LnFxfSwHVU60fI8LShWiXBDmxFFXT";
 
     // 1. A tiny 1x1 transparent/colored JPEG in Base64 for rapid testing

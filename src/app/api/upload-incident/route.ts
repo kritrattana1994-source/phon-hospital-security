@@ -5,6 +5,8 @@ import {
   findOrCreateSubfolder, 
   uploadFileToGoogleDrive 
 } from "@/lib/googleDrive";
+import { db } from "@/lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
 
 export const maxDuration = 12; // Max 12s for Vercel Serverless
 
@@ -17,7 +19,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "ไม่พบข้อมูลรูปภาพ" }, { status: 400 });
     }
 
-    const targetWebhookUrl = webhookUrl || process.env.GOOGLE_DRIVE_WEBHOOK_URL || process.env.GOOGLE_APPS_SCRIPT_URL;
+    let targetWebhookUrl = webhookUrl || process.env.GOOGLE_DRIVE_WEBHOOK_URL || process.env.GOOGLE_APPS_SCRIPT_URL;
+    if (!targetWebhookUrl) {
+      try {
+        const snap = await getDoc(doc(db, "systemSettings", "googleDrive"));
+        if (snap.exists()) {
+          targetWebhookUrl = snap.data()?.webhookUrl;
+        }
+      } catch (e: any) {
+        console.warn("Fetch systemSettings webhook notice:", e?.message);
+      }
+    }
+
     const rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID || "1ED0LnFxfSwHVU60fI8LShWiXBDmxFFXT";
     const targetSubfolder = (subfolder || "รูปภาพเหตุการณ์ (Incidents)").trim();
 
