@@ -269,8 +269,8 @@ export default function GuardPage() {
           <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl flex items-center gap-3 text-amber-800 text-xs">
             <Radio className="w-5 h-5 text-amber-600 shrink-0 animate-spin" />
             <div>
-              <p className="font-bold">อยู่ในโหมดออฟไลน์ใต้ตึก</p>
-              <p className="text-amber-700/80">ระบบจะดูดข้อมูลและรูปที่ค้างอยู่ ส่งขึ้นคลาวด์อัตโนมัติเมื่อมีสัญญาณเน็ต</p>
+              <p className="font-bold">ระบบทำงานในโหมดออฟไลน์ (ไม่มีสัญญาณเครือข่าย)</p>
+              <p className="text-amber-700/80">ระบบจะจัดเก็บข้อมูลไว้ในเครื่อง และซิงค์ขึ้นระบบส่วนกลางอัตโนมัติเมื่อเชื่อมต่อเครือข่ายได้</p>
             </div>
           </div>
         )}
@@ -339,11 +339,11 @@ export default function GuardPage() {
                   </div>
                   <div>
                     <div className="flex items-center gap-1.5">
-                      <span className="font-black text-sm">🚨 มีเหตุการณ์ในกะนี้ ({currentShiftIncidents.length} เรื่อง)</span>
-                      <span className="bg-white text-rose-700 text-[10px] font-black px-1.5 py-0.5 rounded-full">รอดำเนินการ/ปิดงาน</span>
+                      <span className="font-black text-sm">🚨 รายการเหตุการณ์ในกะนี้ ({currentShiftIncidents.length} รายการ)</span>
+                      <span className="bg-white text-rose-700 text-[10px] font-black px-1.5 py-0.5 rounded-full">รอดำเนินการ / บันทึกผล</span>
                     </div>
                     <p className="text-[11px] text-rose-100 line-clamp-1 mt-0.5">
-                      {currentShiftIncidents[0].title} — กดเพื่อเข้าจัดการสถานะ
+                      {currentShiftIncidents[0].title} — แตะเพื่อดำเนินการ
                     </p>
                   </div>
                 </div>
@@ -373,12 +373,12 @@ export default function GuardPage() {
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-bold text-slate-900 text-[15px]">โมดูล 1: เดินตรวจ {checkpoints.length} จุด</h3>
+                      <h3 className="font-bold text-slate-900 text-[15px]">เดินตรวจความปลอดภัย {checkpoints.length} จุด</h3>
                       <span className="text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full font-bold">
                         สแกน QR
                       </span>
                     </div>
-                    <p className="text-xs text-slate-500 mt-0.5">สแกนป้ายยืนยันจุดตรวจ + บันทึกเช็กลิสต์ความปลอดภัย</p>
+                    <p className="text-xs text-slate-500 mt-0.5">บันทึกการตรวจจุดตรวจ และรายการตรวจสอบความปลอดภัย</p>
                   </div>
                 </div>
                 <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-sky-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
@@ -445,14 +445,14 @@ export default function GuardPage() {
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-bold text-slate-900 text-[15px]">โมดูล 2: จัดการเหตุการณ์ & แจ้งเหตุด่วน</h3>
+                      <h3 className="font-bold text-slate-900 text-[15px]">จัดการเหตุการณ์และแจ้งเหตุด่วน</h3>
                       {currentShiftIncidents.length > 0 ? (
                         <span className="text-[10px] bg-rose-600 text-white px-2 py-0.5 rounded-full font-bold animate-pulse">
-                          กะนี้ {currentShiftIncidents.length} เคส
+                          กะนี้ {currentShiftIncidents.length} รายการ
                         </span>
                       ) : unresolvedIncidents.length > 0 ? (
                         <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold">
-                          ค้างกะก่อน {unresolvedIncidents.length} เคส
+                          คงค้าง {unresolvedIncidents.length} รายการ
                         </span>
                       ) : (
                         <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">
@@ -460,14 +460,14 @@ export default function GuardPage() {
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-slate-500 mt-0.5">ปรับสถานะ / ปิดงานพร้อมแนบรูป / ดูย้อนหลัง • Google Drive</p>
+                    <p className="text-xs text-slate-500 mt-0.5">รายงานเหตุการณ์ บันทึกการแก้ไข และจัดเก็บหลักฐานภาพถ่าย</p>
                   </div>
                 </div>
                 <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-rose-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
               </div>
             </Link>
 
-            {/* Card 4: สแกนตรวจรถทุกคันใน รพ. */}
+            {/* Card 4: ตรวจการณ์ยานพาหนะประจำรอบ */}
             <Link
               href="/vehicle?mode=patrol"
               className="group block p-4 bg-white hover:bg-sky-50/40 border border-slate-200/80 hover:border-sky-300 rounded-2xl transition-all shadow-xs active:scale-[0.99]"
@@ -479,13 +479,13 @@ export default function GuardPage() {
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-bold text-slate-900 text-[15px]">สแกนตรวจรถทุกคันใน รพ.</h3>
+                      <h3 className="font-bold text-slate-900 text-[15px]">ตรวจการณ์ยานพาหนะรอบเวร</h3>
                       <span className="text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full font-bold">
                         รอบ {activeRound.id}
                       </span>
                     </div>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      ตรวจรถบุคลากร/คนนอก • รอบนี้: <strong className="text-sky-700 font-bold">{activeRoundScansCount} คัน</strong> • วันนี้: <strong className="text-slate-800 font-bold">{todayScansCount} คัน</strong>
+                      ตรวจสอบยานพาหนะบุคลากรและบุคคลภายนอก • รอบนี้: <strong className="text-sky-700 font-bold">{activeRoundScansCount} คัน</strong> • วันนี้: <strong className="text-slate-800 font-bold">{todayScansCount} คัน</strong>
                     </p>
                   </div>
                 </div>
@@ -493,7 +493,7 @@ export default function GuardPage() {
               </div>
             </Link>
 
-            {/* Card 5: ตรวจสอบเจ้าของรถ (ดูว่ารถใคร) */}
+            {/* Card 5: ตรวจสอบข้อมูลยานพาหนะบุคลากร */}
             <Link
               href="/vehicle?mode=lookup"
               className="group block p-4 bg-white hover:bg-emerald-50/40 border border-slate-200/80 hover:border-emerald-300 rounded-2xl transition-all shadow-xs active:scale-[0.99]"
@@ -505,13 +505,13 @@ export default function GuardPage() {
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-bold text-slate-900 text-[15px]">ตรวจสอบเจ้าของรถ (ดูว่ารถใคร)</h3>
+                      <h3 className="font-bold text-slate-900 text-[15px]">ตรวจสอบข้อมูลยานพาหนะบุคลากร</h3>
                       <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">
                         24 ชม.
                       </span>
                     </div>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      พิมพ์หรือกดเลข 4 ตัวท้าย • รู้ชื่อ แผนก โทรหาเจ้าของรถได้ทันที
+                      ระบุหมายเลขทะเบียน 4 ตัวท้าย • แสดงข้อมูลเจ้าของและหน่วยงาน
                     </p>
                   </div>
                 </div>

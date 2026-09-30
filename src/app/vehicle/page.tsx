@@ -643,7 +643,7 @@ function VehicleContent() {
     canvasElement?: HTMLCanvasElement
   ) => {
     setIsOcrProcessing(true);
-    setOcrStatusText("กำลังตรวจจับเลขทะเบียนด้วย AI...");
+    setOcrStatusText("กำลังประมวลผลข้อมูลป้ายทะเบียน...");
     try {
       let detectedPlate = "";
 
@@ -683,7 +683,7 @@ function VehicleContent() {
 
       // 3. หากตัดกรอบกลางแล้วไม่พบ ลองสแกนภาพเต็มมุมกว้างสำรอง
       if (!detectedPlate && fullImageUrl && fullImageUrl !== dataUrl) {
-        setOcrStatusText("กำลังตรวจจับภาพมุมกว้างสำรอง...");
+        setOcrStatusText("กำลังประมวลผลภาพมุมกว้างสำรอง...");
         try {
           const fallbackRes = await fetch("/api/ocr-plate", {
             method: "POST",
@@ -714,13 +714,13 @@ function VehicleContent() {
             plate,
             isStaff: false,
             type: "success",
-            message: `ตรวจพบเลขทะเบียน ${plate} สำเร็จ`,
+            message: `ตรวจสอบหมายเลขทะเบียน ${plate} เรียบร้อย`,
           });
         } else {
           await handleContinuousScan(plate, undefined, fullImageUrl || dataUrl);
         }
       } else {
-        const msg = "ไม่สามารถอ่านเลขทะเบียนจากภาพได้ชัดเจน กรุณาส่องตรงป้ายอีกครั้ง หรือกดค้นหาด้วยแป้นตัวเลข";
+        const msg = "ไม่สามารถอ่านหมายเลขทะเบียนจากภาพได้ชัดเจน กรุณาจัดตำแหน่งป้ายให้อยู่ในกรอบ หรือค้นหาด้วยหมายเลขทะเบียน";
         if (targetMode === "lookup") {
           alert(`⚠️ ${msg}`);
         }
@@ -734,7 +734,7 @@ function VehicleContent() {
     } catch (err: any) {
       console.error("OCR error:", err);
       if (targetMode === "lookup") {
-        alert("เกิดข้อผิดพลาดในการวิเคราะห์ภาพ กรุณาลองใหม่อีกครั้งหรือพิมพ์เลขทะเบียนด้วยตนเอง");
+        alert("เกิดข้อผิดพลาดในการประมวลผล กรุณาลองใหม่อีกครั้งหรือระบุหมายเลขทะเบียนด้วยตนเอง");
       }
     } finally {
       setIsOcrProcessing(false);
@@ -758,7 +758,7 @@ function VehicleContent() {
     });
 
     setIsOcrProcessing(true);
-    setOcrStatusText("กำลังวิเคราะห์ป้ายทะเบียนด้วย AI...");
+    setOcrStatusText("กำลังประมวลผลข้อมูลป้ายทะเบียน...");
 
     try {
       let detectedPlate = "";
@@ -839,7 +839,7 @@ function VehicleContent() {
             plate,
             isStaff,
             type: "success",
-            message: `ตรวจพบเลขทะเบียน ${plate} สำเร็จ`,
+            message: `ตรวจสอบหมายเลขทะเบียน ${plate} เรียบร้อย`,
           });
         } else {
           await handleContinuousScan(plate, undefined, frames.fullDataUrl);
@@ -855,10 +855,9 @@ function VehicleContent() {
           department: staff?.department,
           message: isStaff 
             ? `รถบุคลากร: ${staff?.ownerName || ""} (${staff?.department || ""})`
-            : "รถภายนอก / ผู้มาติดต่อโรงพยาบาล",
+            : "ยานพาหนะบุคคลภายนอก / ผู้รับบริการ",
         });
 
-        // "พอเสร็จ ก็กลับมาเป็นกล้องอัตโนมัติ รปภ จะได้ไม่ต้องกดอะไร"
         // Automatically unfreeze & resume live camera after 2.3 seconds
         autoResumeTimerRef.current = setTimeout(() => {
           setCapturedResult(null);
@@ -871,7 +870,7 @@ function VehicleContent() {
         setCapturedResult({
           imageUrl: frames.cropDataUrl,
           status: "failed",
-          message: "ภาพไม่ชัดเจน หรือไม่มีป้ายทะเบียน กำลังกลับไปที่กล้อง...",
+          message: "ภาพไม่ชัดเจน หรือไม่พบป้ายทะเบียน กำลังกลับสู่หน้าจอกล้อง...",
         });
 
         // Automatically resume after 1.8 seconds so guard can aim again
@@ -885,7 +884,7 @@ function VehicleContent() {
       setCapturedResult({
         imageUrl: frames.cropDataUrl,
         status: "failed",
-        message: "เกิดข้อผิดพลาดในการประมวลผล กำลังกลับไปที่กล้อง...",
+        message: "เกิดข้อผิดพลาดในการประมวลผล กำลังกลับสู่หน้าจอกล้อง...",
       });
       autoResumeTimerRef.current = setTimeout(() => {
         setCapturedResult(null);
@@ -1080,7 +1079,7 @@ function VehicleContent() {
             }`}
           >
             <Search className="w-3.5 h-3.5" />
-            <span>ดูว่ารถใคร (24 ชม.)</span>
+            <span>ตรวจสอบข้อมูลยานพาหนะ</span>
           </button>
 
           <button
@@ -1095,7 +1094,7 @@ function VehicleContent() {
             }`}
           >
             <Clock className="w-3.5 h-3.5" />
-            <span>ตรวจรอบเวร (เช้า/ดึก)</span>
+            <span>ตรวจการณ์ยานพาหนะประจำรอบ</span>
           </button>
         </div>
       </header>
@@ -1153,8 +1152,8 @@ function VehicleContent() {
                   <Search className="w-4 h-4" />
                 </div>
                 <div>
-                  <h2 className="font-extrabold text-slate-900 leading-tight">ตรวจสอบเจ้าของรถ & สิทธิ์จอด</h2>
-                  <p className="text-[11px] text-emerald-800">ค้นหาได้ตลอด 24 ชม. • ฐานข้อมูล 530 คันในเครื่อง (0.01s)</p>
+                  <h2 className="font-extrabold text-slate-900 leading-tight">ตรวจสอบข้อมูลยานพาหนะบุคลากร</h2>
+                  <p className="text-[11px] text-emerald-800">ค้นหาข้อมูลยานพาหนะบุคลากรในระบบได้ตลอด 24 ชม.</p>
                 </div>
               </div>
               <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold border border-emerald-200">
@@ -1166,7 +1165,7 @@ function VehicleContent() {
             <div className="p-4 bg-white border border-sky-100 rounded-3xl shadow-sm space-y-3">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-slate-700">
-                  ใส่เลขทะเบียน (เช่น ขน 9789 หรือกดเลข 4 ตัวท้าย)
+                  ระบุหมายเลขทะเบียน (เช่น ขน 9789 หรือเลข 4 ตัวท้าย)
                 </label>
                 {dialQuery && (
                   <button
@@ -1174,7 +1173,7 @@ function VehicleContent() {
                     onClick={handleDialClear}
                     className="text-[11px] text-rose-600 hover:underline font-bold"
                   >
-                    ล้างตัวเลข
+                    ล้างข้อมูล
                   </button>
                 )}
               </div>
@@ -1191,7 +1190,7 @@ function VehicleContent() {
                     type="text"
                     value={dialQuery}
                     onChange={(e) => setDialQuery(e.target.value)}
-                    placeholder="พิมพ์หมวดอักษร+เลข หรือกดเลขด้านล่าง..."
+                    placeholder="พิมพ์หมวดอักษรและหมายเลข หรือระบุผ่านแป้นพิมพ์..."
                     className="w-full pl-4 pr-10 py-3.5 bg-slate-50 border-2 border-slate-200 rounded-2xl text-slate-900 placeholder-slate-400 font-mono text-xl font-bold tracking-widest text-center focus:outline-none focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-200 transition-all"
                   />
                   {dialQuery && (
@@ -1212,9 +1211,9 @@ function VehicleContent() {
             <div className="p-3 bg-white border border-slate-200 rounded-3xl shadow-xs space-y-2.5">
               <div className="flex items-center justify-between px-1">
                 <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                  แป้นกดตัวเลข (เหมือนตู้ ATM)
+                  แป้นพิมพ์ตัวเลข
                 </span>
-                <span className="text-[10px] text-emerald-700 font-medium">กดเลขเสร็จแล้วแตะปุ่มค้นหา</span>
+                <span className="text-[10px] text-emerald-700 font-medium">ระบุหมายเลขแล้วกดค้นหา</span>
               </div>
 
               <div className="grid grid-cols-3 gap-2">
@@ -1260,7 +1259,7 @@ function VehicleContent() {
                 className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-2xl font-bold text-base shadow-md shadow-emerald-600/30 active:scale-98 transition-all flex items-center justify-center gap-2 mt-2 cursor-pointer"
               >
                 <Search className="w-5 h-5" />
-                <span>ค้นหาเจ้าของรถ</span>
+                <span>ค้นหาข้อมูลยานพาหนะ</span>
               </button>
             </div>
 
@@ -1268,23 +1267,23 @@ function VehicleContent() {
             {/* SEARCH RESULTS DISPLAY (โชว์เมื่อกดค้นหา) */}
             {/* ================================================================= */}
 
-            {/* CASE A: FOUND MULTIPLE CARS (เช่น เจอ 2 คันขึ้นไป -> ให้จิ้มเลือกว่าจะเอาคันไหน) */}
+            {/* CASE A: FOUND MULTIPLE CARS (พบข้อมูลมากกว่า 1 รายการ) */}
             {hasSearched && matchedVehicles.length > 1 && !selectedVehicle && (
               <div className="p-5 bg-white border-2 border-emerald-400 rounded-3xl shadow-lg space-y-3.5 animate-in zoom-in-95 duration-200">
                 <div className="border-b border-slate-100 pb-2.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
-                      พบรถตรงกัน {matchedVehicles.length} คัน
+                      พบข้อมูลตรงกัน {matchedVehicles.length} รายการ
                     </span>
                     <span className="text-xs font-mono font-bold text-slate-600">
-                      เลขที่ค้นหา: {submittedQuery}
+                      หมายเลขที่ค้นหา: {submittedQuery}
                     </span>
                   </div>
                   <h3 className="text-base font-black text-slate-900 mt-1">
-                    พบรถ {matchedVehicles.length} คันที่มีเลขนี้
+                    พบข้อมูลยานพาหนะ {matchedVehicles.length} รายการ
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    กรุณาแตะเลือกคันที่ต้องการดูข้อมูลเจ้าของรถและเบอร์โทร:
+                    กรุณาเลือกรายการที่ต้องการตรวจสอบข้อมูลเจ้าของและหมายเลขโทรศัพท์:
                   </p>
                 </div>
 
@@ -1713,8 +1712,8 @@ function VehicleContent() {
                       <div className="w-14 h-14 rounded-2xl bg-sky-500/20 border border-sky-400/40 flex items-center justify-center mb-3">
                         <Loader2 className="w-7 h-7 text-sky-400 animate-spin" />
                       </div>
-                      <span className="text-sm font-bold text-white tracking-wide">กำลังวิเคราะห์ป้ายทะเบียน...</span>
-                      <span className="text-[11px] text-slate-300 mt-1">AI กำลังอ่านตัวอักษรและตัวเลขบนป้าย (เสี้ยววินาที)</span>
+                      <span className="text-sm font-bold text-white tracking-wide">กำลังประมวลผลป้ายทะเบียน...</span>
+                      <span className="text-[11px] text-slate-300 mt-1">ระบบกำลังตรวจสอบตัวอักษรและหมายเลขทะเบียน...</span>
                     </div>
                   )}
 
@@ -1724,7 +1723,7 @@ function VehicleContent() {
                       <div className="w-12 h-12 rounded-2xl bg-emerald-500 text-white flex items-center justify-center mb-2 shadow-lg shadow-emerald-500/40">
                         <CheckCircle2 className="w-7 h-7 stroke-[2.5] animate-bounce" />
                       </div>
-                      <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400">ตรวจพบและบันทึกสำเร็จ</span>
+                      <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400">ตรวจสอบและบันทึกข้อมูลเรียบร้อย</span>
                       <span className="text-3xl font-black font-mono tracking-widest text-white mt-1 mb-2 bg-slate-900/90 px-4 py-1 rounded-xl border border-emerald-400/40 shadow-inner">
                         {capturedResult.plate}
                       </span>
@@ -1735,12 +1734,12 @@ function VehicleContent() {
                       }`}>
                         {capturedResult.isStaff 
                           ? `รถบุคลากร: ${capturedResult.ownerName || ""} (${capturedResult.department || ""})` 
-                          : "รถภายนอก / ผู้มาติดต่อ รพ."}
+                          : "ยานพาหนะบุคคลภายนอก / ผู้รับบริการ"}
                       </span>
 
                       <div className="mt-3 flex items-center gap-1.5 text-[11px] font-bold text-emerald-300 animate-pulse bg-emerald-950/70 px-3.5 py-1.5 rounded-full border border-emerald-500/30">
                         <RotateCcw className="w-3.5 h-3.5 animate-spin" />
-                        <span>🔄 กำลังกลับไปที่กล้องอัตโนมัติใน ~2 วินาที...</span>
+                        <span>🔄 กำลังกลับสู่หน้าจอกล้องอัตโนมัติ...</span>
                       </div>
 
                       <button
@@ -1752,7 +1751,7 @@ function VehicleContent() {
                         className="mt-3 w-full py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl font-medium text-[11px] border border-white/20 active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                       >
                         <Camera className="w-3.5 h-3.5" />
-                        <span>หรือแตะที่นี่เพื่อกลับไปกล้องทันที</span>
+                        <span>กลับสู่หน้าจอกล้องทันที</span>
                       </button>
                     </div>
                   )}
@@ -1763,14 +1762,14 @@ function VehicleContent() {
                       <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-400/40 text-amber-400 flex items-center justify-center mb-2 shadow-lg">
                         <AlertOctagon className="w-7 h-7 stroke-[2.5]" />
                       </div>
-                      <span className="text-sm font-bold text-amber-300">อ่านป้ายทะเบียนไม่ชัดเจน</span>
+                      <span className="text-sm font-bold text-amber-300">ภาพป้ายทะเบียนไม่ชัดเจน</span>
                       <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                        {capturedResult.message || "กรุณาเล็งให้ป้ายทะเบียน (ตัวอักษรและตัวเลข) อยู่ตรงกลางกรอบสีเขียว"}
+                        {capturedResult.message || "กรุณาจัดตำแหน่งป้ายทะเบียนให้อยู่ตรงกลางกรอบ"}
                       </p>
 
                       <div className="mt-3 flex items-center gap-1.5 text-[11px] font-bold text-amber-300 animate-pulse bg-amber-950/70 px-3 py-1.5 rounded-full border border-amber-500/30">
                         <RotateCcw className="w-3.5 h-3.5 animate-spin" />
-                        <span>กำลังกลับไปที่กล้องอัตโนมัติ...</span>
+                        <span>กำลังกลับสู่หน้าจอกล้องอัตโนมัติ...</span>
                       </div>
 
                       <button
@@ -1782,7 +1781,7 @@ function VehicleContent() {
                         className="mt-3 w-full py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl font-medium text-[11px] border border-white/20 active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                       >
                         <RotateCcw className="w-3.5 h-3.5" />
-                        <span>แตะเพื่อกลับไปส่องใหม่ทันที</span>
+                        <span>กลับสู่หน้าจอกล้องเพื่อตรวจสอบใหม่</span>
                       </button>
                     </div>
                   )}
@@ -1794,7 +1793,7 @@ function VehicleContent() {
                     if (!isOcrProcessing && cameraActive) handleVideoShutter("patrol");
                   }}
                   className="absolute inset-0 flex flex-col items-center justify-center p-6 z-10 cursor-pointer"
-                  title="แตะที่หน้าจอเพื่อกดจับภาพทันที"
+                  title="แตะที่หน้าจอเพื่อจับภาพทันที"
                 >
                   <div className="w-full max-w-[280px] h-28 border-2 border-emerald-400/90 rounded-2xl relative shadow-2xl transition-all duration-300">
                     <div className="absolute -top-1 -left-1 w-4 h-4 border-t-4 border-l-4 border-emerald-400 rounded-tl-lg" />
@@ -1804,14 +1803,14 @@ function VehicleContent() {
 
                     <div className="absolute -top-7 left-0 right-0 text-center">
                       <span className="text-[10px] font-bold text-emerald-300 bg-slate-900/80 px-2.5 py-0.5 rounded-full border border-emerald-500/30">
-                        เล็งให้ป้ายอยู่ตรงกลางกรอบ
+                        จัดตำแหน่งป้ายทะเบียนให้อยู่ในกรอบ
                       </span>
                     </div>
 
                     <div className="absolute -bottom-6 left-0 right-0 text-center">
                       <span className="text-[10px] font-bold text-white/95 bg-slate-900/90 px-3 py-0.5 rounded-full backdrop-blur-xs border border-white/10 shadow-sm flex items-center justify-center gap-1 mx-auto w-fit">
                         <Sparkles className="w-3 h-3 text-emerald-400 animate-pulse" />
-                        <span>ถือค้างไว้ ระบบจะล็อกภาพชัดสุด & สแกนให้อัตโนมัติ</span>
+                        <span>จัดตำแหน่งป้ายให้อยู่ในกรอบ ระบบจะตรวจจับและบันทึกอัตโนมัติ</span>
                       </span>
                     </div>
                   </div>
@@ -1834,10 +1833,10 @@ function VehicleContent() {
                         ? "bg-emerald-500/20 text-emerald-300 border-emerald-400/40" 
                         : "bg-slate-800/80 text-slate-400 border-slate-700"
                     }`}
-                    title="เปิด/ปิดการสแกนอัตโนมัติ"
+                    title="เปิด/ปิดการตรวจจับอัตโนมัติ"
                   >
                     <Sparkles className="w-3 h-3" />
-                    <span>{autoScanActive ? "ออโต้: เปิด" : "ออโต้: ปิด"}</span>
+                    <span>{autoScanActive ? "ตรวจจับอัตโนมัติ: เปิด" : "ตรวจจับอัตโนมัติ: ปิด"}</span>
                   </button>
                 </div>
 
@@ -1855,7 +1854,7 @@ function VehicleContent() {
               <div className="relative z-20 text-center pointer-events-none">
                 <span className="text-[11px] text-white/90 bg-slate-900/85 px-3.5 py-1.5 rounded-full backdrop-blur-md border border-white/10 inline-flex items-center gap-1.5 shadow-md">
                   <Sparkles className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-                  <span>สแกนอัตโนมัติ: เล็งป้ายแล้วถือค้างไว้ (ไม่ต้องกดปุ่ม)</span>
+                  <span>ระบบตรวจจับอัตโนมัติ: เล็งป้ายทะเบียนให้อยู่ในกรอบเพื่อประมวลผล</span>
                 </span>
               </div>
             </div>
@@ -1880,10 +1879,10 @@ function VehicleContent() {
                   <div className="text-left min-w-0">
                     <div className="text-xs font-black text-white flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
-                      <span className="truncate">โหมดแฮนด์ฟรี: สแกนอัตโนมัติ 100%</span>
+                      <span className="truncate">ระบบตรวจจับป้ายทะเบียนอัตโนมัติ</span>
                     </div>
                     <p className="text-[11px] text-slate-300 truncate">
-                      รปภ. ไม่ต้องกดปุ่ม • ถือเล็งป้าย ระบบจะค้างภาพชัดสุด & สแกนให้ทันที
+                      เล็งป้ายให้อยู่ในกรอบ ระบบจะบันทึกภาพที่มีความคมชัดและประมวลผลโดยอัตโนมัติ
                     </p>
                   </div>
                 </div>
@@ -1893,10 +1892,10 @@ function VehicleContent() {
                   onClick={() => handleVideoShutter("patrol")}
                   disabled={isOcrProcessing || !cameraActive || (capturedResult !== null && capturedResult.status === "processing")}
                   className="py-2 px-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs rounded-xl shadow-md active:scale-95 transition-all flex items-center gap-1 shrink-0 cursor-pointer disabled:opacity-50"
-                  title="หากต้องการกดถ่ายเองทันที"
+                  title="หากต้องการบันทึกภาพด้วยตนเอง"
                 >
                   <Camera className="w-3.5 h-3.5" />
-                  <span>กดถ่ายเอง</span>
+                  <span>บันทึกภาพด้วยตนเอง</span>
                 </button>
               </div>
 
@@ -1908,7 +1907,7 @@ function VehicleContent() {
                   className="flex-1 py-2.5 px-3 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 font-bold text-xs rounded-xl shadow-2xs active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <Upload className="w-3.5 h-3.5 text-slate-500" />
-                  <span>ถ่ายชัดสูง / อัปโหลด</span>
+                  <span>ถ่ายภาพความละเอียดสูง / เลือกไฟล์</span>
                 </button>
 
                 <button
@@ -1921,7 +1920,7 @@ function VehicleContent() {
                   }`}
                 >
                   <Flashlight className={`w-3.5 h-3.5 ${torchOn ? "fill-current" : ""}`} />
-                  <span>{torchOn ? "เปิดไฟอยู่" : "ไฟฉาย"}</span>
+                  <span>{torchOn ? "เปิดไฟฉาย" : "ไฟฉาย"}</span>
                 </button>
               </div>
             </div>
@@ -1929,7 +1928,7 @@ function VehicleContent() {
             {isOcrProcessing && (
               <div className="p-3 bg-sky-50 border border-sky-300 rounded-2xl flex items-center gap-2.5 text-sky-900 text-xs animate-pulse">
                 <Loader2 className="w-4 h-4 animate-spin text-sky-600 shrink-0" />
-                <span className="font-semibold">{ocrStatusText || "กำลังประมวลผลวิเคราะห์ป้ายทะเบียนด้วย AI..."}</span>
+                <span className="font-semibold">{ocrStatusText || "กำลังประมวลผลข้อมูลป้ายทะเบียน..."}</span>
               </div>
             )}
 
@@ -1943,7 +1942,7 @@ function VehicleContent() {
             {/* Fast Continuous Entry Form */}
             <div className="p-4 bg-white border border-sky-100 rounded-3xl shadow-sm space-y-3">
               <label className="block text-xs font-bold text-slate-700">
-                สแกนด่วนขณะเดินตรวจ (ใส่เลขทะเบียน 4 ตัวท้าย)
+                บันทึกหมายเลขทะเบียน (ระบุเลข 4 ตัวท้าย)
               </label>
 
               <form
@@ -1975,15 +1974,15 @@ function VehicleContent() {
             <div className="space-y-2">
               <div className="flex items-center justify-between px-1">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  รายการสแกนรอบ {selectedRound === "22:00" ? "22:00 น. (ดึก)" : "06:00 น. (เช้า)"} ({currentRoundScans.length} คัน)
+                  รายการตรวจสอบรอบ {selectedRound === "22:00" ? "22:00 น. (ดึก)" : "06:00 น. (เช้า)"} ({currentRoundScans.length} คัน)
                 </h3>
-                <span className="text-[11px] text-sky-700 font-bold">แคชออฟไลน์ 0.01s</span>
+                <span className="text-[11px] text-sky-700 font-bold">บันทึกข้อมูลในเครื่อง</span>
               </div>
 
               {currentRoundScans.length === 0 ? (
                 <div className="p-6 bg-white border border-slate-200 rounded-3xl text-center text-xs text-slate-400 space-y-1">
                   <p>ยังไม่มีรายการบันทึกในรอบ {selectedRound === "22:00" ? "22:00 น. (ดึก)" : "06:00 น. (เช้า)"}</p>
-                  <p className="text-[11px]">พิมพ์เลข 4 ตัวท้ายด้านบนหรือใช้กล้องสแกนเพื่อบันทึก</p>
+                  <p className="text-[11px]">ระบุหมายเลขทะเบียน 4 ตัวท้ายด้านบน หรือใช้กล้องเพื่อบันทึกข้อมูล</p>
                 </div>
               ) : (
                 <div className="space-y-2">

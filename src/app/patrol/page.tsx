@@ -500,7 +500,7 @@ export default function PatrolPage() {
                   สแกน QR Code ประจำจุดตรวจ
                 </h3>
                 <p className="text-xs text-slate-500 max-w-xs mb-5">
-                  ส่องกล้องไปที่ป้าย QR ประจำจุดที่ติดไว้หน้างาน ระบบจะดึงข้อมูลจุดตรวจพร้อมบันทึกพิกัด GPS อัตโนมัติ
+                  จัดตำแหน่งกล้องไปยัง QR Code ประจำจุดตรวจ ระบบจะตรวจสอบข้อมูลและบันทึกพิกัด GPS อัตโนมัติ
                 </p>
 
                 <div className="w-full space-y-2">
@@ -508,7 +508,7 @@ export default function PatrolPage() {
                     onClick={startCameraScanner}
                     className="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-bold text-sm shadow-md shadow-sky-500/25 active:scale-95 transition-all flex items-center justify-center gap-2"
                   >
-                    <Camera className="w-5 h-5" /> เปิดกล้องมือถือสแกนป้ายจริง
+                    <Camera className="w-5 h-5" /> เปิดกล้องเพื่อสแกน QR Code
                   </button>
                 </div>
               </div>

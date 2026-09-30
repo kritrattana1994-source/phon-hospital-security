@@ -124,14 +124,14 @@ export async function POST(req: NextRequest) {
     if (deepseekApiKey) {
       try {
         const prompt = `
-คุณคือ AI ด้านความปลอดภัยของ โรงพยาบาลพล (Phon Hospital Smart Patrol)
-ทำหน้าที่วิเคราะห์ข้อมูลความปลอดภัยประจำวันที่ ${reportDate}
+คุณเป็นระบบสรุปและรายงานสถานการณ์ความปลอดภัยของโรงพยาบาลพล
+ทำหน้าที่สรุปและวิเคราะห์ข้อมูลความปลอดภัยประจำวันที่ ${reportDate}
 
 ข้อมูลยานพาหนะ (Vehicle Fleet Patrol):
-- สแกนตรวจรถใน รพ. วันนี้รวม: ${dayScans.length} คัน (บุคลากร ${totalStaffCount} คัน / รถภายนอก ${totalNonStaffCount} คัน)
-- แอบจอดค้างคืน (พบข้ามคืน): ${overnightNonStaff.length} คัน (${overnightNonStaff.map(o => o.plateNumber).join(", ") || "ไม่พบ"})
-- จอดแช่สะสมเกิน 3 วัน: ${abandonedVehicles.length} คัน (${abandonedVehicles.map(a => `${a.plateNumber} (${a.days} วัน)`).join(", ") || "ไม่พบ"})
-- จอดกีดขวางโซนฉุกเฉิน (ER)/ทางลาดแพทย์: ${zoneViolations.length} คัน (${zoneViolations.map((z: any) => z.plateNumber).join(", ") || "ไม่พบ"})
+- ตรวจสอบยานพาหนะใน รพ. วันนี้รวม: ${dayScans.length} คัน (บุคลากร ${totalStaffCount} คัน / ยานพาหนะภายนอก ${totalNonStaffCount} คัน)
+- ยานพาหนะภายนอกจอดค้างคืน (พบข้ามคืน): ${overnightNonStaff.length} คัน (${overnightNonStaff.map(o => o.plateNumber).join(", ") || "ไม่พบ"})
+- ยานพาหนะจอดค้างเกิน 3 วัน: ${abandonedVehicles.length} คัน (${abandonedVehicles.map(a => `${a.plateNumber} (${a.days} วัน)`).join(", ") || "ไม่พบ"})
+- ยานพาหนะจอดกีดขวางพื้นที่ฉุกเฉิน (ER)/ทางลาดแพทย์: ${zoneViolations.length} คัน (${zoneViolations.map((z: any) => z.plateNumber).join(", ") || "ไม่พบ"})
 
 ข้อมูลการเดินตรวจ (Patrol Compliance):
 - จุดตรวจที่สแกนครบ: ${uniqueCheckpointsScanned}/${totalCheckpointsTarget} จุด (${patrolComplianceRate}%)
@@ -141,8 +141,8 @@ export async function POST(req: NextRequest) {
 
 กรุณาสร้างรายงานภาษาไทยฉบับผู้บริหาร (Executive Security Summary) โดยมีโครงสร้างดังนี้:
 1. สรุปสถานการณ์ความปลอดภัยและผลการปฏิบัติงานภาพรวม
-2. บทวิเคราะห์ลานจอดรถและการสแกนตรวจรถทุกคันใน รพ.
-3. บทวิเคราะห์ผลการเดินตรวจรอบเวรและการส่งมอบเวร (ประเมินวินัย รปภ.)
+2. สรุปผลการตรวจสอบยานพาหนะและลานจอดรถ
+3. สรุปผลการตรวจการณ์ตามจุดตรวจและการส่งมอบเวร
 4. รายการสิ่งที่ต้องสั่งการด่วน (Action Items)
         `;
 
@@ -157,7 +157,7 @@ export async function POST(req: NextRequest) {
             messages: [
               {
                 role: "system",
-                content: "คุณเป็นผู้เชี่ยวชาญการบริหารความปลอดภัยระดับโรงพยาบาล ตอบภาษาไทยอย่างกระชับ สุภาพ แม่นยำ และเป็นมืออาชีพ",
+                content: "คุณเป็นผู้เชี่ยวชาญการบริหารความปลอดภัยระดับโรงพยาบาล รายงานข้อมูลด้วยภาษาทางการ สุภาพ แม่นยำ และเป็นมืออาชีพ",
               },
               { role: "user", content: prompt },
             ],
@@ -176,7 +176,7 @@ export async function POST(req: NextRequest) {
 
     // Heuristic Fallback
     if (!aiSummaryMarkdown) {
-      aiSummaryMarkdown = `### 🏥 รายงานวิเคราะห์ความปลอดภัยประจำวัน • รพ.พล (Smart Patrol AI Insight)
+      aiSummaryMarkdown = `### 🏥 รายงานสรุปสถานการณ์ความปลอดภัยประจำวัน • โรงพยาบาลพล
 **ประจำวันที่:** ${reportDate}
 
 #### 1. สรุปภาพรวมความปลอดภัย (Executive Overview)
@@ -184,26 +184,26 @@ export async function POST(req: NextRequest) {
 • อัตราการตรวจตรงเวลาตามเกณฑ์ 1 ชม. แรก อยู่ที่ **${patrolOnTimeRate}%** ${patrolOnTimeRate >= 80 ? "อยู่ในเกณฑ์ดีเยี่ยม ✅" : "มีบางรอบที่ล่าช้า ควรติดตาม ⚠️"}
 • ตรวจพบข้อบกพร่อง/เหตุแจ้งเตือนในพื้นที่ **${patrolIssuesCount} รายการ** ${patrolIssuesCount === 0 ? "(สภาพแวดล้อมปกติ ปลอดภัย 100%)" : "(ประสานงานช่าง/ผู้เกี่ยวข้องแล้ว)"}
 
-#### 2. สรุปผลการสแกนตรวจรถในโรงพยาบาล (Vehicle Fleet Patrol)
-• ทำการสแกนตรวจรถในโรงพยาบาลรวมทั้งสิ้น **${dayScans.length} คัน** (รถบุคลากร ${totalStaffCount} คัน / รถภายนอก ${totalNonStaffCount} คัน)
+#### 2. สรุปผลการตรวจการณ์ยานพาหนะ (Vehicle Fleet Patrol)
+• ตรวจสอบยานพาหนะภายในโรงพยาบาลรวมทั้งสิ้น **${dayScans.length} คัน** (รถบุคลากร ${totalStaffCount} คัน / ยานพาหนะภายนอก ${totalNonStaffCount} คัน)
 ${
   overnightNonStaff.length > 0
-    ? `• ⚠️ **รถแอบจอดค้างคืน ${overnightNonStaff.length} คัน:** (${overnightNonStaff.map(o => o.plateNumber).join(", ")}) จอดตั้งแต่รอบ 22:00 น. ถึง 06:00 น. แนะนำให้ รปภ. ตรวจสอบ`
-    : "• ✅ ไม่พบรถภายนอกแอบจอดค้างคืนผิดระเบียบ"
+    ? `• ⚠️ **ยานพาหนะบุคคลภายนอกจอดค้างคืน ${overnightNonStaff.length} คัน:** (${overnightNonStaff.map(o => o.plateNumber).join(", ")}) จอดตั้งแต่รอบ 22:00 น. ถึง 06:00 น. แนะนำให้ รปภ. ตรวจสอบ`
+    : "• ✅ ไม่พบยานพาหนะบุคคลภายนอกจอดค้างคืน"
 }
 ${
   zoneViolations.length > 0
-    ? `• 🚨 **รถจอดกีดขวางจุดฉุกเฉิน ${zoneViolations.length} คัน:** (${zoneViolations.map((z: any) => `${z.plateNumber} ณ ${z.zone}`).join(", ")}) ต้องเร่งประสานย้ายออกทันที`
+    ? `• 🚨 **ยานพาหนะจอดกีดขวางพื้นที่ฉุกเฉิน ${zoneViolations.length} คัน:** (${zoneViolations.map((z: any) => `${z.plateNumber} ณ ${z.zone}`).join(", ")}) ต้องเร่งประสานย้ายออกทันที`
     : "• ✅ เส้นทางฉุกเฉิน (ER) และทางลาดรับส่งผู้ป่วยโล่ง 100%"
 }
 ${
   abandonedVehicles.length > 0
-    ? `• 🛑 **รถจอดแช่สะสมเกิน 3 วัน:** (${abandonedVehicles.map(a => `${a.plateNumber} จอด ${a.days} วัน`).join(", ")}) เสนอหัวหน้างานประสานตรวจสอบกล้องวงจรปิด`
-    : "• ✅ ไม่พบรถจอดแช่ผิดปกติเกิน 3 วัน"
+    ? `• 🛑 **ยานพาหนะจอดค้างเกิน 3 วัน:** (${abandonedVehicles.map(a => `${a.plateNumber} จอด ${a.days} วัน`).join(", ")}) เสนอหัวหน้างานประสานตรวจสอบกล้องวงจรปิด`
+    : "• ✅ ไม่พบยานพาหนะจอดค้างเกิน 3 วัน"
 }
 
 #### 3. การประเมินวินัยและการส่งมอบเวร (Shift Handover Audit)
-• รปภ. ได้จัดทำและส่งออกรายงานสรุปประจำกะแล้ว **${dayShiftReports.length} กะ**
+• จัดทำและส่งมอบรายงานประจำกะแล้ว **${dayShiftReports.length} กะ**
 ${
   dayShiftReports.length > 0
     ? `• ผู้ส่งมอบเวร: ${dayShiftReports.map((r: any) => `${r.shiftName} (${r.guardName})`).join(", ")}`
@@ -211,12 +211,12 @@ ${
 }
 
 #### 4. สิ่งที่หัวหน้างานต้องสั่งการด่วน (Action Items)
-${zoneViolations.length > 0 ? "1. 🚨 ตรวจสอบและย้ายรถที่ขวางทางฉุกเฉิน ER ทันที\n" : ""}${overnightNonStaff.length > 0 ? "2. ⚠️ ตรวจสอบบัตรผู้ติดต่อและติดใบเตือนรถที่แอบจอดค้างคืน\n" : ""}3. 📋 กำชับ รปภ. ทุกกะให้เดินตรวจสแกนจุดตรวจให้ครบใน 1 ชม. แรก และกดส่งรายงานประจำกะช่วงต่อกะทุกครั้ง`;
+${zoneViolations.length > 0 ? "1. 🚨 ตรวจสอบและย้ายรถที่ขวางทางฉุกเฉิน ER ทันที\n" : ""}${overnightNonStaff.length > 0 ? "2. ⚠️ ตรวจสอบบัตรผู้ติดต่อและออกใบแจ้งเตือนยานพาหนะที่จอดค้างคืน\n" : ""}3. 📋 กำชับเจ้าหน้าที่ รปภ. ปฏิบัติหน้าที่ตรวจจุดตรวจตามกำหนดเวลา และส่งรายงานประจำกะทุกครั้ง`;
     }
 
     const actionItems: string[] = [];
     if (zoneViolations.length > 0) actionItems.push(`ย้ายรถขวางทางฉุกเฉิน ER (${zoneViolations.map((z: any) => z.plateNumber).join(", ")})`);
-    if (overnightNonStaff.length > 0) actionItems.push(`ตรวจสอบรถแอบจอดค้างคืน (${overnightNonStaff.map(o => o.plateNumber).join(", ")})`);
+    if (overnightNonStaff.length > 0) actionItems.push(`ตรวจสอบยานพาหนะจอดค้างคืน (${overnightNonStaff.map(o => o.plateNumber).join(", ")})`);
     if (patrolComplianceRate < 90) actionItems.push(`ติดตามการเดินตรวจจุดตรวจให้ครบ 100%`);
     if (actionItems.length === 0) actionItems.push("ความปลอดภัยปกติ รักษามาตรฐานการตรวจตราต่อเนื่อง");
 
@@ -238,12 +238,12 @@ ${zoneViolations.length > 0 ? "1. 🚨 ตรวจสอบและย้า�
       patrolIssuesCount,
       aiSummaryMarkdown,
       actionItems,
-      generatedBy: "DeepSeek AI • รพ.พล",
+      generatedBy: "ระบบรายงานความปลอดภัยอัตโนมัติ • โรงพยาบาลพล",
       isRealDeepSeek: !!deepseekApiKey,
     });
   } catch (error: any) {
     return NextResponse.json(
-      { error: error?.message || "เกิดข้อผิดพลาดในการประมวลผล DeepSeek AI" },
+      { error: error?.message || "เกิดข้อผิดพลาดในการประมวลผลรายงานสรุป" },
       { status: 500 }
     );
   }

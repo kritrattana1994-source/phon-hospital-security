@@ -72,7 +72,7 @@ export default function Home() {
                 <ul className="text-xs text-slate-600 mt-3 space-y-2">
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-sky-500 shrink-0" />
-                    <span>ล็อกอินด่วนด้วย <strong>รหัส PIN 4 หลัก</strong></span>
+                    <span>เข้าสู่ระบบด้วย <strong>รหัส PIN 4 หลักประจำตัว</strong></span>
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-sky-500 shrink-0" />
@@ -80,18 +80,18 @@ export default function Home() {
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-sky-500 shrink-0" />
-                    <span>ค้นหาด่วนป้ายทะเบียน 4 ตัวท้ายใน <strong>0.1 วินาที</strong></span>
+                    <span>ตรวจสอบข้อมูลทะเบียนยานพาหนะได้อย่างรวดเร็ว</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                    <span className="text-emerald-700 font-semibold">รองรับโหมดออฟไลน์ใต้ตึกอับสัญญาณ 100%</span>
+                    <span className="text-emerald-700 font-semibold">รองรับการบันทึกข้อมูลแบบออฟไลน์ในจุดอับสัญญาณ</span>
                   </li>
                 </ul>
               </div>
             </div>
 
             <div className="pt-6 mt-6 border-t border-sky-100 flex items-center justify-between text-xs font-bold text-sky-600 group-hover:text-sky-700">
-              <span>เข้าสู่หน้า รปภ. หน้างาน &gt;</span>
+              <span>เข้าสู่ระบบปฏิบัติการ รปภ. &gt;</span>
               <div className="w-8 h-8 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center group-hover:translate-x-1 transition-transform">
                 <ArrowRight className="w-4 h-4" />
               </div>
@@ -118,31 +118,31 @@ export default function Home() {
                   สำหรับหัวหน้างาน (Supervisor Dashboard)
                 </h2>
                 <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-                  จอควบคุมความปลอดภัย มอนิเตอร์รอบเวร และบริหารจัดการ:
+                  ศูนย์ควบคุมความปลอดภัย ตรวจสอบรอบเวร และบริหารจัดการ:
                 </p>
                 <ul className="text-xs text-slate-600 mt-3 space-y-2">
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-blue-500 shrink-0" />
-                    <span>มอนิเตอร์สถานะ <strong>จุดตรวจทั้งหมดแบบ Real-time</strong></span>
+                    <span>ตรวจสอบสถานะ <strong>จุดตรวจทั้งหมดแบบ Real-time</strong></span>
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-blue-500 shrink-0" />
-                    <span>ตรวจสอบรูปเหตุฉุกเฉินบน <strong>Google Drive</strong></span>
+                    <span>ตรวจสอบภาพถ่ายรายงานเหตุการณ์บน <strong>Google Drive</strong></span>
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-blue-500 shrink-0" />
-                    <span>จัดการฐานข้อมูลรถบุคลากร + อัตรา KPI รปภ.</span>
+                    <span>จัดการฐานข้อมูลยานพาหนะบุคลากร และเกณฑ์การประเมิน รปภ.</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-indigo-500 shrink-0" />
-                    <span><strong>Gemini AI Batch Run</strong> วิเคราะห์รถแอบจอดค้างคืน</span>
+                    <span><strong>ระบบประมวลผลรายงานอัตโนมัติ</strong> ตรวจสอบยานพาหนะจอดค้างคืน</span>
                   </li>
                 </ul>
               </div>
             </div>
 
             <div className="pt-6 mt-6 border-t border-blue-100 flex items-center justify-between text-xs font-bold text-blue-700 group-hover:text-blue-800">
-              <span>เข้าสู่ศูนย์ควบคุม (PIN: 9999) &gt;</span>
+              <span>เข้าสู่ศูนย์ควบคุมและบริหารจัดการ (PIN: 9999) &gt;</span>
               <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center group-hover:translate-x-1 transition-transform">
                 <ArrowRight className="w-4 h-4" />
               </div>

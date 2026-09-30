@@ -638,8 +638,8 @@ export default function IncidentPage() {
                   <div className="w-12 h-12 rounded-full bg-white shadow-xs flex items-center justify-center text-rose-600">
                     <Camera className="w-6 h-6" />
                   </div>
-                  <span className="text-xs font-bold text-slate-700">แตะเพื่อเปิดกล้อง / แนบรูป</span>
-                  <span className="text-[10px] text-slate-400">ทำงานได้แม้ไม่มีสัญญาณเน็ต</span>
+                  <span className="text-xs font-bold text-slate-700">แตะเพื่อถ่ายภาพ / แนบรูปภาพ</span>
+                  <span className="text-[10px] text-slate-400">รองรับการทำงานในโหมดออฟไลน์</span>
                 </button>
               )}
             </div>
@@ -984,7 +984,7 @@ export default function IncidentPage() {
             <div 
               className="bg-black/95 flex items-center justify-center p-2 min-h-[40vh] max-h-[70vh] cursor-zoom-in group relative"
               onClick={() => openFullImage(previewPhoto.url, previewPhoto.title)}
-              title="คลิกที่รูปเพื่อเปิดดูภาพขนาดเต็ม"
+              title="แตะที่รูปภาพเพื่อเปิดดูภาพขนาดเต็ม"
             >
               <img src={previewPhoto.url} alt="Full view" className="w-full max-h-[68vh] object-contain rounded-2xl select-none" />
             </div>
