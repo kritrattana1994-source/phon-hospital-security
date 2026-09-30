@@ -519,7 +519,7 @@ function VehicleContent() {
       const cropX = Math.round((vw - cropW) / 2);
       const cropY = Math.round((vh - cropH) / 2);
 
-      const targetWidth = Math.min(cropW, 768);
+      const targetWidth = Math.min(cropW, 640);
       const cropCanvas = document.createElement("canvas");
       cropCanvas.width = targetWidth;
       cropCanvas.height = Math.round((targetWidth * cropH) / cropW);
@@ -527,7 +527,7 @@ function VehicleContent() {
       if (!cropCtx) return null;
 
       cropCtx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropCanvas.width, cropCanvas.height);
-      const cropDataUrl = cropCanvas.toDataURL("image/jpeg", 0.88);
+      const cropDataUrl = cropCanvas.toDataURL("image/jpeg", 0.78);
 
       // คำนวณค่าความคมชัดและความเปรียบต่างของขอบตัวอักษรป้าย (Luminance Edge Contrast / Sharpness)
       let sharpness = 0;
@@ -584,32 +584,32 @@ function VehicleContent() {
 
       const sharpness = frames.sharpness;
 
-      // ค่าความคมชัด >= 10 แสดงว่าเริ่มมีวัตถุ/ป้ายทะเบียนที่มีขอบตัวอักษรเข้ามาในกรอบเล็งเป้า
-      if (sharpness >= 10) {
+      // ค่าความคมชัด >= 7 แสดงว่าเริ่มมีวัตถุ/ป้ายทะเบียนที่มีขอบตัวอักษรเข้ามาในกรอบเล็งเป้า
+      if (sharpness >= 7) {
         candidateFramesRef.current.push({ frames, sharpness, timestamp: Date.now() });
 
-        // เก็บ Candidate Frames สูงสุด 3 เฟรม (~600ms) เพื่อหาจังหวะที่ภาพชัดและนิ่งที่สุด
-        if (candidateFramesRef.current.length > 3) {
+        // เก็บ Candidate Frames สูงสุด 2 เฟรม เพื่อความว่องไวสูงสุด (~100-200ms)
+        if (candidateFramesRef.current.length > 2) {
           candidateFramesRef.current.shift();
         }
 
         const candidates = candidateFramesRef.current;
         const count = candidates.length;
 
-        // เงื่อนไขในการสั่งจับภาพอัตโนมัติ:
-        // 1) ตรวจพบจุดพีคของความคมชัด (เฟรมปัจจุบันเริ่มเบลอลง แปลว่าเฟรมก่อนหน้าคือจังหวะที่ชัดที่สุด!)
-        // 2) บัฟเฟอร์ครบ 3 เฟรมและนิ่ง
-        // 3) ความคมชัดสูงมาก (sharpness >= 18) แสดงว่าป้ายอยู่ในโฟกัสสมบูรณ์แล้ว
+        // เงื่อนไขในการสั่งจับภาพทันใจ:
+        // 1) คมชัดระดับตัวอักษร (sharpness >= 11) สั่งจับภาพและประมวลผลทันที
+        // 2) ความคมชัดต่อเนื่อง 2 เฟรม (count >= 2 && sharpness >= 7.5)
+        // 3) จุดพีคของความคมชัด (เฟรมก่อนหน้าชัดกว่าเฟรมปัจจุบัน)
+        const isVerySharp = sharpness >= 11;
+        const isStable = count >= 2 && sharpness >= 7.5;
         const isPeak = count >= 2 && candidates[count - 1].sharpness < candidates[count - 2].sharpness;
-        const isBufferFull = count >= 3;
-        const isVerySharp = sharpness >= 18 && count >= 2;
 
-        if (isPeak || isBufferFull || isVerySharp) {
+        if (isVerySharp || isStable || isPeak) {
           isAutoScanProcessingRef.current = true;
-          // คัดเลือกภาพทะเบียนที่ "ชัดที่สุด" (Highest Sharpness) ในช่วงที่ส่อง
+          // คัดเลือกภาพทะเบียนที่ชัดที่สุด
           const best = candidates.reduce((max, f) => (f.sharpness > max.sharpness ? f : max));
           candidateFramesRef.current = [];
-          autoCaptureCooldownRef.current = Date.now() + 6000; // ป้องกันการเรียกซ้ำขณะกำลังประมวลผล
+          autoCaptureCooldownRef.current = Date.now() + 3000;
 
           try {
             await executeCapture(best.frames, "patrol");
@@ -618,15 +618,15 @@ function VehicleContent() {
           }
         }
       } else {
-        // หากผู้ใช้ส่ายกล้องหรือภาพเบลอมาก ให้ล้างบัฟเฟอร์เก่าทิ้ง
-        if (candidateFramesRef.current.length > 0 && Date.now() - candidateFramesRef.current[0].timestamp > 800) {
+        // หากภาพไม่ชัดให้เคลียร์บัฟเฟอร์อย่างรวดเร็ว
+        if (candidateFramesRef.current.length > 0 && Date.now() - candidateFramesRef.current[0].timestamp > 400) {
           candidateFramesRef.current = [];
         }
       }
     };
 
-    // ตรวจสอบความคมชัดทุกๆ 200ms
-    autoScanTimerRef.current = setInterval(runAutoCapture, 200);
+    // ตรวจสอบความคมชัดทุกๆ 100ms เพื่อความรวดเร็วทันใจ
+    autoScanTimerRef.current = setInterval(runAutoCapture, 100);
 
     return () => {
       if (autoScanTimerRef.current) {
@@ -858,11 +858,11 @@ function VehicleContent() {
             : "ยานพาหนะบุคคลภายนอก / ผู้รับบริการ",
         });
 
-        // Automatically unfreeze & resume live camera after 2.3 seconds
+        // Automatically unfreeze & resume live camera quickly (1.5 seconds)
         autoResumeTimerRef.current = setTimeout(() => {
           setCapturedResult(null);
-          autoCaptureCooldownRef.current = Date.now() + 2000;
-        }, 2300);
+          autoCaptureCooldownRef.current = Date.now() + 1500;
+        }, 1500);
 
       } else {
         // Failed to detect plate
@@ -873,11 +873,11 @@ function VehicleContent() {
           message: "ภาพไม่ชัดเจน หรือไม่พบป้ายทะเบียน กำลังกลับสู่หน้าจอกล้อง...",
         });
 
-        // Automatically resume after 1.8 seconds so guard can aim again
+        // Automatically resume after 1.2 seconds so guard can aim again quickly
         autoResumeTimerRef.current = setTimeout(() => {
           setCapturedResult(null);
-          autoCaptureCooldownRef.current = Date.now() + 1000;
-        }, 1800);
+          autoCaptureCooldownRef.current = Date.now() + 800;
+        }, 1200);
       }
     } catch (err: any) {
       console.error("Capture processing error:", err);
@@ -1787,7 +1787,7 @@ function VehicleContent() {
                   )}
                 </div>
               ) : (
-                /* LIVE VIEWFINDER RETICLE */
+                /* LIVE VIEWFINDER RETICLE - CLEAN & UNOBSTRUCTED */
                 <div 
                   onClick={() => {
                     if (!isOcrProcessing && cameraActive) handleVideoShutter("patrol");
@@ -1795,24 +1795,11 @@ function VehicleContent() {
                   className="absolute inset-0 flex flex-col items-center justify-center p-6 z-10 cursor-pointer"
                   title="แตะที่หน้าจอเพื่อจับภาพทันที"
                 >
-                  <div className="w-full max-w-[280px] h-28 border-2 border-emerald-400/90 rounded-2xl relative shadow-2xl transition-all duration-300">
+                  <div className="w-full max-w-[280px] h-28 border-2 border-emerald-400/80 rounded-2xl relative shadow-2xl transition-all duration-300">
                     <div className="absolute -top-1 -left-1 w-4 h-4 border-t-4 border-l-4 border-emerald-400 rounded-tl-lg" />
                     <div className="absolute -top-1 -right-1 w-4 h-4 border-t-4 border-r-4 border-emerald-400 rounded-tr-lg" />
                     <div className="absolute -bottom-1 -left-1 w-4 h-4 border-b-4 border-l-4 border-emerald-400 rounded-bl-lg" />
                     <div className="absolute -bottom-1 -right-1 w-4 h-4 border-b-4 border-r-4 border-emerald-400 rounded-br-lg" />
-
-                    <div className="absolute -top-7 left-0 right-0 text-center">
-                      <span className="text-[10px] font-bold text-emerald-300 bg-slate-900/80 px-2.5 py-0.5 rounded-full border border-emerald-500/30">
-                        จัดตำแหน่งป้ายทะเบียนให้อยู่ในกรอบ
-                      </span>
-                    </div>
-
-                    <div className="absolute -bottom-6 left-0 right-0 text-center">
-                      <span className="text-[10px] font-bold text-white/95 bg-slate-900/90 px-3 py-0.5 rounded-full backdrop-blur-xs border border-white/10 shadow-sm flex items-center justify-center gap-1 mx-auto w-fit">
-                        <Sparkles className="w-3 h-3 text-emerald-400 animate-pulse" />
-                        <span>จัดตำแหน่งป้ายให้อยู่ในกรอบ ระบบจะตรวจจับและบันทึกอัตโนมัติ</span>
-                      </span>
-                    </div>
                   </div>
                 </div>
               )}
@@ -1836,7 +1823,7 @@ function VehicleContent() {
                     title="เปิด/ปิดการตรวจจับอัตโนมัติ"
                   >
                     <Sparkles className="w-3 h-3" />
-                    <span>{autoScanActive ? "ตรวจจับอัตโนมัติ: เปิด" : "ตรวจจับอัตโนมัติ: ปิด"}</span>
+                    <span>{autoScanActive ? "สแกนอัตโนมัติ: เปิด" : "สแกนอัตโนมัติ: ปิด"}</span>
                   </button>
                 </div>
 
@@ -1848,14 +1835,6 @@ function VehicleContent() {
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                 </button>
-              </div>
-
-              {/* Viewfinder Bottom Status */}
-              <div className="relative z-20 text-center pointer-events-none">
-                <span className="text-[11px] text-white/90 bg-slate-900/85 px-3.5 py-1.5 rounded-full backdrop-blur-md border border-white/10 inline-flex items-center gap-1.5 shadow-md">
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-                  <span>ระบบตรวจจับอัตโนมัติ: เล็งป้ายทะเบียนให้อยู่ในกรอบเพื่อประมวลผล</span>
-                </span>
               </div>
             </div>
 
@@ -1869,33 +1848,25 @@ function VehicleContent() {
               className="hidden"
             />
 
-            {/* HANDS-FREE AUTO-SCAN HERO BAR */}
+            {/* COMPACT AUTO-SCAN ACTION BAR */}
             <div className="space-y-2">
-              <div className="p-3.5 bg-gradient-to-r from-emerald-950/80 via-slate-900/90 to-sky-950/80 border-2 border-emerald-400/60 rounded-2xl flex items-center justify-between gap-3 shadow-lg backdrop-blur-sm">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/30">
-                    <Sparkles className="w-5 h-5 animate-bounce" />
-                  </div>
-                  <div className="text-left min-w-0">
-                    <div className="text-xs font-black text-white flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
-                      <span className="truncate">ระบบตรวจจับป้ายทะเบียนอัตโนมัติ</span>
-                    </div>
-                    <p className="text-[11px] text-slate-300 truncate">
-                      เล็งป้ายให้อยู่ในกรอบ ระบบจะบันทึกภาพที่มีความคมชัดและประมวลผลโดยอัตโนมัติ
-                    </p>
-                  </div>
+              <div className="p-2.5 sm:p-3 bg-slate-900/90 border border-emerald-400/40 rounded-2xl flex items-center justify-between gap-3 shadow-md backdrop-blur-sm">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                  <span className="text-xs font-bold text-white truncate">
+                    สแกนอัตโนมัติความเร็วสูง (หรือแตะจอเพื่อถ่ายทันที)
+                  </span>
                 </div>
 
                 <button
                   type="button"
                   onClick={() => handleVideoShutter("patrol")}
                   disabled={isOcrProcessing || !cameraActive || (capturedResult !== null && capturedResult.status === "processing")}
-                  className="py-2 px-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs rounded-xl shadow-md active:scale-95 transition-all flex items-center gap-1 shrink-0 cursor-pointer disabled:opacity-50"
+                  className="py-1.5 px-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl shadow-xs active:scale-95 transition-all flex items-center gap-1 shrink-0 cursor-pointer disabled:opacity-50"
                   title="หากต้องการบันทึกภาพด้วยตนเอง"
                 >
                   <Camera className="w-3.5 h-3.5" />
-                  <span>บันทึกภาพด้วยตนเอง</span>
+                  <span>ถ่ายเอง</span>
                 </button>
               </div>
 
