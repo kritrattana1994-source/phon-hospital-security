@@ -67,7 +67,9 @@ import {
   TrendingUp,
   CalendarDays,
   ChevronDown,
-  Maximize2
+  Maximize2,
+  Eye,
+  EyeOff
 } from "lucide-react";
 import Link from "next/link";
 import { useFirebaseSync } from "@/lib/useFirebaseSync";
@@ -165,6 +167,7 @@ export default function SupervisorPage() {
   // Google Gemini Vision OCR Test State
   const [testGeminiLoading, setTestGeminiLoading] = useState(false);
   const [testGeminiResult, setTestGeminiResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [showGeminiKey, setShowGeminiKey] = useState(false);
 
   // 365-Day Archival State
   const [archiveCutoffDays, setArchiveCutoffDays] = useState<number>(365);
@@ -574,30 +577,27 @@ export default function SupervisorPage() {
     setTestGeminiLoading(true);
     setTestGeminiResult(null);
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey.trim()}`;
-      const res = await fetch(url, {
+      const res = await fetch("/api/test-gemini", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: "Ping. Reply with PONG only." }] }],
-        }),
+        body: JSON.stringify({ apiKey: geminiApiKey.trim() }),
       });
-      if (res.ok) {
+      const data = await res.json();
+      if (res.ok && data.success) {
         setTestGeminiResult({
           success: true,
-          message: "เชื่อมต่อ Gemini 1.5 Flash API สำเร็จ! พร้อมใช้งานตรวจจับป้ายทะเบียนทั้งรถยนต์และมอเตอร์ไซค์",
+          message: data.message || "✅ เชื่อมต่อ Gemini 1.5 Flash API สำเร็จ 100%!",
         });
       } else {
-        const errText = await res.text();
         setTestGeminiResult({
           success: false,
-          message: `เชื่อมต่อล้มเหลว (HTTP ${res.status}): ตรวจสอบ API Key หรือเปิดสิทธิ์ Gemini API ใน Google AI Studio`,
+          message: data.error || `❌ เชื่อมต่อล้มเหลว (HTTP ${res.status})`,
         });
       }
     } catch (err: any) {
       setTestGeminiResult({
         success: false,
-        message: `เกิดข้อผิดพลาดในการเชื่อมต่อ: ${err?.message || err}`,
+        message: `❌ เกิดข้อผิดพลาดในการเชื่อมต่อ: ${err?.message || err}`,
       });
     } finally {
       setTestGeminiLoading(false);
@@ -4292,13 +4292,23 @@ export default function SupervisorPage() {
                   Google Gemini API Key (ขอฟรีได้จาก Google AI Studio):
                 </label>
                 <div className="flex flex-col sm:flex-row gap-2">
-                  <input
-                    type="password"
-                    value={geminiApiKey || ""}
-                    onChange={(e) => setGeminiApiKey(e.target.value.trim())}
-                    placeholder="AIzaSy..."
-                    className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500 shadow-2xs"
-                  />
+                  <div className="relative flex-1">
+                    <input
+                      type={showGeminiKey ? "text" : "password"}
+                      value={geminiApiKey || ""}
+                      onChange={(e) => setGeminiApiKey(e.target.value.trim())}
+                      placeholder="AIzaSy..."
+                      className="w-full p-2.5 pr-10 bg-white border border-slate-200 rounded-xl text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500 shadow-2xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowGeminiKey(!showGeminiKey)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                      title={showGeminiKey ? "ซ่อนรหัส" : "แสดงรหัส"}
+                    >
+                      {showGeminiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={handleTestGeminiKey}
