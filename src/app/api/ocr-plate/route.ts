@@ -3,67 +3,27 @@ import { createWorker, PSM } from "tesseract.js";
 import fs from "fs";
 import path from "path";
 
-// Global persistent worker cache for high-speed repeated frame recognition
-let cachedWorker: any = null;
-let isInitializing = false;
-
-function getTessdataConfig(): { langPath: string; gzip: boolean; cacheMethod: "none" | "readOnly" } {
+function getLocalTessdataDir(): string | null {
   const candidates = [
     path.join(process.cwd(), "public", "tessdata"),
     path.join(process.cwd(), "tessdata"),
     path.join(__dirname, "..", "..", "..", "..", "public", "tessdata"),
     path.join(__dirname, "..", "..", "..", "..", "tessdata"),
+    "/tmp/tessdata",
   ];
 
   for (const candidate of candidates) {
     try {
       const targetFile = path.join(candidate, "eng.traineddata");
       if (fs.existsSync(targetFile)) {
-        return { langPath: candidate, gzip: false, cacheMethod: "none" };
+        return candidate;
       }
     } catch {}
   }
-
-  // Reliable remote CDN with HTTP 200 OK (never returns 404 like jsdelivr)
-  return {
-    langPath: "https://raw.githubusercontent.com/naptha/tessdata/gh-pages/4.0.0",
-    gzip: true,
-    cacheMethod: "readOnly",
-  };
+  return null;
 }
 
-async function getOcrWorker() {
-  if (cachedWorker) return cachedWorker;
-
-  if (isInitializing) {
-    let waitCount = 0;
-    while (isInitializing && waitCount < 100) {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      waitCount++;
-    }
-    if (cachedWorker) return cachedWorker;
-  }
-
-  isInitializing = true;
-  try {
-    const config = getTessdataConfig();
-    const worker = await createWorker("eng", 1, {
-      langPath: config.langPath,
-      gzip: config.gzip,
-      cacheMethod: config.cacheMethod,
-    });
-    await worker.setParameters({
-      tessedit_pageseg_mode: PSM.AUTO,
-      tessedit_char_whitelist: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ- ",
-    });
-    cachedWorker = worker;
-    return cachedWorker;
-  } finally {
-    isInitializing = false;
-  }
-}
-
-function extractLicensePlateNumber(rawText: string): { plateNumber: string; candidates: string[]; cleanText: string } {
+export function extractLicensePlateNumber(rawText: string): { plateNumber: string; candidates: string[]; cleanText: string } {
   const cleanText = rawText.replace(/\r?\n/g, " ").trim();
   const candidates: string[] = [];
 
@@ -95,6 +55,7 @@ function extractLicensePlateNumber(rawText: string): { plateNumber: string; cand
 }
 
 export async function POST(req: NextRequest) {
+  let worker: any = null;
   try {
     const body = await req.json();
     const { image } = body;
@@ -106,7 +67,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Convert dataUrl to Buffer
+    // Convert dataUrl or base64 to Buffer
     let buffer: Buffer;
     if (image.startsWith("data:")) {
       const base64Data = image.split(",")[1];
@@ -115,55 +76,28 @@ export async function POST(req: NextRequest) {
       buffer = Buffer.from(image, "base64");
     }
 
-    // Run OCR with cached worker
-    const ocrPromise = (async () => {
-      try {
-        const worker = await getOcrWorker();
-        const { data } = await worker.recognize(buffer);
-        return data.text || "";
-      } catch (workerErr) {
-        console.warn("Cached worker error, reinitializing worker:", workerErr);
-        try {
-          if (cachedWorker) {
-            await cachedWorker.terminate().catch(() => {});
-          }
-        } catch {}
-        cachedWorker = null;
-
-        // Fallback: create fresh worker with safe CDN config
-        const config = getTessdataConfig();
-        const oneTimeWorker = await createWorker("eng", 1, {
-          langPath: config.langPath,
-          gzip: config.gzip,
-          cacheMethod: config.cacheMethod,
-        });
-        await oneTimeWorker.setParameters({
-          tessedit_pageseg_mode: PSM.AUTO,
-          tessedit_char_whitelist: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ- ",
-        });
-        const { data } = await oneTimeWorker.recognize(buffer);
-        cachedWorker = oneTimeWorker;
-        return data.text || "";
-      }
-    })();
-
-    const timeoutPromise = new Promise<string>((_, reject) =>
-      setTimeout(() => reject(new Error("OCR timeout")), 8500)
-    );
-
-    let rawText = "";
-    try {
-      rawText = await Promise.race([ocrPromise, timeoutPromise]);
-    } catch (err: any) {
-      console.warn("OCR recognition notice:", err?.message || err);
-      return NextResponse.json({
-        success: false,
-        error: "OCR processing timed out or failed",
-        plateNumber: "",
-        rawText: "",
+    const localDir = getLocalTessdataDir();
+    if (localDir) {
+      worker = await createWorker("eng", 1, {
+        langPath: localDir,
+        gzip: false,
+        cacheMethod: "none",
+      });
+    } else {
+      worker = await createWorker("eng", 1, {
+        langPath: "https://raw.githubusercontent.com/naptha/tessdata/gh-pages/4.0.0",
+        gzip: true,
+        cacheMethod: "readOnly",
       });
     }
 
+    await worker.setParameters({
+      tessedit_pageseg_mode: PSM.AUTO,
+      tessedit_char_whitelist: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ- ",
+    });
+
+    const { data } = await worker.recognize(buffer);
+    const rawText = data?.text || "";
     const { plateNumber, candidates, cleanText } = extractLicensePlateNumber(rawText);
 
     return NextResponse.json({
@@ -178,5 +112,11 @@ export async function POST(req: NextRequest) {
       { success: false, error: error?.message || "Internal server error" },
       { status: 500 }
     );
+  } finally {
+    if (worker) {
+      try {
+        await worker.terminate();
+      } catch {}
+    }
   }
 }

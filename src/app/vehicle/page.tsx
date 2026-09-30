@@ -36,6 +36,7 @@ import { useRouter } from "next/navigation";
 import HospitalBrand from "@/components/HospitalBrand";
 import { uploadImageToDrive } from "@/lib/uploadToDrive";
 import { openFullImage } from "@/lib/imageViewer";
+import { recognizePlateFromCanvas, getClientOcrWorker } from "@/lib/clientOcr";
 
 interface FloatingToast {
   id: string;
@@ -160,6 +161,11 @@ function VehicleContent() {
       router.push("/guard");
     }
   }, [currentUser, router]);
+
+  // Pre-initialize Client OCR worker in the browser
+  useEffect(() => {
+    getClientOcrWorker().catch((err) => console.warn("Client OCR pre-init notice:", err));
+  }, []);
 
   // Handle Patrol Camera
   useEffect(() => {
@@ -359,7 +365,7 @@ function VehicleContent() {
   };
 
   // ตัดภาพเฉพาะโซนกรอบเล็งเป้า (Viewfinder HUD) ตรงกลาง เพื่อให้ OCR วิเคราะห์เลขทะเบียนได้แม่นยำและเร็วที่สุด
-  const captureOcrScanArea = (): { cropDataUrl: string; fullDataUrl: string } | null => {
+  const captureOcrScanArea = (): { cropCanvas: HTMLCanvasElement; cropDataUrl: string; fullDataUrl: string } | null => {
     if (!videoRef.current) return null;
     try {
       const video = videoRef.current;
@@ -392,7 +398,7 @@ function VehicleContent() {
 
       cropCtx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropCanvas.width, cropCanvas.height);
       const cropDataUrl = cropCanvas.toDataURL("image/jpeg", 0.88);
-      return { cropDataUrl, fullDataUrl };
+      return { cropCanvas, cropDataUrl, fullDataUrl };
     } catch (err) {
       console.warn("captureOcrScanArea notice:", err);
       return null;
@@ -419,21 +425,38 @@ function VehicleContent() {
       isAutoScanProcessingRef.current = true;
       setIsAutoScanningFrame(true);
 
-      const controller = new AbortController();
-      const abortTimer = setTimeout(() => controller.abort(), 6500);
-
       try {
-        const res = await fetch("/api/ocr-plate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ image: frames.cropDataUrl }),
-          signal: controller.signal,
-        });
-        clearTimeout(abortTimer);
-        const data = await res.json();
+        let detectedPlate = "";
 
-        if (data.success && data.plateNumber && data.plateNumber.length >= 2) {
-          const plate = data.plateNumber.trim().toUpperCase();
+        // 1. Client-side local WebAssembly OCR in browser (Fastest: ~150ms, zero network)
+        const clientRes = await recognizePlateFromCanvas(frames.cropCanvas);
+        if (clientRes.success && clientRes.plateNumber) {
+          detectedPlate = clientRes.plateNumber;
+        } else {
+          // 2. Server API fallback if client-side is still initializing
+          const controller = new AbortController();
+          const abortTimer = setTimeout(() => controller.abort(), 6000);
+          try {
+            const res = await fetch("/api/ocr-plate", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ image: frames.cropDataUrl }),
+              signal: controller.signal,
+            });
+            clearTimeout(abortTimer);
+            if (res.ok) {
+              const data = await res.json();
+              if (data.success && data.plateNumber) {
+                detectedPlate = data.plateNumber;
+              }
+            }
+          } catch {} finally {
+            clearTimeout(abortTimer);
+          }
+        }
+
+        if (detectedPlate && detectedPlate.length >= 2) {
+          const plate = detectedPlate.trim().toUpperCase();
           setLastDetectedPlate(plate);
           setScanPulse(true);
           setTimeout(() => setScanPulse(false), 1200);
@@ -446,17 +469,16 @@ function VehicleContent() {
             await handleContinuousScan(plate, undefined, frames.fullDataUrl);
           }
         }
-      } catch {
-        // ทำงานต่อเนื่องแบบ Background ไม่บล็อกหน้าจอ
+      } catch (err) {
+        console.warn("Auto scan notice:", err);
       } finally {
-        clearTimeout(abortTimer);
         isAutoScanProcessingRef.current = false;
         setIsAutoScanningFrame(false);
       }
     };
 
-    // ตรวจจับทุก 1.2 วินาทีขณะเล็งกล้อง
-    autoScanTimerRef.current = setInterval(runAutoScan, 1200);
+    // ตรวจจับทุก 1 วินาทีขณะเล็งกล้อง
+    autoScanTimerRef.current = setInterval(runAutoScan, 1000);
 
     return () => {
       if (autoScanTimerRef.current) {
@@ -466,23 +488,70 @@ function VehicleContent() {
     };
   }, [mainTab, cameraActive, autoScanActive, isOcrProcessing]);
 
-  const performOcrOnImage = async (dataUrl: string, targetMode: "lookup" | "patrol", fullImageUrl?: string) => {
+  const performOcrOnImage = async (
+    dataUrl: string,
+    targetMode: "lookup" | "patrol",
+    fullImageUrl?: string,
+    canvasElement?: HTMLCanvasElement
+  ) => {
     setIsOcrProcessing(true);
     setOcrStatusText("กำลังตรวจจับเลขทะเบียนด้วย AI...");
-    const controller = new AbortController();
-    const abortTimer = setTimeout(() => controller.abort(), 12000);
-
     try {
-      const res = await fetch("/api/ocr-plate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: dataUrl }),
-        signal: controller.signal,
-      });
-      clearTimeout(abortTimer);
-      const data = await res.json();
-      if (data.success && data.plateNumber) {
-        const plate = data.plateNumber;
+      let detectedPlate = "";
+
+      // 1. ลองใช้ Client-Side WebAssembly OCR ทันทีหากมี canvas
+      if (canvasElement) {
+        const clientRes = await recognizePlateFromCanvas(canvasElement);
+        if (clientRes.success && clientRes.plateNumber) {
+          detectedPlate = clientRes.plateNumber;
+        }
+      }
+
+      // 2. ถ้ายังไม่พบ ส่งตรวจจับผ่าน Server API
+      if (!detectedPlate) {
+        const controller = new AbortController();
+        const abortTimer = setTimeout(() => controller.abort(), 12000);
+        try {
+          const res = await fetch("/api/ocr-plate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image: dataUrl }),
+            signal: controller.signal,
+          });
+          clearTimeout(abortTimer);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success && data.plateNumber) {
+              detectedPlate = data.plateNumber;
+            }
+          }
+        } catch (apiErr) {
+          console.warn("API OCR error:", apiErr);
+        } finally {
+          clearTimeout(abortTimer);
+        }
+      }
+
+      // 3. หากตัดกรอบกลางแล้วไม่พบ ลองสแกนภาพเต็มมุมกว้างสำรองทันที
+      if (!detectedPlate && fullImageUrl && fullImageUrl !== dataUrl) {
+        setOcrStatusText("กำลังตรวจจับภาพมุมกว้างสำรอง...");
+        try {
+          const fallbackRes = await fetch("/api/ocr-plate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image: fullImageUrl }),
+          });
+          if (fallbackRes.ok) {
+            const fallbackData = await fallbackRes.json();
+            if (fallbackData.success && fallbackData.plateNumber) {
+              detectedPlate = fallbackData.plateNumber;
+            }
+          }
+        } catch {}
+      }
+
+      if (detectedPlate) {
+        const plate = detectedPlate;
         setLastDetectedPlate(plate);
         setScanPulse(true);
         setTimeout(() => setScanPulse(false), 1200);
@@ -499,38 +568,6 @@ function VehicleContent() {
           await handleContinuousScan(plate, undefined, fullImageUrl || dataUrl);
         }
       } else {
-        // หากตัดกรอบกลางแล้วไม่พบ ลองสแกนภาพเต็มมุมกว้างสำรองทันที
-        if (fullImageUrl && fullImageUrl !== dataUrl) {
-          setOcrStatusText("กำลังตรวจจับภาพมุมกว้างสำรอง...");
-          try {
-            const fallbackRes = await fetch("/api/ocr-plate", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ image: fullImageUrl }),
-            });
-            const fallbackData = await fallbackRes.json();
-            if (fallbackData.success && fallbackData.plateNumber) {
-              const plate = fallbackData.plateNumber;
-              setLastDetectedPlate(plate);
-              setScanPulse(true);
-              setTimeout(() => setScanPulse(false), 1200);
-              if (targetMode === "lookup") {
-                setDialQuery(plate);
-                handlePerformSearch(plate);
-                addToast({
-                  plate,
-                  isStaff: false,
-                  type: "success",
-                  message: `ตรวจพบเลขทะเบียน ${plate} สำเร็จ`,
-                });
-              } else {
-                await handleContinuousScan(plate, undefined, fullImageUrl);
-              }
-              return;
-            }
-          } catch {}
-        }
-
         const msg = "ไม่สามารถอ่านเลขทะเบียนจากภาพได้ชัดเจน กรุณาส่องตรงป้ายอีกครั้ง หรือกดค้นหาด้วยแป้นตัวเลข";
         if (targetMode === "lookup") {
           alert(`⚠️ ${msg}`);
@@ -548,7 +585,6 @@ function VehicleContent() {
         alert("เกิดข้อผิดพลาดในการวิเคราะห์ภาพ กรุณาลองใหม่อีกครั้งหรือพิมพ์เลขทะเบียนด้วยตนเอง");
       }
     } finally {
-      clearTimeout(abortTimer);
       setIsOcrProcessing(false);
       setOcrStatusText(null);
     }
@@ -561,7 +597,7 @@ function VehicleContent() {
     }
     const frames = captureOcrScanArea();
     if (frames) {
-      await performOcrOnImage(frames.cropDataUrl, targetMode, frames.fullDataUrl);
+      await performOcrOnImage(frames.cropDataUrl, targetMode, frames.fullDataUrl, frames.cropCanvas);
     } else {
       const frame = captureVideoFrame();
       if (!frame) {
