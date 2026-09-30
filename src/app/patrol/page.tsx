@@ -51,15 +51,60 @@ export default function PatrolPage() {
   const [photoError, setPhotoError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Helper สำหรับค้นหาจุดตรวจจากข้อความที่สแกนได้ หรือ URL parameter
+  const resolveCheckpoint = (input: string): Checkpoint | null => {
+    const text = input.trim();
+    if (!text || checkpoints.length === 0) return null;
+
+    // 1. ตรวจสอบรูปแบบมาตรฐาน "HOSP-PATROL:<checkpointId>:<checkpointCode>"
+    if (text.startsWith("HOSP-PATROL:")) {
+      const parts = text.split(":");
+      const targetId = parts[1]?.trim();
+      const targetCode = parts[2]?.trim();
+
+      // จับคู่ด้วย Checkpoint ID ตรงตัว (100% Strict Match)
+      let matched = checkpoints.find((cp) => cp.id === targetId);
+
+      // หากไม่พบ ID ให้จับคู่ด้วย Code ตรงตัว
+      if (!matched && targetCode) {
+        matched = checkpoints.find(
+          (cp) => cp.code.toLowerCase() === targetCode.toLowerCase()
+        );
+      }
+
+      if (matched) return matched;
+    }
+
+    // 2. จับคู่แบบ Exact Match (เทียบเท่าทั้งก้อนกับ ID หรือ Code ป้องกัน Substring ชนกัน)
+    const exactMatch = checkpoints.find(
+      (cp) =>
+        cp.id === text ||
+        cp.code.toLowerCase() === text.toLowerCase()
+    );
+    if (exactMatch) return exactMatch;
+
+    // 3. กรณีสแกนได้เป็น URL ที่มีพารามิเตอร์ cp= หรือ scan=
+    try {
+      if (text.includes("?") || text.includes("&")) {
+        const queryPart = text.includes("?") ? text.split("?")[1] : text;
+        const searchParams = new URLSearchParams(queryPart);
+        const paramVal = searchParams.get("cp") || searchParams.get("scan");
+        if (paramVal) {
+          return resolveCheckpoint(paramVal);
+        }
+      }
+    } catch (_) {}
+
+    return null;
+  };
+
   // Read URL query parameter on mount (?cp=cp01 or ?scan=01)
   useEffect(() => {
     if (typeof window !== "undefined" && checkpoints.length > 0) {
       const params = new URLSearchParams(window.location.search);
       const cpQuery = params.get("cp") || params.get("scan");
       if (cpQuery) {
-        const found = checkpoints.find(
-          (c) => c.id === cpQuery || c.code === cpQuery || c.code.toLowerCase() === cpQuery.toLowerCase()
-        );
+        const found = resolveCheckpoint(cpQuery);
         if (found) {
           setSelectedCheckpoint(found);
         }
@@ -253,13 +298,7 @@ export default function PatrolPage() {
   };
 
   const handleQrDecoded = (text: string) => {
-    // Formats: "HOSP-PATROL:cp01:A1-01" or "cp01" or "A1-01"
-    const matched = checkpoints.find(
-      (cp) =>
-        text.includes(cp.id) ||
-        text.includes(cp.code) ||
-        text.toLowerCase().includes(cp.code.toLowerCase())
-    );
+    const matched = resolveCheckpoint(text);
 
     if (matched) {
       setSelectedCheckpoint(matched);
