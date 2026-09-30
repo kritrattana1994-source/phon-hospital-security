@@ -66,10 +66,12 @@ import {
   BarChart3,
   TrendingUp,
   CalendarDays,
-  ChevronDown
+  ChevronDown,
+  Maximize2
 } from "lucide-react";
 import Link from "next/link";
 import { useFirebaseSync } from "@/lib/useFirebaseSync";
+import { openFullImage, downloadImage } from "@/lib/imageViewer";
 import HospitalBrand from "@/components/HospitalBrand";
 import PrintQRModal from "@/components/PrintQRModal";
 import { getThaiFiscalYear, isOlderThanDays, formatThaiDateTime } from "@/lib/fiscalYear";
@@ -3422,7 +3424,7 @@ export default function SupervisorPage() {
                           src={incident.imageUrl || "https://images.unsplash.com/photo-1517646287270-a5a9ca602e5c?w=600&q=80"}
                           alt="Incident Evidence"
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform cursor-pointer"
-                          onClick={() => incident.imageUrl && window.open(incident.imageUrl, "_blank")}
+                          onClick={() => incident.imageUrl && setSelectedPhotoModal({ url: incident.imageUrl, title: incident.title, timestamp: incident.timestamp })}
                         />
                         <div className="absolute bottom-1 right-1 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded-md backdrop-blur-xs font-mono">
                           รูปเหตุการณ์
@@ -3503,7 +3505,7 @@ export default function SupervisorPage() {
                                   src={incident.resolutionImageUrl}
                                   alt="Resolution Evidence"
                                   className="w-full h-full object-cover group-hover:scale-105 transition-transform cursor-pointer"
-                                  onClick={() => window.open(incident.resolutionImageUrl, "_blank")}
+                                  onClick={() => setSelectedPhotoModal({ url: incident.resolutionImageUrl!, title: `ภาพผลการระงับเหตุ - ${incident.title}`, timestamp: incident.resolvedAt })}
                                 />
                                 <div className="absolute bottom-0 inset-x-0 bg-emerald-900/80 text-white text-[8px] text-center py-0.5 font-bold">
                                   ภาพปิดงาน
@@ -5528,47 +5530,89 @@ export default function SupervisorPage() {
       {/* MODAL: VIEW PHOTO EVIDENCE (ดูรูปถ่ายจุดตรวจขยาย) */}
       {selectedPhotoModal && (
         <div 
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200"
           onClick={() => setSelectedPhotoModal(null)}
         >
           <div 
-            className="bg-white rounded-3xl overflow-hidden max-w-lg w-full shadow-2xl flex flex-col"
+            className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden max-w-xl w-full shadow-2xl flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
-              <div>
-                <h4 className="font-bold text-sm text-white">{selectedPhotoModal.title}</h4>
+            {/* Header */}
+            <div className="p-4 bg-slate-900 text-white flex justify-between items-center border-b border-slate-800">
+              <div className="pr-2">
+                <h4 className="font-bold text-sm sm:text-base text-white flex items-center gap-2">
+                  <Camera className="w-4 h-4 text-sky-400 shrink-0" />
+                  <span className="truncate">{selectedPhotoModal.title}</span>
+                </h4>
                 {selectedPhotoModal.timestamp && (
-                  <p className="text-[11px] text-slate-400">
-                    เวลาถ่าย: {new Date(selectedPhotoModal.timestamp).toLocaleString("th-TH")}
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    เวลาบันทึก: {new Date(selectedPhotoModal.timestamp).toLocaleString("th-TH")}
                   </p>
                 )}
               </div>
-              <button
-                type="button"
-                onClick={() => setSelectedPhotoModal(null)}
-                className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => openFullImage(selectedPhotoModal.url, selectedPhotoModal.title)}
+                  className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-sky-300 hover:text-white transition-colors"
+                  title="เปิดดูขนาดเต็มจอในแท็บใหม่"
+                >
+                  <Maximize2 className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedPhotoModal(null)}
+                  className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-400 hover:text-white transition-colors"
+                  title="ปิดหน้าต่าง"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
-            <div className="bg-black flex items-center justify-center p-2 max-h-[70vh]">
+
+            {/* Photo Body */}
+            <div 
+              className="bg-black/95 flex items-center justify-center p-2 min-h-[40vh] max-h-[72vh] overflow-hidden relative group cursor-zoom-in"
+              onClick={() => openFullImage(selectedPhotoModal.url, selectedPhotoModal.title)}
+              title="คลิกที่ภาพเพื่อเปิดดูภาพขนาดเต็ม"
+            >
               <img 
                 src={selectedPhotoModal.url} 
                 alt={selectedPhotoModal.title} 
-                className="max-h-[65vh] w-auto object-contain rounded-xl"
+                className="max-h-[70vh] w-auto max-w-full object-contain rounded-xl select-none"
               />
+              <div className="absolute bottom-3 inset-x-0 flex justify-center pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+                <span className="bg-black/70 text-white text-[11px] font-bold px-3 py-1 rounded-full backdrop-blur-xs flex items-center gap-1">
+                  <Maximize2 className="w-3 h-3 text-sky-400" /> แตะหรือคลิกที่รูปเพื่อเปิดดูขนาดเต็ม
+                </span>
+              </div>
             </div>
-            <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-between items-center text-xs">
-              <span className="text-slate-500 text-[11px]">หลักฐานการตรวจยืนยันพิกัด GPS</span>
-              <a
-                href={selectedPhotoModal.url}
-                target="_blank"
-                rel="noreferrer"
-                className="px-3 py-1.5 rounded-lg bg-sky-600 text-white font-bold text-xs hover:bg-sky-500 transition-colors"
-              >
-                เปิดภาพขนาดเต็ม
-              </a>
+
+            {/* Footer */}
+            <div className="p-3.5 bg-slate-900 border-t border-slate-800 flex flex-wrap gap-2 justify-between items-center text-xs">
+              <span className="text-slate-400 text-[11px] flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> หลักฐานยืนยันพิกัด GPS & วันเวลาจริง
+              </span>
+              <div className="flex items-center gap-2 ml-auto">
+                <button
+                  type="button"
+                  onClick={() => downloadImage(selectedPhotoModal.url, selectedPhotoModal.title)}
+                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold text-xs flex items-center gap-1.5 transition-all active:scale-95 shadow-2xs border border-slate-700"
+                  title="บันทึกไฟล์ภาพ .jpg ลงในเครื่อง"
+                >
+                  <Download className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>บันทึกภาพ</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openFullImage(selectedPhotoModal.url, selectedPhotoModal.title)}
+                  className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center gap-1.5 transition-all active:scale-95 shadow-md shadow-sky-600/30"
+                  title="เปิดดูภาพขนาดเต็ม (แท็บใหม่)"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>เปิดภาพขนาดเต็ม</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

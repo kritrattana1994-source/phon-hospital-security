@@ -35,6 +35,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import HospitalBrand from "@/components/HospitalBrand";
 import { uploadImageToDrive } from "@/lib/uploadToDrive";
+import { openFullImage } from "@/lib/imageViewer";
 
 interface FloatingToast {
   id: string;
@@ -1613,16 +1614,15 @@ function VehicleContent() {
                               {scan.plateNumber}
                             </span>
                             {scan.imageUrl && (
-                              <a
-                                href={scan.imageUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-0.5 text-[9px] text-sky-600 hover:text-sky-800 bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200"
-                                title="ดูภาพถ่ายหลักฐาน"
+                              <button
+                                type="button"
+                                onClick={() => openFullImage(scan.imageUrl, `ตรวจรถ_${scan.plateNumber}`)}
+                                className="inline-flex items-center gap-0.5 text-[9px] text-sky-600 hover:text-sky-800 bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200 cursor-pointer active:scale-95"
+                                title="ดูภาพถ่ายหลักฐานขนาดเต็ม"
                               >
                                 <Camera className="w-2.5 h-2.5" />
                                 <span>ภาพ</span>
-                              </a>
+                              </button>
                             )}
                           </div>
                           <span className="text-[10px] text-slate-500 block">

@@ -21,7 +21,8 @@ import {
   RefreshCw,
   Plus,
   Archive,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Download
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -29,6 +30,7 @@ import { useStore, Incident } from "@/lib/store";
 import HospitalBrand from "@/components/HospitalBrand";
 import { getCurrentShift, hospitalShifts } from "@/lib/patrolSchedule";
 import { uploadImageToDrive } from "@/lib/uploadToDrive";
+import { openFullImage, downloadImage } from "@/lib/imageViewer";
 
 export default function IncidentPage() {
   const router = useRouter();
@@ -958,21 +960,52 @@ export default function IncidentPage() {
       )}
 
       {/* ============================================================== */}
+      {/* ============================================================== */}
       {/* PHOTO PREVIEW MODAL */}
       {/* ============================================================== */}
       {previewPhoto && (
         <div
           onClick={() => setPreviewPhoto(null)}
-          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 cursor-pointer"
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 cursor-pointer"
         >
-          <div className="max-w-md w-full bg-slate-900 rounded-3xl overflow-hidden p-3 space-y-2">
-            <div className="flex items-center justify-between text-white text-xs px-2">
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="max-w-lg w-full bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col cursor-default"
+          >
+            <div className="flex items-center justify-between text-white text-xs p-3.5 border-b border-slate-800">
               <span className="font-bold line-clamp-1">{previewPhoto.title}</span>
-              <button onClick={() => setPreviewPhoto(null)} className="text-slate-400 hover:text-white">
+              <button 
+                onClick={() => setPreviewPhoto(null)} 
+                className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-400 hover:text-white transition-colors"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <img src={previewPhoto.url} alt="Full view" className="w-full max-h-[70vh] object-contain rounded-2xl" />
+            <div 
+              className="bg-black/95 flex items-center justify-center p-2 min-h-[40vh] max-h-[70vh] cursor-zoom-in group relative"
+              onClick={() => openFullImage(previewPhoto.url, previewPhoto.title)}
+              title="คลิกที่รูปเพื่อเปิดดูภาพขนาดเต็ม"
+            >
+              <img src={previewPhoto.url} alt="Full view" className="w-full max-h-[68vh] object-contain rounded-2xl select-none" />
+            </div>
+            <div className="p-3 bg-slate-900 border-t border-slate-800 flex justify-end gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => downloadImage(previewPhoto.url, previewPhoto.title)}
+                className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center gap-1.5 active:scale-95 transition-all border border-slate-700"
+              >
+                <Download className="w-3.5 h-3.5 text-emerald-400" />
+                <span>บันทึกภาพ</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => openFullImage(previewPhoto.url, previewPhoto.title)}
+                className="px-4 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center gap-1.5 active:scale-95 transition-all shadow-md shadow-sky-600/30"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>เปิดภาพขนาดเต็ม</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
