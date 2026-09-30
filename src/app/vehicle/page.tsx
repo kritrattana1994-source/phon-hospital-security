@@ -430,10 +430,14 @@ function VehicleContent() {
 
         // 1. Client-side local WebAssembly OCR in browser (Fastest: ~150ms, zero network)
         const clientRes = await recognizePlateFromCanvas(frames.cropCanvas);
-        if (clientRes.success && clientRes.plateNumber) {
-          detectedPlate = clientRes.plateNumber;
+        if (clientRes.isWorkerReady) {
+          // Client worker is active and analyzed the frame locally!
+          if (clientRes.success && clientRes.plateNumber) {
+            detectedPlate = clientRes.plateNumber;
+          }
+          // Note: If no plate is in the frame, we simply wait for the next frame without hitting the server!
         } else {
-          // 2. Server API fallback if client-side is still initializing
+          // 2. Server API fallback ONLY if client-side worker is not ready yet
           const controller = new AbortController();
           const abortTimer = setTimeout(() => controller.abort(), 6000);
           try {

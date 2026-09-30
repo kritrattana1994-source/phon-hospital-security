@@ -83,22 +83,23 @@ export function extractLicensePlateNumber(rawText: string): { plateNumber: strin
 
 export async function recognizePlateFromCanvas(
   canvas: HTMLCanvasElement
-): Promise<{ success: boolean; plateNumber: string; rawText: string }> {
+): Promise<{ isWorkerReady: boolean; success: boolean; plateNumber: string; rawText: string }> {
   try {
     const worker = await getClientOcrWorker();
     if (!worker) {
-      return { success: false, plateNumber: "", rawText: "" };
+      return { isWorkerReady: false, success: false, plateNumber: "", rawText: "" };
     }
     const { data } = await worker.recognize(canvas);
     const rawText = data?.text || "";
     const { plateNumber } = extractLicensePlateNumber(rawText);
     return {
+      isWorkerReady: true,
       success: !!plateNumber,
       plateNumber,
       rawText,
     };
   } catch (err) {
     console.warn("recognizePlateFromCanvas error:", err);
-    return { success: false, plateNumber: "", rawText: "" };
+    return { isWorkerReady: false, success: false, plateNumber: "", rawText: "" };
   }
 }
