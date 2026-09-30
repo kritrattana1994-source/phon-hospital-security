@@ -216,7 +216,7 @@ interface AppState {
   // Vehicles
   staffVehicles: StaffVehicle[];
   parkingScans: ParkingScan[];
-  addParkingScan: (scan: Omit<ParkingScan, 'id' | 'synced' | 'guardName'>) => void;
+  addParkingScan: (scan: Omit<ParkingScan, 'id' | 'synced' | 'guardName'> & { guardName?: string }) => void;
   addStaffVehicle: (vehicle: StaffVehicle) => void;
   syncVehiclesFromSheet: (vehicles: StaffVehicle[]) => void;
   bulkImportVehicles: (vehicles: StaffVehicle[]) => void;
@@ -691,13 +691,21 @@ export const useStore = create<AppState>()(
 
         const newScan: ParkingScan = {
           ...scan,
-          id: 'scan-' + Date.now(),
-          guardName: user?.name || 'รปภ. เวร',
+          id: 'scan-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+          guardName: scan.guardName || user?.name || 'รปภ. เวร',
           timestamp: scan.timestamp || now.toISOString(),
           expireAt: scan.expireAt || expireDate.toISOString(),
           synced: true
         };
         saveParkingScanToCloud(newScan);
+
+        try {
+          if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+            const bc = new BroadcastChannel("hospital_security_parking_sync");
+            bc.postMessage({ type: "NEW_PARKING_SCAN", scan: newScan });
+            bc.close();
+          }
+        } catch {}
 
         set((state) => ({
           parkingScans: [newScan, ...state.parkingScans]

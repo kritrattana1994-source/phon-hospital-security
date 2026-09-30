@@ -33,18 +33,54 @@ export function useFirebaseSync() {
       console.warn("Patrol sync notice:", err.message);
     });
 
-    // 3. Real-time Listener: Parking Scans
+    // 3. Real-time Listener: Parking Scans (รองรับ รปภ. หลายคนสแกนพร้อมกัน ข้อมูลซิงค์สดเรียงลำดับใหม่สุดลงมา)
     const unsubParking = onSnapshot(collection(db, "parkingScans"), (snapshot) => {
       setIsConnected(true);
       const cloudScans = snapshot.docs.map(doc => doc.data() as ParkingScan);
+      // เรียงลำดับเวลาใหม่สุดอยู่บนสุด
+      cloudScans.sort((a, b) => {
+        const timeA = new Date(a.timestamp || 0).getTime();
+        const timeB = new Date(b.timestamp || 0).getTime();
+        if (timeA && timeB && !isNaN(timeA) && !isNaN(timeB)) return timeB - timeA;
+        return (b.id || "").localeCompare(a.id || "");
+      });
       const cloudIds = new Set(cloudScans.map(s => s.id));
       useStore.setState((state) => {
         const unsyncedLocals = state.parkingScans.filter(s => !s.synced && !cloudIds.has(s.id));
-        return { parkingScans: [...cloudScans, ...unsyncedLocals] };
+        const merged = [...cloudScans, ...unsyncedLocals].sort((a, b) => {
+          const timeA = new Date(a.timestamp || 0).getTime();
+          const timeB = new Date(b.timestamp || 0).getTime();
+          return timeB - timeA;
+        });
+        return { parkingScans: merged };
       });
     }, (err) => {
       console.warn("Parking sync notice:", err.message);
     });
+
+    // 3.1 Instant Cross-Tab Broadcast Channel (ซิงค์ข้ามแท็บ/อุปกรณ์ภายในเครื่องทันที 0ms)
+    let broadcast: BroadcastChannel | null = null;
+    try {
+      if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+        broadcast = new BroadcastChannel("hospital_security_parking_sync");
+        broadcast.onmessage = (event) => {
+          if (event.data?.type === "NEW_PARKING_SCAN" && event.data?.scan) {
+            const incomingScan = event.data.scan as ParkingScan;
+            useStore.setState((state) => {
+              if (state.parkingScans.some((s) => s.id === incomingScan.id)) return state;
+              const updated = [incomingScan, ...state.parkingScans].sort((a, b) => {
+                const timeA = new Date(a.timestamp || 0).getTime();
+                const timeB = new Date(b.timestamp || 0).getTime();
+                return timeB - timeA;
+              });
+              return { parkingScans: updated };
+            });
+          }
+        };
+      }
+    } catch (e) {
+      console.warn("BroadcastChannel init notice:", e);
+    }
 
     // 4. Real-time Listener: Incidents
     const unsubIncidents = onSnapshot(collection(db, "incidents"), (snapshot) => {
@@ -188,6 +224,7 @@ export function useFirebaseSync() {
     });
 
     return () => {
+      broadcast?.close();
       unsubPatrol();
       unsubParking();
       unsubIncidents();
