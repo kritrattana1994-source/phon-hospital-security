@@ -1032,11 +1032,14 @@ function VehicleContent() {
   const todayScans = parkingScans.filter((s) => s.timestamp && s.timestamp.startsWith(todayDateStr));
   const todayStaffCount = todayScans.filter((s) => s.isStaff).length;
   const todayOutsideCount = todayScans.filter((s) => !s.isStaff).length;
-
-  const currentRoundScans = parkingScans.filter((s) => {
-    if (!s.timestamp?.startsWith(todayDateStr)) return false;
-    return s.round === selectedRound || (s.roundName && s.roundName.includes(selectedRound));
-  });
+  const currentRoundScans = parkingScans
+    .filter((s) => {
+      const isRoundMatch = s.round === selectedRound || (s.roundName && s.roundName.includes(selectedRound));
+      if (!isRoundMatch) return false;
+      if (!s.timestamp) return false;
+      return s.timestamp.startsWith(todayDateStr) || (Date.now() - new Date(s.timestamp).getTime() < 24 * 60 * 60 * 1000);
+    })
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   const staffCountInRound = currentRoundScans.filter((s) => s.isStaff).length;
   const outsideCountInRound = currentRoundScans.filter((s) => !s.isStaff).length;
 
@@ -1941,69 +1944,108 @@ function VehicleContent() {
               </form>
             </div>
 
-            {/* Scans List in Round */}
+            {/* Scans List in Round - 20 ทะเบียนล่าสุด (ใหม่สุดอยู่บนสุด) */}
             <div className="space-y-2">
               <div className="flex items-center justify-between px-1">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  รายการตรวจสอบรอบ {selectedRound === "22:00" ? "22:00 น. (ดึก)" : "06:00 น. (เช้า)"} ({currentRoundScans.length} คัน)
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-sky-600" />
+                  <span>20 ทะเบียนล่าสุด (รอบ {selectedRound === "22:00" ? "22:00 น. ดึก" : "06:00 น. เช้า"})</span>
                 </h3>
-                <span className="text-[11px] text-sky-700 font-bold">บันทึกข้อมูลในเครื่อง</span>
+                <span className="text-[11px] text-sky-700 font-bold bg-sky-50 px-2 py-0.5 rounded-full border border-sky-200">
+                  ทั้งหมด {currentRoundScans.length} คัน
+                </span>
               </div>
 
               {currentRoundScans.length === 0 ? (
                 <div className="p-6 bg-white border border-slate-200 rounded-3xl text-center text-xs text-slate-400 space-y-1">
                   <p>ยังไม่มีรายการบันทึกในรอบ {selectedRound === "22:00" ? "22:00 น. (ดึก)" : "06:00 น. (เช้า)"}</p>
-                  <p className="text-[11px]">ระบุหมายเลขทะเบียน 4 ตัวท้ายด้านบน หรือใช้กล้องเพื่อบันทึกข้อมูล</p>
+                  <p className="text-[11px]">ส่องกล้องไปที่ป้ายทะเบียน หรือระบุหมายเลข 4 ตัวท้ายเพื่อบันทึกข้อมูล</p>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {currentRoundScans.slice(0, 6).map((scan) => (
-                    <div
-                      key={scan.id}
-                      className="p-3.5 bg-white border border-slate-200 rounded-2xl flex items-center justify-between text-xs shadow-2xs"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <div
-                          className={`w-2.5 h-2.5 rounded-full ${
-                            scan.isStaff ? "bg-emerald-500" : "bg-rose-500 animate-pulse"
-                          }`}
-                        />
-                        <div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-mono font-bold text-slate-900 text-sm">
-                              {scan.plateNumber}
+                  {currentRoundScans.slice(0, 20).map((scan, idx) => {
+                    let formattedTime = "--:--";
+                    if (scan.timestamp) {
+                      try {
+                        const d = new Date(scan.timestamp);
+                        formattedTime = d.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) + " น.";
+                      } catch {
+                        formattedTime = (scan.timestamp.split("T")[1]?.substring(0, 5) || "--:--") + " น.";
+                      }
+                    }
+
+                    return (
+                      <div
+                        key={scan.id || `${scan.plateNumber}-${idx}`}
+                        className={`p-3 bg-white border rounded-2xl flex items-center justify-between text-xs shadow-2xs transition-all ${
+                          idx === 0 
+                            ? "border-emerald-300 ring-2 ring-emerald-200/80 bg-gradient-to-r from-emerald-50/40 via-white to-white" 
+                            : "border-slate-200"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          {/* Number Rank & Status Dot */}
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="font-mono text-[10px] text-slate-400 font-bold w-4 text-center">
+                              {idx + 1}
                             </span>
-                            {scan.imageUrl && (
-                              <button
-                                type="button"
-                                onClick={() => openFullImage(scan.imageUrl, `ตรวจรถ_${scan.plateNumber}`)}
-                                className="inline-flex items-center gap-0.5 text-[9px] text-sky-600 hover:text-sky-800 bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200 cursor-pointer active:scale-95"
-                                title="ดูภาพถ่ายหลักฐานขนาดเต็ม"
-                              >
-                                <Camera className="w-2.5 h-2.5" />
-                                <span>ภาพ</span>
-                              </button>
-                            )}
+                            <div
+                              className={`w-2.5 h-2.5 rounded-full ${
+                                scan.isStaff ? "bg-emerald-500" : "bg-rose-500 animate-pulse"
+                              }`}
+                            />
                           </div>
-                          <span className="text-[10px] text-slate-500 block">
-                            {scan.ownerName || scan.zone || "รถภายนอก"}
+
+                          <div className="min-w-0">
+                            {/* Plate Number & Time right next to it */}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-mono font-black text-slate-900 text-sm sm:text-base tracking-tight">
+                                {scan.plateNumber}
+                              </span>
+
+                              {/* เวลาบันทึกอยู่ข้างทะเบียน */}
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[11px] font-mono font-bold border border-slate-200 shrink-0">
+                                <Clock className="w-3 h-3 text-sky-600" />
+                                <span>{formattedTime}</span>
+                              </span>
+
+                              {idx === 0 && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 uppercase tracking-wider shrink-0">
+                                  ล่าสุด
+                                </span>
+                              )}
+
+                              {scan.imageUrl && (
+                                <button
+                                  type="button"
+                                  onClick={() => openFullImage(scan.imageUrl, `ตรวจรถ_${scan.plateNumber}`)}
+                                  className="inline-flex items-center gap-0.5 text-[9px] text-sky-600 hover:text-sky-800 bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200 cursor-pointer active:scale-95 shrink-0"
+                                  title="ดูภาพถ่ายหลักฐานขนาดเต็ม"
+                                >
+                                  <Camera className="w-2.5 h-2.5" />
+                                  <span>ภาพ</span>
+                                </button>
+                              )}
+                            </div>
+
+                            <span className="text-[10px] text-slate-500 block truncate mt-0.5">
+                              {scan.ownerName || scan.zone || "ยานพาหนะภายนอก"}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="text-right shrink-0 pl-2">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold block ${
+                              scan.isStaff ? "bg-emerald-100 text-emerald-800 border border-emerald-200" : "bg-rose-100 text-rose-800 border border-rose-200"
+                            }`}
+                          >
+                            {scan.isStaff ? "บุคลากร" : "ภายนอก"}
                           </span>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold block ${
-                            scan.isStaff ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
-                          }`}
-                        >
-                          {scan.isStaff ? "บุคลากร" : "ภายนอก"}
-                        </span>
-                        <span className="text-[10px] text-slate-400 font-mono">
-                          {scan.timestamp ? scan.timestamp.split("T")[1]?.substring(0, 5) : "--:--"}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
