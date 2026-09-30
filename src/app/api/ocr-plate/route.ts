@@ -117,7 +117,11 @@ async function recognizeWithGemini(
   const cleanBase64 = base64Image.replace(/^data:image\/[a-zA-Z]+;base64,/, "").trim();
   if (!cleanBase64) return null;
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  const candidateModels = [
+    "gemini-flash-latest",
+    "gemini-3.5-flash-lite",
+    "gemini-3.8-flash",
+  ];
 
   const promptText = `
 คุณคือ AI ตรวจจับป้ายทะเบียนรถในประเทศไทย สำหรับระบบรักษาความปลอดภัย โรงพยาบาลพล
@@ -132,73 +136,77 @@ async function recognizeWithGemini(
    - หากในภาพไม่มีป้ายทะเบียน หรือมองไม่เห็นตัวอักษร/ตัวเลขเลย ให้ตอบคำเดียวว่า NONE
   `.trim();
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8500);
+  for (const model of candidateModels) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8500);
 
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { text: promptText },
-              {
-                inline_data: {
-                  mime_type: "image/jpeg",
-                  data: cleanBase64,
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                { text: promptText },
+                {
+                  inline_data: {
+                    mime_type: "image/jpeg",
+                    data: cleanBase64,
+                  },
                 },
-              },
-            ],
+              ],
+            },
+          ],
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 200,
           },
-        ],
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 50,
-        },
-      }),
-      signal: controller.signal,
-    });
+        }),
+        signal: controller.signal,
+      });
 
-    clearTimeout(timeoutId);
+      clearTimeout(timeoutId);
 
-    if (!res.ok) {
-      const errText = await res.text();
-      console.warn("Gemini Vision API error response:", res.status, errText);
-      return null;
+      if (!res.ok) {
+        const errText = await res.text();
+        console.warn(`Gemini Vision API (${model}) notice: HTTP ${res.status}`, errText);
+        continue;
+      }
+
+      const data = await res.json();
+      const rawAiText = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+      if (!rawAiText || rawAiText.toUpperCase().includes("NONE")) {
+        return { success: false, plateNumber: "", letters: "", digits: "", rawText: rawAiText, model };
+      }
+
+      // Clean any prefix like "ทะเบียน:" or quotes
+      let cleanPlate = rawAiText
+        .replace(/[`"*_#]/g, "")
+        .replace(/\r?\n/g, " ")
+        .trim();
+      cleanPlate = cleanPlate.replace(/^(?:ป้ายทะเบียน|เลขทะเบียน|ทะเบียน|ทะเบียนรถ|รถ|plate|license\s*plate)\s*[:=]?\s*/i, "").trim();
+
+      // Use our canonical parser to ensure clean letters & digits
+      const extracted = extractLicensePlate(cleanPlate);
+      const finalPlate = extracted.fullPlate || cleanPlate;
+
+      return {
+        success: !!finalPlate,
+        plateNumber: finalPlate,
+        letters: extracted.letters,
+        digits: extracted.digits,
+        rawText: rawAiText,
+        model,
+      };
+    } catch (err) {
+      clearTimeout(timeoutId);
+      console.warn(`Gemini Vision API (${model}) error:`, err);
     }
-
-    const data = await res.json();
-    const rawAiText = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
-    if (!rawAiText || rawAiText.toUpperCase().includes("NONE")) {
-      return { success: false, plateNumber: "", letters: "", digits: "", rawText: rawAiText, model: "gemini-1.5-flash" };
-    }
-
-    // Clean any prefix like "ทะเบียน:" or quotes
-    let cleanPlate = rawAiText
-      .replace(/[`"*_#]/g, "")
-      .replace(/\r?\n/g, " ")
-      .trim();
-    cleanPlate = cleanPlate.replace(/^(?:ป้ายทะเบียน|เลขทะเบียน|ทะเบียน|ทะเบียนรถ|รถ|plate|license\s*plate)\s*[:=]?\s*/i, "").trim();
-
-    // Use our canonical parser to ensure clean letters & digits
-    const extracted = extractLicensePlate(cleanPlate);
-    const finalPlate = extracted.fullPlate || cleanPlate;
-
-    return {
-      success: !!finalPlate,
-      plateNumber: finalPlate,
-      letters: extracted.letters,
-      digits: extracted.digits,
-      rawText: rawAiText,
-      model: "gemini-1.5-flash",
-    };
-  } catch (err) {
-    clearTimeout(timeoutId);
-    console.warn("Gemini Vision API call notice:", err);
-    return null;
   }
+
+  return null;
 }
 
 export async function POST(req: NextRequest) {
@@ -214,7 +222,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1. Try Gemini 1.5 Flash Vision API first if API key is provided
+    // 1. Try Gemini Flash Vision API first if API key is provided
     const apiKey = (
       clientKey ||
       process.env.GEMINI_API_KEY ||
@@ -227,7 +235,7 @@ export async function POST(req: NextRequest) {
       if (geminiResult && geminiResult.success && geminiResult.plateNumber) {
         return NextResponse.json({
           success: true,
-          engine: "gemini-1.5-flash",
+          engine: geminiResult.model || "gemini-flash",
           rawText: geminiResult.rawText,
           plateNumber: geminiResult.plateNumber,
           fullPlate: geminiResult.plateNumber,

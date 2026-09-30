@@ -586,7 +586,7 @@ export default function SupervisorPage() {
       if (res.ok && data.success) {
         setTestGeminiResult({
           success: true,
-          message: data.message || "✅ เชื่อมต่อ Gemini 1.5 Flash API สำเร็จ 100%!",
+          message: data.message || "✅ เชื่อมต่อ Google Gemini Flash API สำเร็จ 100%!",
         });
       } else {
         setTestGeminiResult({
@@ -4297,7 +4297,7 @@ export default function SupervisorPage() {
                       type={showGeminiKey ? "text" : "password"}
                       value={geminiApiKey || ""}
                       onChange={(e) => setGeminiApiKey(e.target.value.trim())}
-                      placeholder="AIzaSy..."
+                      placeholder="AQ... หรือ AIzaSy..."
                       className="w-full p-2.5 pr-10 bg-white border border-slate-200 rounded-xl text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500 shadow-2xs"
                     />
                     <button
