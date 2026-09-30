@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { db } from "./firebase";
 import { collection, onSnapshot, doc } from "firebase/firestore";
 import { useStore, PatrolLog, ParkingScan, Incident, Checkpoint, StaffVehicle } from "./store";
-import { seedFirestoreIfEmpty, saveCheckpointToCloud, saveIncidentToCloud } from "./firebaseService";
+import { seedFirestoreIfEmpty, saveCheckpointToCloud, saveIncidentToCloud, saveGoogleDriveWebhookToCloud } from "./firebaseService";
 
 export function useFirebaseSync() {
   const [isConnected, setIsConnected] = useState(false);
@@ -146,8 +146,19 @@ export function useFirebaseSync() {
     const unsubDriveConfig = onSnapshot(doc(db, "systemSettings", "googleDrive"), (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data();
-        if (data && typeof data.webhookUrl === "string") {
-          useStore.setState({ googleDriveWebhookUrl: data.webhookUrl });
+        if (data && typeof data.webhookUrl === "string" && data.webhookUrl.trim()) {
+          useStore.setState({ googleDriveWebhookUrl: data.webhookUrl.trim() });
+        } else {
+          // If cloud has no webhookUrl but this device has one from testing, sync it to cloud!
+          const localUrl = useStore.getState().googleDriveWebhookUrl;
+          if (localUrl && localUrl.trim().startsWith("http")) {
+            saveGoogleDriveWebhookToCloud(localUrl.trim());
+          }
+        }
+      } else {
+        const localUrl = useStore.getState().googleDriveWebhookUrl;
+        if (localUrl && localUrl.trim().startsWith("http")) {
+          saveGoogleDriveWebhookToCloud(localUrl.trim());
         }
       }
     }, (err) => {
