@@ -1,4 +1,4 @@
-import { Checkpoint, PatrolLog, Guard } from "./store";
+import { Checkpoint, PatrolLog, Guard, ParkingScan } from "./store";
 
 export interface PatrolRound {
   id: string;               // e.g. "R01", "R02", ...
@@ -444,14 +444,24 @@ export function calculateGuardKPIs(
   checkpoints: Checkpoint[],
   patrolLogs: PatrolLog[],
   shiftReports: ShiftReportLog[] = [],
-  now: Date = new Date()
+  now: Date = new Date(),
+  parkingScans: ParkingScan[] = []
 ) {
   const todayStr = now.toISOString().split("T")[0];
   const todayLogs = patrolLogs.filter((l) => l.timestamp?.startsWith(todayStr));
+  const todayVehicles = parkingScans.filter((s) => s.timestamp?.startsWith(todayStr));
 
   return guards.map((guard) => {
     const guardLogs = todayLogs.filter((l) => l.guardId === guard.id || l.guardName === guard.name);
     const checkpointsScanned = guardLogs.length;
+
+    // สแกนตรวจยานพาหนะ
+    const vehiclesScanned = todayVehicles.filter(
+      (s) => s.guardName === guard.name || s.guardName?.includes(guard.name)
+    ).length;
+
+    // ยอดรวมการสแกนทั้งหมด (จุดตรวจ + ตรวจรถ) สำหรับเปรียบเทียบผลงาน
+    const totalScans = checkpointsScanned + vehiclesScanned;
 
     // รอบที่มีส่วนร่วมตรวจ
     const roundsInvolved = new Set(guardLogs.map((l) => l.roundId).filter(Boolean)).size;
@@ -474,10 +484,10 @@ export function calculateGuardKPIs(
     // คะแนนประเมินเบื้องต้น
     let ratingGrade: "A" | "B" | "C" = "B";
     let ratingText = "ผ่านเกณฑ์มาตรฐาน";
-    if (checkpointsScanned >= checkpoints.length && onTimeRate >= 80 && reportsSent > 0) {
+    if ((checkpointsScanned >= checkpoints.length || totalScans >= 15) && (onTimeRate >= 80 || checkpointsScanned === 0) && reportsSent > 0) {
       ratingGrade = "A";
       ratingText = "ดีเยี่ยม (ตรงเวลา + ส่งงานครบ)";
-    } else if (checkpointsScanned === 0 && reportsSent === 0) {
+    } else if (checkpointsScanned === 0 && vehiclesScanned === 0 && reportsSent === 0) {
       ratingGrade = "C";
       ratingText = "ยังไม่มีบันทึกปฏิบัติการ";
     }
@@ -485,6 +495,8 @@ export function calculateGuardKPIs(
     return {
       guard,
       checkpointsScanned,
+      vehiclesScanned,
+      totalScans,
       roundsInvolved,
       onTimeRate,
       photosUploaded,
@@ -492,7 +504,7 @@ export function calculateGuardKPIs(
       reportsSent,
       ratingGrade,
       ratingText,
-      lastActive: guardLogs[0]?.timestamp,
+      lastActive: guardLogs[0]?.timestamp || todayVehicles.find((s) => s.guardName === guard.name)?.timestamp,
     };
-  });
+  }).sort((a, b) => b.totalScans - a.totalScans); // เรียงลำดับ รปภ. ที่มียอดสแกนรวมสูงสุดอยู่บนสุด
 }

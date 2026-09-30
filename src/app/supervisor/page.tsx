@@ -881,7 +881,7 @@ export default function SupervisorPage() {
   const currentActiveRound = getCurrentRound(supervisorRounds, supervisorNow);
   const currentActiveShift = getCurrentShift(supervisorNow);
   const shiftKPIs = calculateShiftKPIs(supervisorRounds, checkpoints, patrolLogs, shiftReports || [], supervisorNow);
-  const guardKPIs = calculateGuardKPIs(onlyGuards, supervisorRounds, checkpoints, patrolLogs, shiftReports || [], supervisorNow);
+  const guardKPIs = calculateGuardKPIs(onlyGuards, supervisorRounds, checkpoints, patrolLogs, shiftReports || [], supervisorNow, parkingScans);
   const allRoundsProgress = supervisorRounds.map((r) => getRoundProgress(r, checkpoints, patrolLogs, supervisorNow));
   const todayDateStr = supervisorNow.toISOString().split("T")[0];
   const todayPhotosLogs = patrolLogs.filter((l) => !!l.imageUrl && l.timestamp?.startsWith(todayDateStr));
@@ -1156,10 +1156,11 @@ export default function SupervisorPage() {
     const reportsCount = guardReports.length;
     const photosCount = guardPhotos;
     const vehiclesContributed = monthParkingScans.filter((s) => s.guardName?.includes(guard.name)).length;
+    const totalAllScans = totalScans + vehiclesContributed;
 
     let grade = "-";
     let gradeColor = "text-slate-500 bg-slate-100 border-slate-200";
-    if (totalScans > 0 || reportsCount > 0) {
+    if (totalScans > 0 || vehiclesContributed > 0 || reportsCount > 0) {
       if (onTimeRate >= 95 && reportsCount >= 10) {
         grade = "A+";
         gradeColor = "text-emerald-800 bg-emerald-100 border-emerald-400";
@@ -1185,11 +1186,12 @@ export default function SupervisorPage() {
       reportsCount,
       photosCount,
       vehiclesContributed,
+      totalAllScans,
       grade,
       gradeColor,
       isDiligent: reportsCount >= 10,
     };
-  }).sort((a, b) => (b.totalScans + b.reportsCount) - (a.totalScans + a.reportsCount));
+  }).sort((a, b) => b.totalAllScans - a.totalAllScans || (b.reportsCount - a.reportsCount));
 
   // Selected Day Vehicle Patrol Breakdown (2 รอบมาตรฐาน: รอบดึก 22:00 น. และ รอบเช้า 06:00 น.)
   const dayVehiclesScanned = parkingScans.filter((s) => s.timestamp?.startsWith(selectedVehiclePatrolDate));
@@ -1735,8 +1737,10 @@ export default function SupervisorPage() {
                   <table className="w-full text-left text-xs">
                     <thead>
                       <tr className="border-b border-slate-100 text-[11px] text-slate-400">
-                        <th className="pb-2 font-bold">เจ้าหน้าที่ รปภ.</th>
+                        <th className="pb-2 font-bold">อันดับ / เจ้าหน้าที่ รปภ.</th>
                         <th className="pb-2 font-bold text-center">สแกนจุดตรวจ</th>
+                        <th className="pb-2 font-bold text-center">สแกนตรวจรถ</th>
+                        <th className="pb-2 font-bold text-center text-sky-900 bg-sky-50/70 rounded-t-lg">รวมสแกนทั้งหมด</th>
                         <th className="pb-2 font-bold text-center">ตรงเวลา (1 ชม.)</th>
                         <th className="pb-2 font-bold text-center">รายงานส่งเวร</th>
                         <th className="pb-2 font-bold text-center">ภาพถ่าย</th>
@@ -1748,8 +1752,13 @@ export default function SupervisorPage() {
                         <tr key={item.guard.id || idx} className="hover:bg-sky-50/40 transition-colors">
                           <td className="py-2.5 pr-2">
                             <div className="flex items-center gap-2">
-                              <div className="w-7 h-7 rounded-full bg-sky-100 text-sky-800 font-black text-[11px] flex items-center justify-center shrink-0">
-                                {idx + 1}
+                              <div className={`w-7 h-7 rounded-full font-black text-[11px] flex items-center justify-center shrink-0 ${
+                                idx === 0 ? "bg-amber-100 text-amber-900 border border-amber-300" :
+                                idx === 1 ? "bg-slate-200 text-slate-800 border border-slate-300" :
+                                idx === 2 ? "bg-amber-50 text-amber-800 border border-amber-200" :
+                                "bg-sky-50 text-sky-800"
+                              }`}>
+                                {idx === 0 ? "🥇1" : idx === 1 ? "🥈2" : idx === 2 ? "🥉3" : idx + 1}
                               </div>
                               <div>
                                 <span className="font-bold text-slate-900 block">{item.name}</span>
@@ -1759,8 +1768,16 @@ export default function SupervisorPage() {
                               </div>
                             </div>
                           </td>
-                          <td className="py-2.5 text-center font-bold text-slate-800">
-                            {item.totalScans} ครั้ง
+                          <td className="py-2.5 text-center font-bold font-mono text-slate-800">
+                            {item.totalScans} จุด
+                          </td>
+                          <td className="py-2.5 text-center font-bold font-mono text-sky-700">
+                            {item.vehiclesContributed} คัน
+                          </td>
+                          <td className="py-2.5 text-center bg-sky-50/40">
+                            <span className="font-extrabold font-mono text-xs px-2.5 py-0.5 rounded-full bg-sky-100 text-sky-900 border border-sky-300 shadow-xs">
+                              {item.totalAllScans} ครั้ง
+                            </span>
                           </td>
                           <td className="py-2.5 text-center">
                             <span
@@ -2400,7 +2417,7 @@ export default function SupervisorPage() {
                     KPI ผลงานรายบุคคล (ประเมินพนักงาน รปภ. {onlyGuards.length} นาย)
                   </h3>
                   <p className="text-xs text-slate-500">
-                    ติดตามสถิติการเดินตรวจจริง อัตราตรวจตรงเวลา 1 ชม. แรก และการส่งมอบงานประจำกะ
+                    ติดตามสถิติการสแกนจุดตรวจ สแกนตรวจยานพาหนะ อัตราตรงเวลา 1 ชม. แรก และการส่งมอบงานประจำกะ
                   </p>
                 </div>
               </div>
@@ -2409,8 +2426,13 @@ export default function SupervisorPage() {
                 <table className="w-full text-xs text-left">
                   <thead className="bg-slate-50 text-slate-600 font-bold border-y border-slate-200">
                     <tr>
+                      <th className="py-3 px-3 text-center">อันดับ</th>
                       <th className="py-3 px-3">ชื่อ - สกุล รปภ.</th>
                       <th className="py-3 px-3 text-center">สแกนจุดตรวจ</th>
+                      <th className="py-3 px-3 text-center">สแกนตรวจรถ</th>
+                      <th className="py-3 px-3 text-center bg-blue-50/80 text-blue-900 border-x border-blue-200">
+                        รวมสแกนทั้งหมด
+                      </th>
                       <th className="py-3 px-3 text-center">รอบที่ตรวจ</th>
                       <th className="py-3 px-3 text-center">ตรงเวลา (1 ชม.)</th>
                       <th className="py-3 px-3 text-center bg-indigo-50/60 text-indigo-900">
@@ -2422,15 +2444,33 @@ export default function SupervisorPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {guardKPIs.map((gData) => {
+                    {guardKPIs.map((gData, idx) => {
                       return (
                         <tr key={gData.guard.id} className="hover:bg-sky-50/40 transition-colors">
+                          <td className="py-3 px-3 text-center font-bold">
+                            <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-black ${
+                              idx === 0 ? "bg-amber-100 text-amber-900 border border-amber-300 shadow-xs" :
+                              idx === 1 ? "bg-slate-200 text-slate-800 border border-slate-300" :
+                              idx === 2 ? "bg-amber-50 text-amber-800 border border-amber-200" :
+                              "bg-slate-100 text-slate-600"
+                            }`}>
+                              {idx === 0 ? "🥇1" : idx === 1 ? "🥈2" : idx === 2 ? "🥉3" : idx + 1}
+                            </span>
+                          </td>
                           <td className="py-3 px-3">
                             <span className="font-bold text-slate-900 block">{gData.guard.name}</span>
                             <span className="text-[10px] text-slate-400 font-mono">PIN: {gData.guard.pin} • {gData.guard.phone}</span>
                           </td>
                           <td className="py-3 px-3 text-center font-bold font-mono text-slate-800">
                             {gData.checkpointsScanned} จุด
+                          </td>
+                          <td className="py-3 px-3 text-center font-bold font-mono text-sky-700">
+                            {gData.vehiclesScanned} คัน
+                          </td>
+                          <td className="py-3 px-3 text-center bg-blue-50/40 border-x border-blue-100">
+                            <span className="font-extrabold font-mono text-xs px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-900 border border-blue-300 shadow-xs">
+                              {gData.totalScans} ครั้ง
+                            </span>
                           </td>
                           <td className="py-3 px-3 text-center font-bold text-slate-700">
                             {gData.roundsInvolved} รอบ
