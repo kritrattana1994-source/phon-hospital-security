@@ -382,49 +382,40 @@
       align-items: center;
       gap: 6px;
     }
-    .editor-actions {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
     .editor-hint {
       font-size: 11.5px;
       color: #94a3b8;
     }
-    .btn-tap-mode {
-      background: #0f172a;
-      color: #38bdf8;
-      border: 1.5px solid #0284c7;
+    .btn-popup-fullscreen {
+      width: 100%;
+      background: linear-gradient(135deg, #0284c7, #0369a1);
+      color: white;
+      border: none;
       border-radius: 8px;
-      padding: 5px 11px;
-      font-size: 11.5px;
+      padding: 7px 10px;
+      font-family: var(--font-heading);
+      font-size: 11px;
       font-weight: 700;
       cursor: pointer;
-      display: inline-flex;
+      display: flex;
       align-items: center;
-      gap: 5px;
-      transition: all 0.2s;
+      justify-content: center;
+      gap: 6px;
+      margin-top: 4px;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 8px rgba(2, 132, 199, 0.4);
     }
-    .btn-tap-mode.active {
-      background: #0284c7;
-      color: white;
-      box-shadow: 0 0 10px rgba(2, 132, 199, 0.5);
+    .btn-popup-fullscreen:hover {
+      background: linear-gradient(135deg, #0369a1, #075985);
+      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.6);
     }
-    .btn-reset-pins {
-      background: #334155;
-      color: #f1f5f9;
-      border: 1px solid #475569;
-      border-radius: 8px;
-      padding: 5px 11px;
-      font-size: 11.5px;
-      font-weight: 700;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    .btn-reset-pins:hover {
-      background: #475569;
-      color: white;
+    .modal-no-img-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 30px 16px;
+      text-align: center;
     }
 
     /* Horizontal Scrollable Pills for Mobile & Desktop */
@@ -509,7 +500,7 @@
       border-radius: 9999px;
       border: 1.5px solid rgba(255, 255, 255, 0.35);
       box-shadow: 0 4px 14px rgba(0, 0, 0, 0.7), 0 0 8px rgba(0, 0, 0, 0.5);
-      cursor: grab;
+      cursor: pointer;
       transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
       white-space: nowrap;
       pointer-events: auto;
@@ -520,9 +511,6 @@
       border-color: #38bdf8;
       box-shadow: 0 6px 20px rgba(56, 189, 248, 0.55), 0 0 12px rgba(0,0,0,0.8);
       z-index: 1000 !important;
-    }
-    .map-checkpoint-marker:active {
-      cursor: grabbing;
     }
     .marker-circle {
       width: 28px;
@@ -962,16 +950,10 @@
         flex-direction: column;
         align-items: flex-start;
         gap: 6px;
-      }
-      .editor-actions {
-        width: 100%;
-        justify-content: space-between;
-      }
-      .btn-tap-mode, .btn-reset-pins {
-        padding: 4px 8px;
+      .cp-pill {
+        padding: 4px 9px;
         font-size: 10.5px;
       }
-      .cp-pill {
         padding: 4px 9px;
         font-size: 10.5px;
       }
@@ -1155,39 +1137,31 @@
         <div class="map-status-tag">● สดแบบเรียลไทม์ (Live Map)</div>
       </div>
 
-      <!-- Interactive Pin Adjustment Toolbar -->
+      <!-- Checkpoint Selector & Information Toolbar -->
       <div class="pin-editor-bar">
         <div class="editor-header">
-          <span class="editor-title">🎯 ปรับตำแหน่งหมุดแสดงผลบนแผนที่:</span>
-          <div class="editor-actions">
-            <button type="button" id="btnTapMode" class="btn-tap-mode" onclick="toggleTapToMoveMode()">
-              📍 โหมดแตะแผนที่เพื่อย้าย: <span id="tapModeState">ปิด</span>
-            </button>
-            <button type="button" class="btn-reset-pins" onclick="resetPinsToScanned()">
-              🔄 รีเซ็ตพิกัดตามที่สแกนด้วยมือถือ
-            </button>
-          </div>
+          <span class="editor-title">📍 เลือกจุดตรวจเพื่อดูรูปถ่ายสถานที่จริง (01 - 07):</span>
         </div>
 
         <div class="editor-hint" id="moveHint">
-          💡 เลือกรหัสจุดตรวจด้านล่าง ➔ คลิกลากหมุดบนแผนที่ หรือเปิดโหมดแตะแผนที่เพื่อย้ายจุดได้ทันที
+          💡 แตะที่จุดตรวจด้านล่างหรือแตะหมุดบนแผนที่ เพื่อเปิดดูรูปถ่ายสถานที่จริง (บนคอมพิวเตอร์: กด Ctrl + คลิก เพื่อปรับตำแหน่งหมุด)
         </div>
 
         <!-- Horizontal scrollable pills -->
         <div class="cp-selector-pills-wrap">
           <div class="cp-selector-pills">
-            <button type="button" class="cp-pill active" data-cp="01" onclick="selectCheckpointForEdit('01')"><span class="dot" style="background:#0284c7"></span>01 หน้าห้องสุขาภิบาล (OPD เก่า)</button>
-            <button type="button" class="cp-pill" data-cp="02" onclick="selectCheckpointForEdit('02')"><span class="dot" style="background:#dc2626"></span>02 หน้า ER (ฉุกเฉิน)</button>
-            <button type="button" class="cp-pill" data-cp="03" onclick="selectCheckpointForEdit('03')"><span class="dot" style="background:#059669"></span>03 ตึกชาย</button>
-            <button type="button" class="cp-pill" data-cp="04" onclick="selectCheckpointForEdit('04')"><span class="dot" style="background:#7c3aed"></span>04 ตึกหญิง</button>
-            <button type="button" class="cp-pill" data-cp="05" onclick="selectCheckpointForEdit('05')"><span class="dot" style="background:#d97706"></span>05 หน้าห้องเครื่องสำรองไฟฟ้า (OPD ใหม่)</button>
-            <button type="button" class="cp-pill" data-cp="06" onclick="selectCheckpointForEdit('06')"><span class="dot" style="background:#0891b2"></span>06 หน้าห้อง งานยานพาหนะ</button>
-            <button type="button" class="cp-pill" data-cp="07" onclick="selectCheckpointForEdit('07')"><span class="dot" style="background:#4f46e5"></span>07 หน้าอาคารโอสถศาลา</button>
+            <button type="button" class="cp-pill active" data-cp="01" onclick="selectCheckpoint('01')"><span class="dot" style="background:#0284c7"></span>01 หน้าห้องสุขาภิบาล (OPD เก่า)</button>
+            <button type="button" class="cp-pill" data-cp="02" onclick="selectCheckpoint('02')"><span class="dot" style="background:#dc2626"></span>02 หน้า ER (ฉุกเฉิน)</button>
+            <button type="button" class="cp-pill" data-cp="03" onclick="selectCheckpoint('03')"><span class="dot" style="background:#059669"></span>03 ตึกชาย</button>
+            <button type="button" class="cp-pill" data-cp="04" onclick="selectCheckpoint('04')"><span class="dot" style="background:#7c3aed"></span>04 ตึกหญิง</button>
+            <button type="button" class="cp-pill" data-cp="05" onclick="selectCheckpoint('05')"><span class="dot" style="background:#d97706"></span>05 หน้าห้องเครื่องสำรองไฟฟ้า (OPD ใหม่)</button>
+            <button type="button" class="cp-pill" data-cp="06" onclick="selectCheckpoint('06')"><span class="dot" style="background:#0891b2"></span>06 หน้าห้อง งานยานพาหนะ</button>
+            <button type="button" class="cp-pill" data-cp="07" onclick="selectCheckpoint('07')"><span class="dot" style="background:#4f46e5"></span>07 หน้าอาคารโอสถศาลา</button>
           </div>
         </div>
 
         <div class="safety-guarantee">
-          🔒 <strong>ปลอดภัย 100%:</strong> การปรับตำแหน่งหมุดบนหน้าแผนที่นี้เป็นการแสดงผลแผนที่ภาพถ่ายดาวเทียมเท่านั้น โดย<strong>ไม่กระทบหรือเปลี่ยนแปลงพิกัดจุดตรวจจริงในระบบโทรศัพท์ของ รปภ.</strong>
+          🔒 <strong>ระบบล็อคตำแหน่งปลอดภัย 100%:</strong> ป้องกันการขยับหมุดโดยไม่ตั้งใจบนโทรศัพท์มือถือ (การย้ายหมุดทำได้เฉพาะบนคอมพิวเตอร์ด้วยการกดปุ่ม Ctrl + คลิก เท่านั้น)
         </div>
       </div>
 
@@ -1222,6 +1196,11 @@
       </div>
       <div class="photo-modal-body">
         <img id="modalImg" src="" alt="ภาพถ่ายจุดตรวจจริง" />
+        <div id="modalNoImgPlaceholder" class="modal-no-img-box" style="display:none;">
+          <span style="font-size: 42px;">📷</span>
+          <h4 id="modalNoImgText" style="color: white; font-size: 15px; margin-top: 8px;">ยังไม่มีรูปถ่าย</h4>
+          <p style="color: #94a3b8; font-size: 12px; margin-top: 4px;">จะแสดงผลอัตโนมัติทันทีเมื่อเพิ่มไฟล์ 01.jpg ในโฟลเดอร์ รูปจุด</p>
+        </div>
       </div>
       <div class="photo-modal-nav">
         <button type="button" class="btn-modal-nav" onclick="navPhotoModal(-1)">◀ จุดก่อนหน้า</button>
@@ -1247,7 +1226,6 @@
     let markersMap = {};
     let routePolyline = null;
     let activeCpNum = '01';
-    let tapToMoveEnabled = false;
     let currentModalCpNum = '01';
 
     function getWorkingCoordinates() {
@@ -1282,47 +1260,11 @@
       updateMarkerPopup(cpNum, lat, lng);
       const hint = document.getElementById('moveHint');
       if (hint) {
-        hint.innerHTML = `<span style="color:#38bdf8; font-weight:bold;">✅ บันทึกตำแหน่งแสดงผลจุดที่ ${cpNum} แล้ว</span> (พิกัดจริงในแอปไม่ถูกแตะต้อง)`;
+        hint.innerHTML = `<span style="color:#38bdf8; font-weight:bold;">✅ บันทึกตำแหน่งแสดงผลจุดที่ ${cpNum} แล้ว</span> (พิกัดจริงใน Firestore ปลอดภัย 100%)`;
       }
     }
 
-    function resetPinsToScanned() {
-      if (confirm('ต้องการรีเซ็ตตำแหน่งหมุดทั้งหมดบนแผนที่กลับสู่ "พิกัดจริงตามมือถือ" หรือไม่?')) {
-        localStorage.removeItem('phon_map_visual_pins');
-        realCheckpointsData.forEach(cp => {
-          if (markersMap[cp.num]) {
-            markersMap[cp.num].setLatLng([cp.lat, cp.lng]);
-            updateMarkerPopup(cp.num, cp.lat, cp.lng);
-          }
-        });
-        updateRouteLine();
-        const hint = document.getElementById('moveHint');
-        if (hint) {
-          hint.innerHTML = `<span style="color:#10b981; font-weight:bold;">🔄 รีเซ็ตตำแหน่งหมุดกลับสู่พิกัดจริงตามโทรศัพท์มือถือเรียบร้อยแล้ว</span>`;
-        }
-        leafletMap.setView([15.8165, 102.6089], 19);
-      }
-    }
-
-    function toggleTapToMoveMode() {
-      tapToMoveEnabled = !tapToMoveEnabled;
-      const btn = document.getElementById('btnTapMode');
-      const state = document.getElementById('tapModeState');
-      if (tapToMoveEnabled) {
-        btn.classList.add('active');
-        state.innerText = 'เปิดใช้งาน';
-        const hint = document.getElementById('moveHint');
-        if (hint) {
-          hint.innerHTML = `<span style="color:#fde047; font-weight:bold;">👉 แตะตรงจุดใดก็ได้บนแผนที่</span> เพื่อย้าย <strong>จุดที่ ${activeCpNum}</strong> มายังตำแหน่งที่แตะ`;
-        }
-      } else {
-        btn.classList.remove('active');
-        state.innerText = 'ปิด';
-        selectCheckpointForEdit(activeCpNum);
-      }
-    }
-
-    function selectCheckpointForEdit(cpNum) {
+    function selectCheckpoint(cpNum) {
       activeCpNum = cpNum;
       document.querySelectorAll('.cp-pill').forEach(btn => {
         if (btn.getAttribute('data-cp') === cpNum) {
@@ -1352,38 +1294,43 @@
       if (marker && leafletMap) {
         const latlng = marker.getLatLng();
         leafletMap.panTo(latlng, { animate: true, duration: 0.4 });
-        marker.openPopup();
+        setTimeout(() => {
+          marker.openPopup();
+        }, 80);
       }
 
       const cp = realCheckpointsData.find(c => c.num === cpNum);
       const hint = document.getElementById('moveHint');
       if (hint && cp) {
-        hint.innerHTML = `📍 กำลังปรับตำแหน่ง: <strong>จุดที่ ${cp.num} ${cp.name}</strong> ➔ คลิกลากหมุด หรือแตะบนแผนที่ (เมื่อเปิดโหมดแตะ)`;
+        hint.innerHTML = `📍 กำลังดู: <strong>จุดที่ ${cp.num} ${cp.name}</strong> • แตะรูปเพื่อดูภาพขนาดใหญ่ (บนคอมพิวเตอร์: กด Ctrl + คลิก เพื่อปรับตำแหน่งหมุด)`;
       }
     }
 
     function handleImgError(img, cpNum) {
-      // First try fallback folder 'checkpoints_photos'
-      if (!img.dataset.triedFallback) {
-        img.dataset.triedFallback = 'true';
-        img.src = './checkpoints_photos/' + cpNum + '.jpg';
+      if (!img.dataset.step) {
+        img.dataset.step = '1';
+        img.src = './รูปจุด/' + cpNum + '.jpg';
         return;
       }
-      // If still missing, show polite no-image placeholder
-      const wrap = img.parentElement;
+      if (img.dataset.step === '1') {
+        img.dataset.step = '2';
+        img.src = encodeURI('./รูปจุด/' + cpNum + '.jpg');
+        return;
+      }
+      // If all failed (e.g. 01.jpg which is not yet present)
+      const wrap = img.closest('.popup-img-wrap');
       if (wrap) wrap.style.display = 'none';
       const noImgBox = document.getElementById('noImg-' + cpNum);
       if (noImgBox) noImgBox.style.display = 'flex';
     }
 
-    function updateMarkerPopup(cpNum, lat, lng) {
-      const marker = markersMap[cpNum];
+    function getPopupHtml(cpNum, lat, lng) {
       const cp = realCheckpointsData.find(c => c.num === cpNum);
-      if (!marker || !cp) return;
+      if (!cp) return '';
 
-      const imgSrc = './รูปจุด/' + cp.num + '.jpg';
+      const primaryImg = './checkpoints_photos/' + cp.num + '.jpg';
 
-      marker.setPopupContent(`
+      return `
         <div class="popup-card">
           <div class="popup-header">
             <span class="popup-badge" style="background:${cp.color}">จุดที่ ${cp.num}</span>
@@ -1391,26 +1338,43 @@
           </div>
           <div class="popup-sub">📍 ${cp.building} (${cp.floor})</div>
 
-          <!-- Real Checkpoint Photo Preview from 'รูปจุด' folder -->
+          <!-- Real Checkpoint Photo Preview -->
           <div class="popup-img-wrap" onclick="openPhotoModal('${cp.num}')" title="แตะเพื่อดูภาพขนาดใหญ่">
-            <img src="${imgSrc}" alt="${cp.name}" class="popup-img" onerror="handleImgError(this, '${cp.num}')" />
+            <img src="${primaryImg}" alt="${cp.name}" class="popup-img" data-cp="${cp.num}" onerror="handleImgError(this, '${cp.num}')" />
             <div class="popup-img-overlay">
               <span>🔍 แตะดูภาพขนาดใหญ่</span>
             </div>
           </div>
           <div id="noImg-${cp.num}" class="popup-no-img" style="display:none;">
-            <span>📷 รูปถ่ายจุดตรวจที่ ${cp.num}</span>
-            <span style="font-size:10px; color:#64748b;">(ยังไม่มีไฟล์ ${cp.num}.jpg ในโฟลเดอร์ รูปจุด)</span>
+            <span style="font-size:22px;">📷</span>
+            <span style="font-weight:700;">รูปถ่ายจุดตรวจที่ ${cp.num}</span>
+            <span style="font-size:10px; color:#94a3b8;">(ยังไม่มีไฟล์ ${cp.num}.jpg ในโฟลเดอร์ รูปจุด)</span>
           </div>
 
           <div class="popup-gps">
             <span>GPS:</span> ${parseFloat(lat).toFixed(6)}, ${parseFloat(lng).toFixed(6)}
           </div>
-          <div class="popup-hint">
-            🖐️ ลากหมุดเพื่อปรับตำแหน่ง หรือแตะภาพเพื่อดูรูปเต็ม
-          </div>
+          <button type="button" class="btn-popup-fullscreen" onclick="openPhotoModal('${cp.num}')">
+            🖼️ ดูรูปถ่ายสถานที่จริงขนาดใหญ่
+          </button>
         </div>
-      `);
+      `;
+    }
+
+    function updateMarkerPopup(cpNum, lat, lng) {
+      const marker = markersMap[cpNum];
+      if (!marker) return;
+      const html = getPopupHtml(cpNum, lat, lng);
+      if (marker.getPopup()) {
+        marker.setPopupContent(html);
+      } else {
+        marker.bindPopup(html, {
+          maxWidth: 290,
+          minWidth: 230,
+          autoPan: true,
+          autoPanPadding: [20, 20]
+        });
+      }
     }
 
     function updateRouteLine() {
@@ -1486,23 +1450,18 @@
           popupAnchor: [0, -18]
         });
 
+        // DRAGGABLE IS FALSE: Mobile fingers and normal clicks NEVER move markers!
         const marker = L.marker([cp.lat, cp.lng], {
           icon: pinIcon,
-          draggable: true,
-          title: `จุดที่ ${cp.num}: ${cp.name} (ลากเพื่อปรับตำแหน่ง หรือแตะดูรูปถ่าย)`
+          draggable: false,
+          title: `จุดที่ ${cp.num}: ${cp.name} (แตะเพื่อดูรูปถ่ายสถานที่จริง)`
         }).addTo(leafletMap);
 
-        marker.on('dragstart', function() {
-          selectCheckpointForEdit(cp.num);
-        });
-
-        marker.on('dragend', function(e) {
-          const pos = e.target.getLatLng();
-          saveVisualCoordinate(cp.num, pos.lat, pos.lng);
-        });
-
-        marker.on('click', function() {
-          selectCheckpointForEdit(cp.num);
+        marker.on('click', function(e) {
+          if (e && e.originalEvent) {
+            L.DomEvent.stopPropagation(e);
+          }
+          selectCheckpoint(cp.num);
         });
 
         markersMap[cp.num] = marker;
@@ -1511,10 +1470,10 @@
 
       updateRouteLine();
 
-      // Tap-to-move (for Mobile) and Ctrl + Click (for Desktop)
+      // Repositioning is strictly allowed ONLY via Ctrl + Click with mouse on PC
       leafletMap.on('click', function(e) {
-        const isCtrl = e.originalEvent && e.originalEvent.ctrlKey;
-        if (tapToMoveEnabled || isCtrl) {
+        const isCtrl = e.originalEvent && (e.originalEvent.ctrlKey || e.originalEvent.metaKey);
+        if (isCtrl) {
           if (activeCpNum && markersMap[activeCpNum]) {
             markersMap[activeCpNum].setLatLng(e.latlng);
             saveVisualCoordinate(activeCpNum, e.latlng.lat, e.latlng.lng);
@@ -1542,20 +1501,36 @@
       const building = document.getElementById('modalCpBuilding');
       const img = document.getElementById('modalImg');
       const counter = document.getElementById('modalCounter');
+      const noImgPlaceholder = document.getElementById('modalNoImgPlaceholder');
 
       badge.innerText = 'จุดที่ ' + cp.num;
       badge.style.background = cp.color;
       title.innerText = cp.name;
       building.innerText = cp.building + ' (' + cp.floor + ')';
-      img.src = './รูปจุด/' + cp.num + '.jpg';
+      
+      img.style.display = 'block';
+      if (noImgPlaceholder) noImgPlaceholder.style.display = 'none';
+
+      img.dataset.step = '0';
+      img.src = './checkpoints_photos/' + cp.num + '.jpg';
       img.onerror = function() {
-        if (!this.dataset.triedFallback) {
-          this.dataset.triedFallback = 'true';
-          this.src = './checkpoints_photos/' + cp.num + '.jpg';
+        if (this.dataset.step === '0') {
+          this.dataset.step = '1';
+          this.src = './รูปจุด/' + cp.num + '.jpg';
+        } else if (this.dataset.step === '1') {
+          this.dataset.step = '2';
+          this.src = encodeURI('./รูปจุด/' + cp.num + '.jpg');
+        } else {
+          // If all fail (e.g. 01.jpg which is not yet present)
+          this.style.display = 'none';
+          if (noImgPlaceholder) {
+            noImgPlaceholder.style.display = 'flex';
+            const cpText = document.getElementById('modalNoImgText');
+            if (cpText) cpText.innerText = `จุดที่ ${cp.num}: ${cp.name} (${cp.building})`;
+          }
         }
       };
-      img.dataset.triedFallback = '';
-      
+
       const idx = realCheckpointsData.findIndex(c => c.num === cpNum);
       counter.innerText = 'จุดตรวจ ' + (idx + 1) + ' จาก ' + realCheckpointsData.length;
 
@@ -1577,7 +1552,7 @@
       if (nextIdx >= realCheckpointsData.length) nextIdx = 0;
       const nextCp = realCheckpointsData[nextIdx];
       openPhotoModal(nextCp.num);
-      selectCheckpointForEdit(nextCp.num);
+      selectCheckpoint(nextCp.num);
     }
 
     // Keyboard support: Escape closes modal, Left/Right navigates
