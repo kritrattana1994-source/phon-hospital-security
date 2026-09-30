@@ -245,13 +245,15 @@ function VehicleContent() {
   const lastScannedRef = useRef<Record<string, number>>({});
   const [cameraInputPlate, setCameraInputPlate] = useState("");
 
-  // --- Captured Preview & Manual Capture States ---
+  // --- Captured Preview & Smart Auto-Capture States ---
   const [capturedResult, setCapturedResult] = useState<CapturedResult | null>(null);
   const autoResumeTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const [autoScanActive, setAutoScanActive] = useState(false);
+  const [autoScanActive, setAutoScanActive] = useState(true); // เปิดโหมดจับภาพอัตโนมัติเป็นค่าเริ่มต้นตามสั่ง (รปภ. ไม่ต้องกดถ่าย)
   const [isAutoScanningFrame, setIsAutoScanningFrame] = useState(false);
   const [lastDetectedPlate, setLastDetectedPlate] = useState<string | null>(null);
   const [scanPulse, setScanPulse] = useState(false);
+  const autoCaptureCooldownRef = useRef<number>(0);
+  const candidateFramesRef = useRef<Array<{ frames: any; sharpness: number; timestamp: number }>>([]);
   const [floatingNotification, setFloatingNotification] = useState<{
     id: string;
     plate: string;
@@ -493,8 +495,8 @@ function VehicleContent() {
     }
   };
 
-  // ตัดภาพเฉพาะโซนกรอบเล็งเป้า (Viewfinder HUD) ตรงกลาง เพื่อให้ OCR วิเคราะห์เลขทะเบียนได้แม่นยำและเร็วที่สุด
-  const captureOcrScanArea = (): { cropCanvas: HTMLCanvasElement; cropDataUrl: string; fullDataUrl: string } | null => {
+  // ตัดภาพเฉพาะโซนกรอบเล็งเป้า (Viewfinder HUD) ตรงกลาง พร้อมคำนวณค่าความคมชัด (Sharpness) เพื่อล็อกภาพที่ชัดที่สุด
+  const captureOcrScanArea = (): { cropCanvas: HTMLCanvasElement; cropDataUrl: string; fullDataUrl: string; sharpness: number } | null => {
     if (!videoRef.current) return null;
     try {
       const video = videoRef.current;
@@ -522,96 +524,110 @@ function VehicleContent() {
       const cropCanvas = document.createElement("canvas");
       cropCanvas.width = targetWidth;
       cropCanvas.height = Math.round((targetWidth * cropH) / cropW);
-      const cropCtx = cropCanvas.getContext("2d");
+      const cropCtx = cropCanvas.getContext("2d", { willReadFrequently: true });
       if (!cropCtx) return null;
 
       cropCtx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropCanvas.width, cropCanvas.height);
       const cropDataUrl = cropCanvas.toDataURL("image/jpeg", 0.88);
-      return { cropCanvas, cropDataUrl, fullDataUrl };
+
+      // คำนวณค่าความคมชัดและความเปรียบต่างของขอบตัวอักษรป้าย (Luminance Edge Contrast / Sharpness)
+      let sharpness = 0;
+      try {
+        const sampleW = Math.min(cropCanvas.width, 320);
+        const sampleH = Math.min(cropCanvas.height, 140);
+        const sCanvas = document.createElement("canvas");
+        sCanvas.width = sampleW;
+        sCanvas.height = sampleH;
+        const sCtx = sCanvas.getContext("2d", { willReadFrequently: true });
+        if (sCtx) {
+          sCtx.drawImage(cropCanvas, 0, 0, sampleW, sampleH);
+          const imgData = sCtx.getImageData(0, 0, sampleW, sampleH);
+          const data = imgData.data;
+          let diffSum = 0;
+          let samples = 0;
+          // Step by 16 bytes (every 4 pixels) for ultra-fast calculation (< 1ms)
+          for (let i = 0; i < data.length - 16; i += 16) {
+            const lum1 = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+            const lum2 = data[i + 4] * 0.299 + data[i + 5] * 0.587 + data[i + 6] * 0.114;
+            diffSum += Math.abs(lum1 - lum2);
+            samples++;
+          }
+          sharpness = samples > 0 ? diffSum / samples : 0;
+        }
+      } catch {}
+
+      return { cropCanvas, cropDataUrl, fullDataUrl, sharpness };
     } catch (err) {
       console.warn("captureOcrScanArea notice:", err);
       return null;
     }
   };
 
-  // ลูปตรวจจับป้ายทะเบียนอัตโนมัติขณะส่องกล้อง (Auto-Scan Loop)
+  // ลูปตรวจจับและล็อกภาพป้ายทะเบียนที่ชัดที่สุดอัตโนมัติ (Auto-Detect Sharpest Frame & Freeze Loop)
   useEffect(() => {
     if (mainTab !== "patrol" || !cameraActive || !autoScanActive) {
       if (autoScanTimerRef.current) {
         clearInterval(autoScanTimerRef.current);
         autoScanTimerRef.current = null;
       }
+      candidateFramesRef.current = [];
       return;
     }
 
-    const runAutoScan = async () => {
-      if (isAutoScanProcessingRef.current || isOcrProcessing) return;
+    const runAutoCapture = async () => {
+      // หยุดชั่วคราวหากกำลังประมวลผล, หน้าจอกำลังค้างผลลัพธ์ หรืออยู่ในช่วงคูลดาวน์หลังสแกนคันก่อนหน้า
+      if (isAutoScanProcessingRef.current || isOcrProcessing || capturedResult !== null) return;
+      if (Date.now() < autoCaptureCooldownRef.current) return;
       if (!videoRef.current || videoRef.current.paused || videoRef.current.ended) return;
 
       const frames = captureOcrScanArea();
       if (!frames) return;
 
-      isAutoScanProcessingRef.current = true;
-      setIsAutoScanningFrame(true);
+      const sharpness = frames.sharpness;
 
-      try {
-        let detectedPlate = "";
+      // ค่าความคมชัด >= 10 แสดงว่าเริ่มมีวัตถุ/ป้ายทะเบียนที่มีขอบตัวอักษรเข้ามาในกรอบเล็งเป้า
+      if (sharpness >= 10) {
+        candidateFramesRef.current.push({ frames, sharpness, timestamp: Date.now() });
 
-        // 1. Client-side local WebAssembly OCR in browser (Fastest: ~150ms, zero network)
-        const clientRes = await recognizePlateFromCanvas(frames.cropCanvas);
-        if (clientRes.isWorkerReady) {
-          // Client worker is active and analyzed the frame locally!
-          if (clientRes.success && clientRes.plateNumber) {
-            detectedPlate = clientRes.plateNumber;
-          }
-          // Note: If no plate is in the frame, we simply wait for the next frame without hitting the server!
-        } else {
-          // 2. Server API fallback ONLY if client-side worker is not ready yet
-          const controller = new AbortController();
-          const abortTimer = setTimeout(() => controller.abort(), 6000);
+        // เก็บ Candidate Frames สูงสุด 3 เฟรม (~600ms) เพื่อหาจังหวะที่ภาพชัดและนิ่งที่สุด
+        if (candidateFramesRef.current.length > 3) {
+          candidateFramesRef.current.shift();
+        }
+
+        const candidates = candidateFramesRef.current;
+        const count = candidates.length;
+
+        // เงื่อนไขในการสั่งจับภาพอัตโนมัติ:
+        // 1) ตรวจพบจุดพีคของความคมชัด (เฟรมปัจจุบันเริ่มเบลอลง แปลว่าเฟรมก่อนหน้าคือจังหวะที่ชัดที่สุด!)
+        // 2) บัฟเฟอร์ครบ 3 เฟรมและนิ่ง
+        // 3) ความคมชัดสูงมาก (sharpness >= 18) แสดงว่าป้ายอยู่ในโฟกัสสมบูรณ์แล้ว
+        const isPeak = count >= 2 && candidates[count - 1].sharpness < candidates[count - 2].sharpness;
+        const isBufferFull = count >= 3;
+        const isVerySharp = sharpness >= 18 && count >= 2;
+
+        if (isPeak || isBufferFull || isVerySharp) {
+          isAutoScanProcessingRef.current = true;
+          // คัดเลือกภาพทะเบียนที่ "ชัดที่สุด" (Highest Sharpness) ในช่วงที่ส่อง
+          const best = candidates.reduce((max, f) => (f.sharpness > max.sharpness ? f : max));
+          candidateFramesRef.current = [];
+          autoCaptureCooldownRef.current = Date.now() + 6000; // ป้องกันการเรียกซ้ำขณะกำลังประมวลผล
+
           try {
-            const res = await fetch("/api/ocr-plate", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ image: frames.cropDataUrl }),
-              signal: controller.signal,
-            });
-            clearTimeout(abortTimer);
-            if (res.ok) {
-              const data = await res.json();
-              if (data.success && data.plateNumber) {
-                detectedPlate = data.plateNumber;
-              }
-            }
-          } catch {} finally {
-            clearTimeout(abortTimer);
+            await executeCapture(best.frames, "patrol");
+          } finally {
+            isAutoScanProcessingRef.current = false;
           }
         }
-
-        if (detectedPlate && detectedPlate.length >= 2) {
-          const plate = detectedPlate.trim().toUpperCase();
-          setLastDetectedPlate(plate);
-          setScanPulse(true);
-          setTimeout(() => setScanPulse(false), 1200);
-
-          const lastTime = lastScannedRef.current[plate] || 0;
-          const now = Date.now();
-
-          // ป้องกันการบันทึกซ้ำซ้อนภายใน 10 วินาที
-          if (now - lastTime >= 10000) {
-            await handleContinuousScan(plate, undefined, frames.fullDataUrl);
-          }
+      } else {
+        // หากผู้ใช้ส่ายกล้องหรือภาพเบลอมาก ให้ล้างบัฟเฟอร์เก่าทิ้ง
+        if (candidateFramesRef.current.length > 0 && Date.now() - candidateFramesRef.current[0].timestamp > 800) {
+          candidateFramesRef.current = [];
         }
-      } catch (err) {
-        console.warn("Auto scan notice:", err);
-      } finally {
-        isAutoScanProcessingRef.current = false;
-        setIsAutoScanningFrame(false);
       }
     };
 
-    // ตรวจจับทุก 1 วินาทีขณะเล็งกล้อง
-    autoScanTimerRef.current = setInterval(runAutoScan, 1000);
+    // ตรวจสอบความคมชัดทุกๆ 200ms
+    autoScanTimerRef.current = setInterval(runAutoCapture, 200);
 
     return () => {
       if (autoScanTimerRef.current) {
@@ -619,7 +635,7 @@ function VehicleContent() {
         autoScanTimerRef.current = null;
       }
     };
-  }, [mainTab, cameraActive, autoScanActive, isOcrProcessing]);
+  }, [mainTab, cameraActive, autoScanActive, isOcrProcessing, capturedResult]);
 
   const performOcrOnImage = async (
     dataUrl: string,
@@ -727,36 +743,28 @@ function VehicleContent() {
     }
   };
 
-  const handleVideoShutter = async (targetMode: "lookup" | "patrol") => {
-    if (!videoRef.current) {
-      alert("กล้องยังไม่พร้อมใช้งาน กรุณากดปุ่มรีสตาร์ตกล้อง หรือเลือกอัปโหลดรูปภาพ");
-      return;
-    }
-
+  const executeCapture = async (
+    frames: { cropCanvas: HTMLCanvasElement; cropDataUrl: string; fullDataUrl: string; sharpness?: number },
+    targetMode: "lookup" | "patrol"
+  ) => {
     if (autoResumeTimerRef.current) {
       clearTimeout(autoResumeTimerRef.current);
       autoResumeTimerRef.current = null;
     }
 
-    const frames = captureOcrScanArea();
-    if (!frames) {
-      alert("ไม่สามารถจับภาพจากกล้องได้ กรุณาลองใหม่อีกครั้ง");
-      return;
-    }
-
-    // Freeze viewfinder with processing state
+    // 1. FREEZE viewfinder immediately on the sharpest frame ("ค้างภาพทะเบียน ที่ชัดสุด")
     setCapturedResult({
       imageUrl: frames.cropDataUrl,
       status: "processing",
     });
 
     setIsOcrProcessing(true);
-    setOcrStatusText("กำลังตรวจจับเลขทะเบียนด้วย AI...");
+    setOcrStatusText("กำลังวิเคราะห์ป้ายทะเบียนด้วย AI...");
 
     try {
       let detectedPlate = "";
 
-      // 1. Try Gemini 1.5 Flash Vision API via /api/ocr-plate (High accuracy, reads 2-line bike & car plates)
+      // 1. Try Gemini Vision API via /api/ocr-plate (High accuracy, reads 2-line bike & car plates)
       const controller = new AbortController();
       const abortTimer = setTimeout(() => controller.abort(), 9500);
       try {
@@ -817,8 +825,8 @@ function VehicleContent() {
         setTimeout(() => setScanPulse(false), 1200);
 
         // Check if staff vehicle:
-        // เฉพาะการเทียบจอดกลางคืน (โหมด patrol) ให้เอาหมวดอักษรมาเทียบด้วย เพราะต้องตรงกัน (strictLetters: true)
-        // ระบบค้นหารถ (โหมด lookup) ใช้ 4 ตัวเหมือนเดิม (strictLetters: false)
+        // ในโหมด patrol (ตรวจรถกลางคืน/เช้า) บังคับเทียบตัวอักษรตรงกัน (strictLetters: true)
+        // ในโหมด lookup (ค้นหารถ) ใช้ 4 ตัวเหมือนเดิม (strictLetters: false)
         const isPatrolMode = targetMode === "patrol";
         const staff = findMatchingStaffVehicle(plate, staffVehicles, { strictLetters: isPatrolMode });
 
@@ -851,10 +859,12 @@ function VehicleContent() {
             : "รถภายนอก / ผู้มาติดต่อโรงพยาบาล",
         });
 
-        // Automatically resume camera after 3.2 seconds for next vehicle
+        // "พอเสร็จ ก็กลับมาเป็นกล้องอัตโนมัติ รปภ จะได้ไม่ต้องกดอะไร"
+        // Automatically unfreeze & resume live camera after 2.3 seconds
         autoResumeTimerRef.current = setTimeout(() => {
           setCapturedResult(null);
-        }, 3200);
+          autoCaptureCooldownRef.current = Date.now() + 2000;
+        }, 2300);
 
       } else {
         // Failed to detect plate
@@ -862,28 +872,43 @@ function VehicleContent() {
         setCapturedResult({
           imageUrl: frames.cropDataUrl,
           status: "failed",
-          message: "อ่านตัวเลขไม่ชัดเจน กรุณาเล็งให้ป้ายอยู่กลางกรอบแล้วกดจับภาพใหม่อีกครั้ง",
+          message: "ภาพไม่ชัดเจน หรือไม่มีป้ายทะเบียน กำลังกลับไปที่กล้อง...",
         });
 
-        // Auto-resume after 3.5 seconds
+        // Automatically resume after 1.8 seconds so guard can aim again
         autoResumeTimerRef.current = setTimeout(() => {
           setCapturedResult(null);
-        }, 3500);
+          autoCaptureCooldownRef.current = Date.now() + 1000;
+        }, 1800);
       }
     } catch (err: any) {
       console.error("Capture processing error:", err);
       setCapturedResult({
         imageUrl: frames.cropDataUrl,
         status: "failed",
-        message: "เกิดข้อผิดพลาดในการประมวลผล กรุณาลองจับภาพใหม่อีกครั้ง",
+        message: "เกิดข้อผิดพลาดในการประมวลผล กำลังกลับไปที่กล้อง...",
       });
       autoResumeTimerRef.current = setTimeout(() => {
         setCapturedResult(null);
-      }, 3500);
+        autoCaptureCooldownRef.current = Date.now() + 1000;
+      }, 1800);
     } finally {
       setIsOcrProcessing(false);
       setOcrStatusText(null);
     }
+  };
+
+  const handleVideoShutter = async (targetMode: "lookup" | "patrol") => {
+    if (!videoRef.current) {
+      alert("กล้องยังไม่พร้อมใช้งาน กรุณากดปุ่มรีสตาร์ตกล้อง หรือเลือกอัปโหลดรูปภาพ");
+      return;
+    }
+    const frames = captureOcrScanArea();
+    if (!frames) {
+      alert("ไม่สามารถจับภาพจากกล้องได้ กรุณาลองใหม่อีกครั้ง");
+      return;
+    }
+    await executeCapture(frames, targetMode);
   };
 
   const handleFileInputChange = async (
@@ -1745,16 +1770,21 @@ function VehicleContent() {
                           : "รถภายนอก / ผู้มาติดต่อ รพ."}
                       </span>
 
+                      <div className="mt-3 flex items-center gap-1.5 text-[11px] font-bold text-emerald-300 animate-pulse bg-emerald-950/70 px-3.5 py-1.5 rounded-full border border-emerald-500/30">
+                        <RotateCcw className="w-3.5 h-3.5 animate-spin" />
+                        <span>🔄 กำลังกลับไปที่กล้องอัตโนมัติใน ~2 วินาที...</span>
+                      </div>
+
                       <button
                         type="button"
                         onClick={() => {
                           if (autoResumeTimerRef.current) clearTimeout(autoResumeTimerRef.current);
                           setCapturedResult(null);
                         }}
-                        className="mt-4 w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-2xl font-black text-xs shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                        className="mt-3 w-full py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl font-medium text-[11px] border border-white/20 active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                       >
-                        <Camera className="w-4 h-4" />
-                        <span>📸 ส่องป้ายคันต่อไป (กลับไปกล้อง)</span>
+                        <Camera className="w-3.5 h-3.5" />
+                        <span>หรือแตะที่นี่เพื่อกลับไปกล้องทันที</span>
                       </button>
                     </div>
                   )}
@@ -1767,8 +1797,13 @@ function VehicleContent() {
                       </div>
                       <span className="text-sm font-bold text-amber-300">อ่านป้ายทะเบียนไม่ชัดเจน</span>
                       <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                        {capturedResult.message || "กรุณาเล็งให้ป้ายทะเบียน (ตัวอักษรและตัวเลข) อยู่ตรงกลางกรอบสีเขียว แล้วกดจับภาพใหม่อีกครั้ง"}
+                        {capturedResult.message || "กรุณาเล็งให้ป้ายทะเบียน (ตัวอักษรและตัวเลข) อยู่ตรงกลางกรอบสีเขียว"}
                       </p>
+
+                      <div className="mt-3 flex items-center gap-1.5 text-[11px] font-bold text-amber-300 animate-pulse bg-amber-950/70 px-3 py-1.5 rounded-full border border-amber-500/30">
+                        <RotateCcw className="w-3.5 h-3.5 animate-spin" />
+                        <span>กำลังกลับไปที่กล้องอัตโนมัติ...</span>
+                      </div>
 
                       <button
                         type="button"
@@ -1776,10 +1811,10 @@ function VehicleContent() {
                           if (autoResumeTimerRef.current) clearTimeout(autoResumeTimerRef.current);
                           setCapturedResult(null);
                         }}
-                        className="mt-4 w-full py-3 bg-sky-600 hover:bg-sky-500 text-white rounded-2xl font-bold text-xs shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                        className="mt-3 w-full py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl font-medium text-[11px] border border-white/20 active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                       >
-                        <RotateCcw className="w-4 h-4" />
-                        <span>🔄 กลับไปที่กล้องเพื่อส่องใหม่</span>
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>แตะเพื่อกลับไปส่องใหม่ทันที</span>
                       </button>
                     </div>
                   )}
@@ -1806,8 +1841,9 @@ function VehicleContent() {
                     </div>
 
                     <div className="absolute -bottom-6 left-0 right-0 text-center">
-                      <span className="text-[10px] font-bold text-white/95 bg-slate-900/90 px-3 py-0.5 rounded-full backdrop-blur-xs border border-white/10 shadow-sm">
-                        แตะที่จอ หรือ กดปุ่มด้านล่างเพื่อจับภาพ
+                      <span className="text-[10px] font-bold text-white/95 bg-slate-900/90 px-3 py-0.5 rounded-full backdrop-blur-xs border border-white/10 shadow-sm flex items-center justify-center gap-1 mx-auto w-fit">
+                        <Sparkles className="w-3 h-3 text-emerald-400 animate-pulse" />
+                        <span>ถือค้างไว้ ระบบจะล็อกภาพชัดสุด & สแกนให้อัตโนมัติ</span>
                       </span>
                     </div>
                   </div>
@@ -1821,6 +1857,20 @@ function VehicleContent() {
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
                     LIVE PATROL
                   </span>
+
+                  <button
+                    type="button"
+                    onClick={() => setAutoScanActive(!autoScanActive)}
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 border transition-all ${
+                      autoScanActive 
+                        ? "bg-emerald-500/20 text-emerald-300 border-emerald-400/40" 
+                        : "bg-slate-800/80 text-slate-400 border-slate-700"
+                    }`}
+                    title="เปิด/ปิดการสแกนอัตโนมัติ"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>{autoScanActive ? "ออโต้: เปิด" : "ออโต้: ปิด"}</span>
+                  </button>
                 </div>
 
                 <button
@@ -1836,7 +1886,8 @@ function VehicleContent() {
               {/* Viewfinder Bottom Status */}
               <div className="relative z-20 text-center pointer-events-none">
                 <span className="text-[11px] text-white/90 bg-slate-900/85 px-3.5 py-1.5 rounded-full backdrop-blur-md border border-white/10 inline-flex items-center gap-1.5 shadow-md">
-                  <span>📸 เล็งป้ายแล้วกดปุ่ม "จับภาพป้ายทะเบียน" ด้านล่าง</span>
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+                  <span>สแกนอัตโนมัติ: เล็งป้ายแล้วถือค้างไว้ (ไม่ต้องกดปุ่ม)</span>
                 </span>
               </div>
             </div>
@@ -1851,28 +1902,35 @@ function VehicleContent() {
               className="hidden"
             />
 
-            {/* HERO MANUAL SHUTTER BUTTON */}
+            {/* HANDS-FREE AUTO-SCAN HERO BAR */}
             <div className="space-y-2">
-              <button
-                type="button"
-                onClick={() => handleVideoShutter("patrol")}
-                disabled={isOcrProcessing || !cameraActive || (capturedResult !== null && capturedResult.status === "processing")}
-                className="w-full py-4 px-4 bg-gradient-to-r from-sky-600 via-teal-600 to-emerald-600 hover:from-sky-500 hover:to-emerald-500 disabled:opacity-50 text-white font-extrabold text-base rounded-2xl shadow-xl shadow-sky-600/30 active:scale-98 transition-all flex items-center justify-center gap-3 cursor-pointer"
-              >
-                {isOcrProcessing ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    <span>กำลังวิเคราะห์ป้ายทะเบียน...</span>
-                  </>
-                ) : (
-                  <>
-                    <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center border-2 border-white">
-                      <div className="w-3.5 h-3.5 rounded-full bg-white animate-pulse" />
+              <div className="p-3.5 bg-gradient-to-r from-emerald-950/80 via-slate-900/90 to-sky-950/80 border-2 border-emerald-400/60 rounded-2xl flex items-center justify-between gap-3 shadow-lg backdrop-blur-sm">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/30">
+                    <Sparkles className="w-5 h-5 animate-bounce" />
+                  </div>
+                  <div className="text-left min-w-0">
+                    <div className="text-xs font-black text-white flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                      <span className="truncate">โหมดแฮนด์ฟรี: สแกนอัตโนมัติ 100%</span>
                     </div>
-                    <span>กดจับภาพป้ายทะเบียน (AI OCR)</span>
-                  </>
-                )}
-              </button>
+                    <p className="text-[11px] text-slate-300 truncate">
+                      รปภ. ไม่ต้องกดปุ่ม • ถือเล็งป้าย ระบบจะค้างภาพชัดสุด & สแกนให้ทันที
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleVideoShutter("patrol")}
+                  disabled={isOcrProcessing || !cameraActive || (capturedResult !== null && capturedResult.status === "processing")}
+                  className="py-2 px-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs rounded-xl shadow-md active:scale-95 transition-all flex items-center gap-1 shrink-0 cursor-pointer disabled:opacity-50"
+                  title="หากต้องการกดถ่ายเองทันที"
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                  <span>กดถ่ายเอง</span>
+                </button>
+              </div>
 
               <div className="flex gap-2">
                 <button
