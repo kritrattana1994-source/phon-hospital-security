@@ -8,6 +8,9 @@ import {
   deleteCheckpointFromCloud,
   saveStaffVehiclesToCloud,
   deleteStaffVehicleFromCloud,
+  saveGuardToCloud,
+  deleteGuardFromCloud,
+  saveAllGuardsToCloud,
   saveShiftReportToCloud,
   saveDailyAISummaryToCloud,
   saveGoogleDriveWebhookToCloud,
@@ -250,11 +253,19 @@ interface AppState {
 }
 
 export const initialGuards: Guard[] = [
-  { id: 'g1', name: 'นายสมชาย รักษา', pin: '1234', shift: 'morning', phone: '089-111-2233', role: 'guard' },
-  { id: 'g2', name: 'นายประสิทธิ์ คุ้มกัน', pin: '1111', shift: 'morning', phone: '089-222-3344', role: 'guard' },
-  { id: 'g3', name: 'นายวิชัย ระวังภัย', pin: '2222', shift: 'morning', phone: '089-333-4455', role: 'guard' },
-  { id: 'g4', name: 'นายสมศักดิ์ ปลอดภัย', pin: '5678', shift: 'night', phone: '089-444-5566', role: 'guard' },
-  { id: 'g5', name: 'นายสุรชัย มั่นคง', pin: '3333', shift: 'night', phone: '089-555-6677', role: 'guard' },
+  { id: 'g0510', name: 'นายบุญธรรม เชียงเทียะ', pin: '0510', shift: 'morning', phone: '0821063839', role: 'guard' },
+  { id: 'g0514', name: 'นายภูธีป ทองผา', pin: '0514', shift: 'morning', phone: '0910657049', role: 'guard' },
+  { id: 'g0515', name: 'นายกฤษฎา หัตถพนม', pin: '0515', shift: 'morning', phone: '0657471882', role: 'guard' },
+  { id: 'g0511', name: 'นายวีระชาติ พานนนท์', pin: '0511', shift: 'morning', phone: '0636109011', role: 'guard' },
+  { id: 'g0513', name: 'นายทรงชัย ทุมพัง', pin: '0513', shift: 'morning', phone: '0637738979', role: 'guard' },
+  { id: 'g0516', name: 'นายสุพัฒน์พงศ์ เอมวัฒน์', pin: '0516', shift: 'morning', phone: '0986572089', role: 'guard' },
+  { id: 'g0512', name: 'นายประสิทธิ์ อูปแก้ว', pin: '0512', shift: 'morning', phone: '0872154255', role: 'guard' },
+  { id: 'g0001', name: 'นายศักดิ์สิทธิ์ นาเม็ง', pin: '0001', shift: 'morning', phone: '0912130432', role: 'guard' },
+  { id: 'g0002', name: 'นายศุภชัย โสภา', pin: '0002', shift: 'morning', phone: '0966307969', role: 'guard' },
+  { id: 'g0003', name: 'นายสนธยา อะวะตา', pin: '0003', shift: 'morning', phone: '0981264839', role: 'guard' },
+  { id: 'g0004', name: 'นายพิสันชัย ศรีกุดเรือ', pin: '0004', shift: 'morning', phone: '0943734429', role: 'guard' },
+  { id: 'g0005', name: 'นายรักไทย ตระวงษ์', pin: '0005', shift: 'morning', phone: '0653252169,0807611976', role: 'guard' },
+  { id: 'g0006', name: 'นายกฤษฎ์ ป้อมสุวรรณ', pin: '0006', shift: 'morning', phone: '0943918410', role: 'guard' },
 ];
 
 export const initialCheckpoints: Checkpoint[] = [
@@ -762,21 +773,30 @@ export const useStore = create<AppState>()(
 
       // Guards List & Shift Management
       guards: initialGuards,
-      addGuard: (guard) => set((state) => ({
-        guards: [
-          ...state.guards,
-          {
-            ...guard,
-            id: 'g-' + Date.now(),
-          }
-        ]
-      })),
-      updateGuard: (id, updated) => set((state) => ({
-        guards: state.guards.map(g => g.id === id ? { ...g, ...updated } : g)
-      })),
-      deleteGuard: (id) => set((state) => ({
-        guards: state.guards.filter(g => g.id !== id)
-      })),
+      addGuard: (guard) => {
+        const newGuard: Guard = {
+          ...guard,
+          id: 'g-' + Date.now(),
+        };
+        saveGuardToCloud(newGuard);
+        set((state) => ({
+          guards: [...state.guards, newGuard]
+        }));
+      },
+      updateGuard: (id, updated) => {
+        set((state) => {
+          const newGuards = state.guards.map((g) => (g.id === id ? { ...g, ...updated } : g));
+          const target = newGuards.find((g) => g.id === id);
+          if (target) saveGuardToCloud(target);
+          return { guards: newGuards };
+        });
+      },
+      deleteGuard: (id) => {
+        deleteGuardFromCloud(id);
+        set((state) => ({
+          guards: state.guards.filter((g) => g.id !== id)
+        }));
+      },
 
 
 

@@ -3,8 +3,17 @@
 import { useEffect, useState } from "react";
 import { db } from "./firebase";
 import { collection, onSnapshot, doc } from "firebase/firestore";
-import { useStore, PatrolLog, ParkingScan, Incident, Checkpoint, StaffVehicle } from "./store";
-import { seedFirestoreIfEmpty, saveCheckpointToCloud, saveIncidentToCloud, saveGoogleDriveWebhookToCloud, saveGeminiApiKeyToCloud } from "./firebaseService";
+import { useStore, PatrolLog, ParkingScan, Incident, Checkpoint, StaffVehicle, Guard, initialGuards } from "./store";
+import { 
+  seedFirestoreIfEmpty, 
+  saveCheckpointToCloud, 
+  saveIncidentToCloud, 
+  saveGoogleDriveWebhookToCloud, 
+  saveGeminiApiKeyToCloud,
+  saveGuardToCloud,
+  deleteGuardFromCloud,
+  saveAllGuardsToCloud
+} from "./firebaseService";
 
 export function useFirebaseSync() {
   const [isConnected, setIsConnected] = useState(false);
@@ -223,6 +232,32 @@ export function useFirebaseSync() {
       console.warn("Gemini config sync notice:", err.message);
     });
 
+    // 12. Real-time Listener: Guards (ซิงค์รายชื่อและรหัส PIN ของ รปภ. ทุกเครื่องสดทันที)
+    const unsubGuards = onSnapshot(collection(db, "guards"), (snapshot) => {
+      setIsConnected(true);
+      if (!snapshot.empty) {
+        const cloudGuards = snapshot.docs.map(doc => doc.data() as Guard);
+        const hasLegacyMockOnly = cloudGuards.some(g => g.id === "g1" && g.name === "นายสมชาย รักษา");
+        if (hasLegacyMockOnly || cloudGuards.length < 5) {
+          // หากบน Cloud ยังมีเฉพาะข้อมูลจำลองเก่า ให้อัปโหลดรายชื่อ 13 นายจริงของ รพ.พล ขึ้น Cloud ทันที
+          saveAllGuardsToCloud(initialGuards).then(() => {
+            if (hasLegacyMockOnly) {
+              ["g1", "g2", "g3", "g4", "g5"].forEach(id => deleteGuardFromCloud(id));
+            }
+          });
+        } else {
+          useStore.setState({ guards: cloudGuards });
+        }
+      } else {
+        // หากบน Cloud ยังว่างเปล่า ให้อัปโหลดรายชื่อ 13 นายจริงของ รพ.พล ขึ้น Cloud ทันที
+        const currentLocal = useStore.getState().guards || [];
+        const toSave = currentLocal.length >= 10 ? currentLocal : initialGuards;
+        saveAllGuardsToCloud(toSave);
+      }
+    }, (err) => {
+      console.warn("Guards sync notice:", err.message);
+    });
+
     return () => {
       broadcast?.close();
       unsubPatrol();
@@ -235,6 +270,7 @@ export function useFirebaseSync() {
       unsubDailyAI();
       unsubDriveConfig();
       unsubGeminiConfig();
+      unsubGuards();
     };
   }, []);
 

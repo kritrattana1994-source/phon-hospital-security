@@ -176,6 +176,28 @@ export async function saveGuardToCloud(guard: Guard) {
   }
 }
 
+export async function deleteGuardFromCloud(guardId: string) {
+  try {
+    await deleteDoc(doc(db, "guards", guardId));
+  } catch (err) {
+    console.warn("Cloud delete guard failed:", err);
+  }
+}
+
+export async function saveAllGuardsToCloud(guards: Guard[]) {
+  if (!guards || guards.length === 0) return;
+  try {
+    const batch = writeBatch(db);
+    for (const g of guards) {
+      const docRef = doc(db, "guards", g.id);
+      batch.set(docRef, sanitizeForFirestore(g), { merge: true });
+    }
+    await batch.commit();
+  } catch (err) {
+    console.warn("Cloud batch save guards failed:", err);
+  }
+}
+
 // Staff Vehicles
 export async function saveStaffVehiclesToCloud(vehicles: StaffVehicle[]) {
   if (!vehicles || vehicles.length === 0) return;

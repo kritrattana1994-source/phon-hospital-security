@@ -73,6 +73,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useFirebaseSync } from "@/lib/useFirebaseSync";
+import { saveAllGuardsToCloud } from "@/lib/firebaseService";
 import { openFullImage, downloadImage } from "@/lib/imageViewer";
 import HospitalBrand from "@/components/HospitalBrand";
 import PrintQRModal from "@/components/PrintQRModal";
@@ -87,6 +88,11 @@ import {
   calculateGuardKPIs,
   PatrolRound 
 } from "@/lib/patrolSchedule";
+import { 
+  analyze90DaysParking, 
+  exportWeekendSquattersToCSV, 
+  AnalyzedVehicle 
+} from "@/lib/parkingAnalytics";
 
 export default function SupervisorPage() {
   const { 
@@ -135,9 +141,19 @@ export default function SupervisorPage() {
 
   const { isConnected: isCloudConnected } = useFirebaseSync();
 
-  const [activeTab, setActiveTab] = useState<"overview" | "rounds" | "checkpoints" | "staff" | "vehicles" | "incidents" | "ai" | "archive">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "rounds" | "checkpoints" | "staff" | "vehicles" | "incidents" | "ai" | "archive" | "parkingIntelligence">("overview");
   const [lineSent, setLineSent] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
+
+  // 90-Day Parking Intelligence & Weekend Squatter Detection State
+  const [parkingCutoffDays, setParkingCutoffDays] = useState<number>(90);
+  const [ai90Summary, setAi90Summary] = useState<string | null>(null);
+  const [ai90ActionItems, setAi90ActionItems] = useState<string[]>([]);
+  const [ai90Generating, setAi90Generating] = useState(false);
+  const [ai90Alert, setAi90Alert] = useState<string | null>(null);
+  const [parkingRiskFilter, setParkingRiskFilter] = useState<"weekend_squatter" | "chronic_overnight" | "unregistered_staff" | "abandoned" | "all">("weekend_squatter");
+  const [parkingPlateSearch, setParkingPlateSearch] = useState<string>("");
+  const [selectedVehicleForDetail, setSelectedVehicleForDetail] = useState<AnalyzedVehicle | null>(null);
 
   // Month-by-Month Analytics State
   const nowSupervisor = new Date();
@@ -1276,6 +1292,62 @@ export default function SupervisorPage() {
 
   const selectedSavedAISummary = dailyAISummaries.find((s) => s.dateString === selectedAiArchiveDate);
 
+  // 90-Day Parking Intelligence & Weekend Squatter Analytics Calculation
+  const parkingAnalytics90d = analyze90DaysParking(parkingScans, staffVehicles, parkingCutoffDays);
+
+  const handleRun90DaysAI = async () => {
+    setAi90Generating(true);
+    setAi90Alert(null);
+    try {
+      const res = await fetch("/api/ai/parking-intelligence-90d", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          daysAnalyzed: parkingCutoffDays,
+          totalScans: parkingAnalytics90d.totalScans,
+          uniqueVehiclesCount: parkingAnalytics90d.uniqueVehiclesCount,
+          staffVehiclesCount: parkingAnalytics90d.staffVehiclesCount,
+          outsideVehiclesCount: parkingAnalytics90d.outsideVehiclesCount,
+          weekendSquatters: parkingAnalytics90d.weekendSquatters,
+          chronicOvernight: parkingAnalytics90d.chronicOvernight,
+          abandonedVehicles: parkingAnalytics90d.abandonedVehicles,
+          unregisteredStaffSuspects: parkingAnalytics90d.unregisteredStaffSuspects,
+          geminiApiKey,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "เกิดข้อผิดพลาดในการวิเคราะห์ AI");
+      }
+
+      const data = await res.json();
+      if (data.success) {
+        setAi90Summary(data.aiSummaryMarkdown);
+        setAi90ActionItems(data.actionItems || []);
+        setAi90Alert("วิเคราะห์และสังเคราะห์รายงาน AI สำหรับลานจอด 90 วันสำเร็จแล้ว");
+        setTimeout(() => setAi90Alert(null), 5000);
+      }
+    } catch (err: any) {
+      alert("เกิดข้อผิดพลาด: " + (err?.message || err));
+    } finally {
+      setAi90Generating(false);
+    }
+  };
+
+  const handleDownloadSquattersCSV = () => {
+    const csvData = exportWeekendSquattersToCSV(parkingAnalytics90d.weekendSquatters);
+    const blob = new Blob([csvData], { type: "text/csv;charset=utf-8;" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `PHON_Weekend_Squatters_${new Date().toISOString().split("T")[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  };
+
   // DASHBOARD MAIN VIEW
   return (
     <div className="min-h-screen bg-[#f0f6fa] text-slate-800 flex flex-col font-['Sarabun',sans-serif]">
@@ -1318,6 +1390,7 @@ export default function SupervisorPage() {
             { id: "checkpoints", label: `จัดการจุดตรวจ (${checkpoints.length})`, icon: CheckSquare },
             { id: "staff", label: `จัดการพนักงาน รปภ. (${onlyGuards.length})`, icon: Users },
             { id: "vehicles", label: `รถบุคลากร (${staffVehicles.length})`, icon: Car },
+            { id: "parkingIntelligence", label: `🚨 AI เรดาร์การจอด 90 วัน (${parkingAnalytics90d.weekendSquatters.length})`, icon: ShieldAlert, highlight: true },
             { id: "incidents", label: `แจ้งเหตุด่วน (${incidents.length})`, icon: AlertTriangle },
             { id: "ai", label: "สรุปรายงานประจำวัน (07:00 น.)", icon: ListChecks },
             { id: "archive", label: "📦 คลังสำรองข้อมูล (365 วัน)", icon: FolderArchive, highlight: true },
@@ -2831,16 +2904,29 @@ export default function SupervisorPage() {
                   <h2 className="font-bold text-lg text-slate-900">รายชื่อเจ้าหน้าที่ รปภ. ({onlyGuards.length} นาย)</h2>
                   <p className="text-xs text-slate-500">สามารถเพิ่ม/ลบ เจ้าหน้าที่ รปภ. และตั้งรหัส PIN 4 หลักประจำตัว</p>
                 </div>
-                <button
-                  onClick={() => {
-                    setEditingGuard(null);
-                    setGuardForm({ name: "", pin: "", shift: "morning", phone: "", role: "guard" });
-                    setShowAddGuardModal(true);
-                  }}
-                  className="px-4 py-2.5 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl flex items-center gap-2 active:scale-95 transition-all shadow-xs"
-                >
-                  <Plus className="w-4 h-4" /> เพิ่มเจ้าหน้าที่ รปภ. ใหม่
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await saveAllGuardsToCloud(guards);
+                      alert("✅ ซิงค์รายชื่อและรหัส PIN ของ รปภ. ทุกนายขึ้น Cloud สำเร็จแล้ว ทุกเครื่องจะอัปเดตตรงกันทันที");
+                    }}
+                    className="px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 active:scale-95 transition-all shadow-xs"
+                    title="ซิงค์รายชื่อและรหัส PIN ทั้งหมดขึ้น Firebase Cloud ทันที"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> ซิงค์รายชื่อขึ้น Cloud ทันที
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEditingGuard(null);
+                      setGuardForm({ name: "", pin: "", shift: "morning", phone: "", role: "guard" });
+                      setShowAddGuardModal(true);
+                    }}
+                    className="px-4 py-2.5 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl flex items-center gap-2 active:scale-95 transition-all shadow-xs"
+                  >
+                    <Plus className="w-4 h-4" /> เพิ่มเจ้าหน้าที่ รปภ. ใหม่
+                  </button>
+                </div>
               </div>
 
               <div className="overflow-x-auto">
@@ -2917,6 +3003,14 @@ export default function SupervisorPage() {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("parkingIntelligence")}
+                  className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-rose-600 hover:from-amber-600 hover:to-rose-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 active:scale-95 transition-all shadow-xs"
+                >
+                  <ShieldAlert className="w-4 h-4" />
+                  <span>เรดาร์วิเคราะห์ 90 วัน (พบแอบจอดเสาร์-อาทิตย์ {parkingAnalytics90d.weekendSquatters.length} คัน)</span>
+                </button>
                 <button
                   type="button"
                   onClick={handleDownloadTemplate}
@@ -4651,7 +4745,566 @@ export default function SupervisorPage() {
             </div>
           </div>
         )}
+
+        {/* TAB 9: 90-DAY PARKING INTELLIGENCE & WEEKEND SQUATTER RADAR */}
+        {activeTab === "parkingIntelligence" && (
+          <div className="space-y-6">
+            {/* Header / Banner */}
+            <div className="bg-white border border-sky-100 rounded-3xl p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2.5">
+                  <span className="p-2.5 rounded-2xl bg-rose-500/10 text-rose-600 border border-rose-500/20">
+                    <ShieldAlert className="w-6 h-6" />
+                  </span>
+                  <div>
+                    <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                      เรดาร์วิเคราะห์พฤติกรรมการจอดรถ {parkingCutoffDays} วัน
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                        AI Weekend Squatter Radar
+                      </span>
+                    </h2>
+                    <p className="text-xs text-slate-500">
+                      โรงพยาบาลพล — เปรียบเทียบข้อมูลย้อนหลัง คัดกรองรถบุคลากร vs บุคคลภายนอก และชี้เป้าทะเบียนที่ชอบแอบมาจอดวันเสาร์-อาทิตย์
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2.5">
+                {/* Period Selector */}
+                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs">
+                  <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                  <span className="font-bold text-slate-600">ย้อนหลัง:</span>
+                  <select
+                    value={parkingCutoffDays}
+                    onChange={(e) => setParkingCutoffDays(Number(e.target.value))}
+                    className="bg-transparent font-bold text-sky-700 focus:outline-none cursor-pointer"
+                  >
+                    <option value={30}>30 วัน (1 เดือน)</option>
+                    <option value={60}>60 วัน (2 เดือน)</option>
+                    <option value={90}>90 วัน (3 เดือน)</option>
+                    <option value={180}>180 วัน (6 เดือน)</option>
+                    <option value={365}>365 วัน (1 ปี)</option>
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleDownloadSquattersCSV}
+                  disabled={parkingAnalytics90d.weekendSquatters.length === 0}
+                  className="px-3.5 py-2.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-2xs active:scale-95 disabled:opacity-50"
+                  title="ส่งออกรายชื่อรถแอบจอดเสาร์-อาทิตย์เป็นไฟล์ Excel CSV"
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                  <span>ส่งออก Excel รถแอบจอด ({parkingAnalytics90d.weekendSquatters.length})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleRun90DaysAI}
+                  disabled={ai90Generating}
+                  className="px-4 py-2.5 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 active:scale-95 transition-all shadow-xs disabled:opacity-50"
+                >
+                  {ai90Generating ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>กำลังสังเคราะห์ AI...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4 text-amber-300" />
+                      <span>ประมวลผล AI สรุปผู้บริหาร</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {ai90Alert && (
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-3 text-xs text-emerald-900 font-bold animate-in fade-in-50">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                <span>{ai90Alert}</span>
+              </div>
+            )}
+
+            {/* KPI Cards Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+              <div className="bg-white border border-sky-100 rounded-2xl p-4 shadow-2xs space-y-1">
+                <div className="flex items-center justify-between text-slate-500 text-xs">
+                  <span>สแกนสะสม ({parkingCutoffDays} วัน)</span>
+                  <Car className="w-4 h-4 text-sky-600" />
+                </div>
+                <div className="text-2xl font-black text-slate-900">
+                  {parkingAnalytics90d.totalScans.toLocaleString()}
+                  <span className="text-xs font-normal text-slate-400 ml-1">ครั้ง</span>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  ยานพาหนะรวม {parkingAnalytics90d.uniqueVehiclesCount.toLocaleString()} คัน
+                </p>
+              </div>
+
+              <div className="bg-white border border-emerald-100 rounded-2xl p-4 shadow-2xs space-y-1">
+                <div className="flex items-center justify-between text-slate-500 text-xs">
+                  <span>รถบุคลากร รพ. (คนใน)</span>
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                </div>
+                <div className="text-2xl font-black text-emerald-700">
+                  {parkingAnalytics90d.staffVehiclesCount.toLocaleString()}
+                  <span className="text-xs font-normal text-slate-400 ml-1">คัน</span>
+                </div>
+                <p className="text-[11px] text-emerald-600">
+                  คัดแยกสิทธิ์ถูกต้อง ไม่ปะปน
+                </p>
+              </div>
+
+              <div 
+                onClick={() => setParkingRiskFilter("weekend_squatter")}
+                className={`cursor-pointer rounded-2xl p-4 shadow-2xs space-y-1 transition-all border ${
+                  parkingRiskFilter === "weekend_squatter"
+                    ? "bg-rose-50 border-rose-400 ring-2 ring-rose-400/30"
+                    : "bg-white border-rose-200 hover:border-rose-300"
+                }`}
+              >
+                <div className="flex items-center justify-between text-rose-700 text-xs font-bold">
+                  <span>🚨 แอบจอดเสาร์-อาทิตย์</span>
+                  <AlertTriangle className="w-4 h-4 text-rose-600 animate-pulse" />
+                </div>
+                <div className="text-2xl font-black text-rose-600">
+                  {parkingAnalytics90d.weekendSquatters.length}
+                  <span className="text-xs font-normal text-slate-400 ml-1">คัน</span>
+                </div>
+                <p className="text-[11px] text-rose-600 font-medium">
+                  สัดส่วนวันหยุด ≥ 65%
+                </p>
+              </div>
+
+              <div 
+                onClick={() => setParkingRiskFilter("chronic_overnight")}
+                className={`cursor-pointer rounded-2xl p-4 shadow-2xs space-y-1 transition-all border ${
+                  parkingRiskFilter === "chronic_overnight"
+                    ? "bg-indigo-50 border-indigo-400 ring-2 ring-indigo-400/30"
+                    : "bg-white border-indigo-200 hover:border-indigo-300"
+                }`}
+              >
+                <div className="flex items-center justify-between text-indigo-700 text-xs font-bold">
+                  <span>🌙 จอดค้างคืนเรื้อรัง</span>
+                  <Clock className="w-4 h-4 text-indigo-600" />
+                </div>
+                <div className="text-2xl font-black text-indigo-700">
+                  {parkingAnalytics90d.chronicOvernight.length}
+                  <span className="text-xs font-normal text-slate-400 ml-1">คัน</span>
+                </div>
+                <p className="text-[11px] text-indigo-600 font-medium">
+                  พบค้างคืนรอบดึก ≥ 4 ครั้ง
+                </p>
+              </div>
+
+              <div 
+                onClick={() => setParkingRiskFilter("unregistered_staff")}
+                className={`cursor-pointer rounded-2xl p-4 shadow-2xs space-y-1 transition-all border ${
+                  parkingRiskFilter === "unregistered_staff"
+                    ? "bg-amber-50 border-amber-400 ring-2 ring-amber-400/30"
+                    : "bg-white border-amber-200 hover:border-amber-300"
+                }`}
+              >
+                <div className="flex items-center justify-between text-amber-700 text-xs font-bold">
+                  <span>ℹ️ สงสัยบุคลากรตกหล่น</span>
+                  <Sparkles className="w-4 h-4 text-amber-600" />
+                </div>
+                <div className="text-2xl font-black text-amber-700">
+                  {parkingAnalytics90d.unregisteredStaffSuspects.length}
+                  <span className="text-xs font-normal text-slate-400 ml-1">คัน</span>
+                </div>
+                <p className="text-[11px] text-amber-600 font-medium">
+                  มาจันทร์-ศุกร์ สม่ำเสมอ
+                </p>
+              </div>
+            </div>
+
+            {/* AI Executive Briefing Section */}
+            <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-950 text-white rounded-3xl p-6 shadow-md border border-slate-800 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-rose-500/20 text-rose-300 flex items-center justify-center border border-rose-500/30 shrink-0">
+                    <Bot className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-sm text-white flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-amber-300" />
+                      บทวิเคราะห์เชิงลึกสำหรับผู้บริหาร (Executive Parking Security Intelligence)
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      ประมวลผลด้วยโมเดล Gemini / Heuristic Engine ชี้เป้าพฤติกรรมแอบจอดวันเสาร์-อาทิตย์ พร้อมคำแนะนำสั่งการ รปภ.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleRun90DaysAI}
+                    disabled={ai90Generating}
+                    className="px-3.5 py-1.5 bg-white/10 hover:bg-white/20 text-white font-bold text-xs rounded-xl transition-all flex items-center gap-1.5"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${ai90Generating ? "animate-spin" : ""}`} />
+                    <span>{ai90Generating ? "กำลังวิเคราะห์..." : "วิเคราะห์ใหม่"}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Action Items Badges */}
+              {ai90ActionItems.length > 0 && (
+                <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-2xl space-y-2">
+                  <span className="text-[11px] font-bold text-rose-300 flex items-center gap-1.5 uppercase tracking-wider">
+                    <ShieldAlert className="w-3.5 h-3.5" /> สิ่งที่ รปภ. ต้องดำเนินการทันที (Action Items):
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {ai90ActionItems.map((item, idx) => (
+                      <span
+                        key={idx}
+                        className="text-xs bg-rose-950/80 text-rose-200 border border-rose-500/40 px-3 py-1 rounded-xl font-medium"
+                      >
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* AI Markdown Content Preview */}
+              <div className="p-5 bg-white/5 border border-white/10 rounded-2xl text-xs space-y-3 font-sans leading-relaxed text-slate-200 whitespace-pre-line max-h-96 overflow-y-auto">
+                {ai90Summary ||
+                  `🏥 รายงานวิเคราะห์การจอดรถย้อนหลัง ${parkingCutoffDays} วัน (สรุปเบื้องต้น):
+• ยานพาหนะที่เข้ามาหมุนเวียนในโรงพยาบาลรวม ${parkingAnalytics90d.uniqueVehiclesCount.toLocaleString()} คัน (บุคลากร ${parkingAnalytics90d.staffVehiclesCount} คัน / ยานพาหนะภายนอก ${parkingAnalytics90d.outsideVehiclesCount} คัน)
+• 🚨 ตรวจพบยานพาหนะบุคคลภายนอกแอบมาจอดวันเสาร์-อาทิตย์ผิดปกติรวม ${parkingAnalytics90d.weekendSquatters.length} คัน (${parkingAnalytics90d.weekendSquatters.slice(0, 3).map((s) => `${s.plateNumber} ${s.province} มาวันหยุด ${s.weekendDays} วัน`).join(", ") || "ไม่พบ"})
+• 🌙 รถจอดค้างคืนเรื้อรังรวม ${parkingAnalytics90d.chronicOvernight.length} คัน
+• ℹ️ พบรถที่มาจันทร์-ศุกร์สม่ำเสมอเข้าข่ายบุคลากรที่ยังไม่ลงทะเบียน ${parkingAnalytics90d.unregisteredStaffSuspects.length} คัน
+
+กดปุ่ม "ประมวลผล AI สรุปผู้บริหาร" ด้านบน เพื่อให้ AI สังเคราะห์รายงานฉบับสมบูรณ์พร้อมแผนสั่งการ รปภ.`}
+              </div>
+            </div>
+
+            {/* Interactive Vehicle Radar Explorer */}
+            <div className="bg-white border border-sky-100 rounded-3xl p-6 shadow-xs space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  {[
+                    { id: "weekend_squatter", label: `🚨 แอบจอดเสาร์-อาทิตย์ (${parkingAnalytics90d.weekendSquatters.length})`, count: parkingAnalytics90d.weekendSquatters.length },
+                    { id: "chronic_overnight", label: `🌙 จอดค้างคืนเรื้อรัง (${parkingAnalytics90d.chronicOvernight.length})`, count: parkingAnalytics90d.chronicOvernight.length },
+                    { id: "unregistered_staff", label: `ℹ️ สงสัยบุคลากรตกหล่น (${parkingAnalytics90d.unregisteredStaffSuspects.length})`, count: parkingAnalytics90d.unregisteredStaffSuspects.length },
+                    { id: "abandoned", label: `🛑 จอดแช่ยาวนาน (${parkingAnalytics90d.abandonedVehicles.length})`, count: parkingAnalytics90d.abandonedVehicles.length },
+                    { id: "all", label: `📋 รถภายนอกทั้งหมด (${parkingAnalytics90d.outsideVehiclesCount})`, count: parkingAnalytics90d.outsideVehiclesCount },
+                  ].map((filter) => (
+                    <button
+                      key={filter.id}
+                      type="button"
+                      onClick={() => setParkingRiskFilter(filter.id as any)}
+                      className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+                        parkingRiskFilter === filter.id
+                          ? "bg-sky-600 text-white shadow-xs"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                    >
+                      {filter.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Search Bar */}
+                <div className="relative w-full md:w-72">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={parkingPlateSearch}
+                    onChange={(e) => setParkingPlateSearch(e.target.value)}
+                    placeholder="ค้นหาเลขทะเบียน หรือจังหวัด..."
+                    className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-900 focus:bg-white focus:outline-sky-500"
+                  />
+                  {parkingPlateSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setParkingPlateSearch("")}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Table / List of Filtered Vehicles */}
+              {(() => {
+                let list: AnalyzedVehicle[] = [];
+                if (parkingRiskFilter === "weekend_squatter") list = parkingAnalytics90d.weekendSquatters;
+                else if (parkingRiskFilter === "chronic_overnight") list = parkingAnalytics90d.chronicOvernight;
+                else if (parkingRiskFilter === "unregistered_staff") list = parkingAnalytics90d.unregisteredStaffSuspects;
+                else if (parkingRiskFilter === "abandoned") list = parkingAnalytics90d.abandonedVehicles;
+                else list = parkingAnalytics90d.allAnalyzedVehicles.filter((v) => !v.isStaff);
+
+                if (parkingPlateSearch.trim()) {
+                  const q = parkingPlateSearch.trim().toLowerCase();
+                  list = list.filter(
+                    (v) =>
+                      v.plateNumber.toLowerCase().includes(q) ||
+                      v.province.toLowerCase().includes(q)
+                  );
+                }
+
+                if (list.length === 0) {
+                  return (
+                    <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                      <Car className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                      <p className="text-xs font-bold text-slate-600">ไม่พบยานพาหนะตามเงื่อนไขที่เลือก</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        ลองเปลี่ยนตัวกรอง หรือค้นหาด้วยคำอื่น
+                      </p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs text-left">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+                          <th className="p-3">ลำดับ</th>
+                          <th className="p-3">เลขทะเบียนรถ</th>
+                          <th className="p-3">ประเภทความเสี่ยง</th>
+                          <th className="p-3">สถิติวันเสาร์-อาทิตย์ vs วันธรรมดา</th>
+                          <th className="p-3">สัดส่วนวันหยุด</th>
+                          <th className="p-3">ค้างคืนรอบดึก</th>
+                          <th className="p-3">โซนจอดประจำ</th>
+                          <th className="p-3">พบล่าสุด</th>
+                          <th className="p-3 text-right">การจัดการ</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {list.map((v, idx) => (
+                          <tr key={v.normalizedKey || idx} className="hover:bg-sky-50/40 transition-colors">
+                            <td className="p-3 text-slate-400 font-mono">{idx + 1}</td>
+                            <td className="p-3">
+                              <div className="font-mono font-black text-sm text-slate-900">
+                                {v.plateNumber}
+                              </div>
+                              <span className="text-[10px] text-slate-500 font-sans">
+                                {v.province}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              {v.riskCategory === "weekend_squatter" && (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                                  🚨 แอบจอดเสาร์-อาทิตย์
+                                </span>
+                              )}
+                              {v.riskCategory === "chronic_overnight" && (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                                  🌙 ค้างคืนเรื้อรัง
+                                </span>
+                              )}
+                              {v.riskCategory === "unregistered_staff" && (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                  ℹ️ สงสัยบุคลากรตกหล่น
+                                </span>
+                              )}
+                              {v.riskCategory === "abandoned" && (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-200 text-slate-800 border border-slate-300">
+                                  🛑 จอดแช่ยาวนาน
+                                </span>
+                              )}
+                              {v.riskCategory === "normal_visitor" && (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">
+                                  ผู้ติดต่อทั่วไป
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3">
+                              <div className="flex items-center gap-2">
+                                <span className="px-2 py-0.5 rounded-md font-bold text-[10px] bg-rose-50 text-rose-700 border border-rose-200">
+                                  ส.-อา.: {v.weekendDays} วัน
+                                </span>
+                                <span className="px-2 py-0.5 rounded-md font-bold text-[10px] bg-sky-50 text-sky-700 border border-sky-200">
+                                  จ.-ศ.: {v.weekdayDays} วัน
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-slate-400 mt-1">
+                                มาทั้งหมด {v.totalUniqueDays} วัน (สแกน {v.scanCount} ครั้ง)
+                              </p>
+                            </td>
+                            <td className="p-3">
+                              <div className="space-y-1">
+                                <span className="font-bold text-xs text-rose-700">
+                                  {Math.round(v.weekendRatio * 100)}%
+                                </span>
+                                <div className="w-24 h-2 bg-slate-100 rounded-full overflow-hidden flex border border-slate-200">
+                                  <div
+                                    className="bg-rose-500 h-full transition-all"
+                                    style={{ width: `${Math.round(v.weekendRatio * 100)}%` }}
+                                    title={`วันหยุด ${Math.round(v.weekendRatio * 100)}%`}
+                                  />
+                                  <div
+                                    className="bg-sky-400 h-full transition-all"
+                                    style={{ width: `${100 - Math.round(v.weekendRatio * 100)}%` }}
+                                    title={`วันธรรมดา ${100 - Math.round(v.weekendRatio * 100)}%`}
+                                  />
+                                </div>
+                              </div>
+                            </td>
+                            <td className="p-3 font-mono font-bold text-slate-700">
+                              {v.overnightCount > 0 ? (
+                                <span className="px-2 py-0.5 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                  {v.overnightCount} ครั้ง
+                                </span>
+                              ) : (
+                                <span className="text-slate-400">0</span>
+                              )}
+                            </td>
+                            <td className="p-3 text-slate-700 font-medium">
+                              {v.mostFrequentZone}
+                            </td>
+                            <td className="p-3 font-mono text-slate-500 text-[11px]">
+                              {v.lastSeen || "-"}
+                            </td>
+                            <td className="p-3 text-right">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedVehicleForDetail(v)}
+                                className="px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold rounded-lg transition-all border border-sky-200"
+                              >
+                                ประวัติสแกน
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        )}
       </main>
+
+      {/* MODAL: 90-DAY VEHICLE SCAN HISTORY DETAIL */}
+      {selectedVehicleForDetail && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl space-y-4 border border-sky-100">
+            <div className="flex justify-between items-start border-b border-slate-100 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="p-2 rounded-xl bg-rose-50 text-rose-600 border border-rose-200">
+                    <Car className="w-5 h-5" />
+                  </span>
+                  <div>
+                    <h3 className="font-mono font-black text-xl text-slate-900">
+                      {selectedVehicleForDetail.plateNumber}
+                    </h3>
+                    <p className="text-xs text-slate-500 font-sans">
+                      {selectedVehicleForDetail.province} • {selectedVehicleForDetail.riskReason}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedVehicleForDetail(null)}
+                className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Quick Metrics */}
+            <div className="grid grid-cols-3 gap-2.5 text-center text-xs">
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200">
+                <span className="text-slate-500 block">มาทั้งหมด</span>
+                <span className="font-bold text-base text-slate-900">
+                  {selectedVehicleForDetail.totalUniqueDays} วัน
+                </span>
+              </div>
+              <div className="p-3 bg-rose-50 rounded-2xl border border-rose-200">
+                <span className="text-rose-600 block">วันเสาร์-อาทิตย์</span>
+                <span className="font-bold text-base text-rose-700">
+                  {selectedVehicleForDetail.weekendDays} วัน ({Math.round(selectedVehicleForDetail.weekendRatio * 100)}%)
+                </span>
+              </div>
+              <div className="p-3 bg-indigo-50 rounded-2xl border border-indigo-200">
+                <span className="text-indigo-600 block">ค้างคืนรอบดึก</span>
+                <span className="font-bold text-base text-indigo-700">
+                  {selectedVehicleForDetail.overnightCount} ครั้ง
+                </span>
+              </div>
+            </div>
+
+            {/* Day of Week Breakdown Pill List */}
+            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-2">
+              <span className="font-bold text-slate-700 block">ความถี่ตามวันในสัปดาห์:</span>
+              <div className="grid grid-cols-7 gap-1 text-center font-mono">
+                {[
+                  { label: "อา.", count: selectedVehicleForDetail.dayOfWeekBreakdown.sun, isWeekend: true },
+                  { label: "จ.", count: selectedVehicleForDetail.dayOfWeekBreakdown.mon, isWeekend: false },
+                  { label: "อ.", count: selectedVehicleForDetail.dayOfWeekBreakdown.tue, isWeekend: false },
+                  { label: "พ.", count: selectedVehicleForDetail.dayOfWeekBreakdown.wed, isWeekend: false },
+                  { label: "พฤ.", count: selectedVehicleForDetail.dayOfWeekBreakdown.thu, isWeekend: false },
+                  { label: "ศ.", count: selectedVehicleForDetail.dayOfWeekBreakdown.fri, isWeekend: false },
+                  { label: "ส.", count: selectedVehicleForDetail.dayOfWeekBreakdown.sat, isWeekend: true },
+                ].map((item, idx) => (
+                  <div
+                    key={idx}
+                    className={`p-2 rounded-xl border ${
+                      item.isWeekend
+                        ? "bg-rose-100/70 border-rose-300 text-rose-900 font-bold"
+                        : "bg-white border-slate-200 text-slate-700"
+                    }`}
+                  >
+                    <span className="block text-[10px] text-slate-500">{item.label}</span>
+                    <span className="text-sm font-black">{item.count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* List of dates seen */}
+            <div className="space-y-2 text-xs">
+              <span className="font-bold text-slate-700">
+                ประวัติวันที่สแกนพบในรอบ {parkingCutoffDays} วัน ({selectedVehicleForDetail.datesSeen.length} วัน):
+              </span>
+              <div className="max-h-56 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-2xl">
+                {selectedVehicleForDetail.datesSeen.map((dStr, idx) => {
+                  const d = new Date(dStr + "T12:00:00");
+                  const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                  const dayName = d.toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+                  return (
+                    <div key={idx} className="p-2.5 flex items-center justify-between hover:bg-slate-50">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                          isWeekend
+                            ? "bg-rose-100 text-rose-800 border border-rose-200"
+                            : "bg-sky-50 text-sky-800 border border-sky-200"
+                        }`}>
+                          {isWeekend ? "วันหยุดเสาร์-อาทิตย์" : "วันธรรมดา"}
+                        </span>
+                        <span className="font-bold text-slate-800">{dayName}</span>
+                      </div>
+                      <span className="text-[11px] font-mono text-slate-400">{dStr}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setSelectedVehicleForDetail(null)}
+                className="px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl transition-all"
+              >
+                ปิดหน้าต่าง
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL 1: ADD/EDIT CHECKPOINT */}
       {showAddCpModal && (
