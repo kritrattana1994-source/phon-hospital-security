@@ -1355,9 +1355,6 @@ export default function SupervisorPage() {
       <header className="bg-white border-b border-sky-100 sticky top-0 z-30 px-6 py-3.5 shadow-2xs">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div className="flex items-center gap-4">
-            <Link href="/" className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition-all">
-              <ArrowLeft className="w-5 h-5" />
-            </Link>
             <HospitalBrand badgeText="ศูนย์ควบคุมความปลอดภัย" />
           </div>
 
