@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
   useStore, 
   Checkpoint, 
@@ -69,7 +69,9 @@ import {
   ChevronDown,
   Maximize2,
   Eye,
-  EyeOff
+  EyeOff,
+  Lock,
+  Delete
 } from "lucide-react";
 import Link from "next/link";
 import { useFirebaseSync } from "@/lib/useFirebaseSync";
@@ -136,10 +138,97 @@ export default function SupervisorPage() {
     geminiApiKey,
     setGeminiApiKey,
     dailyAISummaries,
-    addDailyAISummary
+    addDailyAISummary,
+    loginSupervisor,
+    logoutSupervisor
   } = useStore();
 
   const { isConnected: isCloudConnected } = useFirebaseSync();
+
+  // --- Supervisor PIN Authentication (รหัสผ่าน 9999) ---
+  const [pin, setPin] = useState("");
+  const [pinError, setPinError] = useState("");
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState<boolean>(true);
+
+  // ตรวจสอบสถานะการเข้าสู่ระบบจาก sessionStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedAuth = sessionStorage.getItem("supervisor_auth_unlocked");
+      if (savedAuth === "true") {
+        loginSupervisor("9999");
+        setIsAuthenticated(true);
+      } else {
+        setIsAuthenticated(false);
+      }
+      setIsCheckingAuth(false);
+    }
+  }, [loginSupervisor]);
+
+  const handlePinSubmit = (pinToTest?: string) => {
+    const code = (pinToTest !== undefined ? pinToTest : pin).trim();
+    if (code === "9999" || loginSupervisor(code)) {
+      loginSupervisor(code);
+      setIsAuthenticated(true);
+      setPinError("");
+      setPin("");
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("supervisor_auth_unlocked", "true");
+      }
+    } else {
+      setPinError("รหัสผ่านไม่ถูกต้อง (กรุณาระบุรหัสผ่าน 9999)");
+      setPin("");
+    }
+  };
+
+  const handleKeyPress = (num: string) => {
+    if (pin.length < 4) {
+      const nextPin = pin + num;
+      setPin(nextPin);
+      setPinError("");
+      if (nextPin.length === 4) {
+        setTimeout(() => handlePinSubmit(nextPin), 150);
+      }
+    }
+  };
+
+  const handleDelete = () => {
+    setPin((prev) => prev.slice(0, -1));
+    setPinError("");
+  };
+
+  const handleClear = () => {
+    setPin("");
+    setPinError("");
+  };
+
+  const handleLogout = () => {
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem("supervisor_auth_unlocked");
+    }
+    logoutSupervisor();
+    setIsAuthenticated(false);
+    setPin("");
+  };
+
+  // ดักฟังการพิมพ์ตัวเลขจากแป้นพิมพ์คอมพิวเตอร์
+  useEffect(() => {
+    if (isAuthenticated) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key >= "0" && e.key <= "9") {
+        handleKeyPress(e.key);
+      } else if (e.key === "Backspace") {
+        handleDelete();
+      } else if (e.key === "Enter") {
+        handlePinSubmit();
+      } else if (e.key === "Escape") {
+        handleClear();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [pin, isAuthenticated]);
 
   const [activeTab, setActiveTab] = useState<"overview" | "rounds" | "checkpoints" | "staff" | "vehicles" | "incidents" | "ai" | "archive" | "parkingIntelligence">("overview");
   const [lineSent, setLineSent] = useState(false);
@@ -1348,6 +1437,135 @@ export default function SupervisorPage() {
     window.URL.revokeObjectURL(url);
   };
 
+  // 1. กำลังตรวจสอบสิทธิ์เซสชัน
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen bg-[#f0f6fa] flex items-center justify-center font-['Sarabun',sans-serif]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-sky-200 border-t-sky-600 rounded-full animate-spin" />
+          <span className="text-xs text-slate-500 font-bold">กำลังตรวจสอบสิทธิ์...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. หน้าใส่รหัสผ่านหัวหน้างาน (PIN 9999)
+  if (!isAuthenticated) {
+    return (
+      <main className="min-h-screen bg-[#f0f6fa] text-slate-800 flex flex-col justify-between p-4 sm:p-6 select-none relative overflow-hidden max-w-md mx-auto border-x border-sky-100 shadow-xl font-['Sarabun',sans-serif]">
+        {/* Top Header */}
+        <div className="flex flex-col gap-2 z-10">
+          <div className="flex justify-between items-center">
+            <Link
+              href="/"
+              className="p-2 -ml-2 rounded-xl bg-slate-100 text-slate-600 hover:text-slate-900 active:scale-95 transition-all flex items-center gap-1.5 text-xs font-bold"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>หน้าแรก</span>
+            </Link>
+            <span className="text-[10px] font-bold text-sky-800 bg-sky-100 px-2.5 py-1 rounded-full border border-sky-200 uppercase tracking-wider">
+              SUPERVISOR PORTAL
+            </span>
+          </div>
+
+          <div className="pt-2">
+            <HospitalBrand badgeText="ศูนย์ควบคุมความปลอดภัย" />
+          </div>
+        </div>
+
+        {/* Ambient background glows */}
+        <div className="absolute top-1/4 -left-32 w-80 h-80 bg-sky-200/40 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-1/2 -right-32 w-80 h-80 bg-blue-100/50 rounded-full blur-3xl pointer-events-none" />
+
+        {/* PIN Indicators & Card */}
+        <div className="w-full max-w-xs mx-auto text-center my-auto py-4 z-10">
+          <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-sky-600 to-blue-700 flex items-center justify-center text-white mx-auto mb-3 shadow-lg shadow-sky-600/30 ring-4 ring-sky-100">
+            <Lock className="w-8 h-8" />
+          </div>
+          <h1 className="text-2xl font-black tracking-tight text-slate-900">
+            เข้าสู่ระบบหัวหน้างาน
+          </h1>
+          <p className="text-xs text-slate-500 mt-1">
+            กรุณาระบุรหัสผ่าน 4 หลัก เพื่อเข้าใช้งานระบบควบคุม
+          </p>
+
+          <div className="flex justify-center gap-4 my-5">
+            {[0, 1, 2, 3].map((index) => {
+              const isFilled = pin.length > index;
+              return (
+                <div
+                  key={index}
+                  className={`w-5 h-5 rounded-full transition-all duration-200 ${
+                    isFilled
+                      ? "bg-sky-600 scale-110 shadow-md shadow-sky-500/40 ring-2 ring-sky-200"
+                      : "bg-white border-2 border-slate-300"
+                  }`}
+                />
+              );
+            })}
+          </div>
+
+          {pinError ? (
+            <p className="text-rose-600 text-xs font-bold animate-pulse">{pinError}</p>
+          ) : (
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-sky-50 border border-sky-200 rounded-full text-[11px] text-sky-800 font-semibold">
+              <Sparkles className="w-3 h-3 text-sky-600" />
+              <span>รหัสผ่านเข้าใช้งาน: <strong className="font-mono text-sky-900">9999</strong></span>
+            </div>
+          )}
+        </div>
+
+        {/* Keypad */}
+        <div className="w-full max-w-xs mx-auto z-10 pb-6">
+          <div className="grid grid-cols-3 gap-2.5 mb-3">
+            {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => handleKeyPress(n)}
+                className="h-14 rounded-2xl bg-white border border-slate-200 text-2xl font-bold text-slate-800 hover:bg-sky-50 active:scale-95 active:bg-sky-600 active:text-white transition-all flex items-center justify-center shadow-xs cursor-pointer"
+              >
+                {n}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={handleClear}
+              className="h-14 rounded-2xl bg-slate-100 text-xs font-bold text-slate-500 hover:text-slate-800 active:scale-95 transition-all flex items-center justify-center cursor-pointer"
+            >
+              ล้าง
+            </button>
+            <button
+              type="button"
+              onClick={() => handleKeyPress("0")}
+              className="h-14 rounded-2xl bg-white border border-slate-200 text-2xl font-bold text-slate-800 hover:bg-sky-50 active:scale-95 active:bg-sky-600 active:text-white transition-all flex items-center justify-center shadow-xs cursor-pointer"
+            >
+              0
+            </button>
+            <button
+              type="button"
+              onClick={handleDelete}
+              className="h-14 rounded-2xl bg-slate-100 text-slate-500 hover:text-slate-800 active:scale-95 transition-all flex items-center justify-center cursor-pointer"
+              title="ลบตัวเลข"
+            >
+              <Delete className="w-6 h-6" />
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => handlePinSubmit()}
+            disabled={pin.length < 4}
+            className="w-full py-3.5 bg-gradient-to-r from-sky-600 to-blue-700 hover:from-sky-500 hover:to-blue-600 disabled:opacity-40 text-white font-bold text-sm rounded-2xl shadow-md shadow-sky-600/25 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <ShieldCheck className="w-4 h-4" />
+            <span>เข้าสู่ระบบหัวหน้างาน (9999)</span>
+          </button>
+        </div>
+      </main>
+    );
+  }
+
   // DASHBOARD MAIN VIEW
   return (
     <div className="min-h-screen bg-[#f0f6fa] text-slate-800 flex flex-col font-['Sarabun',sans-serif]">
@@ -1375,6 +1593,16 @@ export default function SupervisorPage() {
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
               <span>เจ้าหน้าที่ รปภ. ทั้งหมด {onlyGuards.length} นาย</span>
             </div>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all active:scale-95 cursor-pointer"
+              title="ออกจากระบบ / ล็อกหน้าจอหัวหน้างาน"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span>ออกจากระบบ</span>
+            </button>
           </div>
         </div>
       </header>

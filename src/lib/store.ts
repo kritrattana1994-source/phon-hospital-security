@@ -493,14 +493,7 @@ export const useStore = create<AppState>()(
   persist(
     (set, get) => ({
       currentUser: null,
-      supervisorUser: {
-        id: 'sup-1',
-        name: 'หัวหน้างานความปลอดภัย',
-        pin: '9999',
-        shift: 'morning',
-        phone: '089-999-8877',
-        role: 'supervisor'
-      },
+      supervisorUser: null,
       googleDriveWebhookUrl: '',
       setGoogleDriveWebhookUrl: (url: string) => {
         saveGoogleDriveWebhookToCloud(url);
@@ -917,6 +910,8 @@ export const useStore = create<AppState>()(
               useStore.setState({ incidents: cleanIncidents });
             }
           }
+          // Ensure supervisor requires PIN 9999 every session
+          useStore.setState({ supervisorUser: null });
         }
       },
     }
