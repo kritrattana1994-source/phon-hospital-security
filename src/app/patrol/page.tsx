@@ -56,6 +56,17 @@ export default function PatrolPage() {
     const text = input.trim();
     if (!text || checkpoints.length === 0) return null;
 
+    // Mapping สำหรับรองรับ QR โค้ดรุ่นเดิมที่อาจพิมพ์ไปก่อนหน้า (cp01 - cp07)
+    const legacyIdToCode: Record<string, string> = {
+      cp01: "01",
+      cp02: "02",
+      cp03: "03",
+      cp04: "04",
+      cp05: "05",
+      cp06: "06",
+      cp07: "07",
+    };
+
     // 1. ตรวจสอบรูปแบบมาตรฐาน "HOSP-PATROL:<checkpointId>:<checkpointCode>"
     if (text.startsWith("HOSP-PATROL:")) {
       const parts = text.split(":");
@@ -63,27 +74,54 @@ export default function PatrolPage() {
       const targetCode = parts[2]?.trim();
 
       // จับคู่ด้วย Checkpoint ID ตรงตัว (100% Strict Match)
-      let matched = checkpoints.find((cp) => cp.id === targetId);
+      if (targetId) {
+        const matchedById = checkpoints.find((cp) => cp.id === targetId);
+        if (matchedById) return matchedById;
 
-      // หากไม่พบ ID ให้จับคู่ด้วย Code ตรงตัว
-      if (!matched && targetCode) {
-        matched = checkpoints.find(
-          (cp) => cp.code.toLowerCase() === targetCode.toLowerCase()
-        );
+        // หากเป็น Legacy ID เช่น cp01 ให้แปลงเป็น Code "01"
+        if (legacyIdToCode[targetId]) {
+          const matchedLegacy = checkpoints.find((cp) => cp.code === legacyIdToCode[targetId]);
+          if (matchedLegacy) return matchedLegacy;
+        }
       }
 
-      if (matched) return matched;
+      // หากไม่พบ ID ให้จับคู่ด้วย Code ตรงตัว
+      if (targetCode) {
+        const normalizedTargetCode = targetCode.padStart(2, "0");
+        const matchedByCode = checkpoints.find(
+          (cp) => cp.code.toLowerCase() === targetCode.toLowerCase() || cp.code === normalizedTargetCode
+        );
+        if (matchedByCode) return matchedByCode;
+      }
     }
 
-    // 2. จับคู่แบบ Exact Match (เทียบเท่าทั้งก้อนกับ ID หรือ Code ป้องกัน Substring ชนกัน)
-    const exactMatch = checkpoints.find(
-      (cp) =>
-        cp.id === text ||
-        cp.code.toLowerCase() === text.toLowerCase()
-    );
-    if (exactMatch) return exactMatch;
+    // 2. จับคู่แบบ Exact Match (ID ตรงตัว)
+    const exactIdMatch = checkpoints.find((cp) => cp.id === text);
+    if (exactIdMatch) return exactIdMatch;
 
-    // 3. กรณีสแกนได้เป็น URL ที่มีพารามิเตอร์ cp= หรือ scan=
+    // 3. แปลง Legacy ID (เช่น cp01) ตรงๆ
+    if (legacyIdToCode[text]) {
+      const matchedLegacy = checkpoints.find((cp) => cp.code === legacyIdToCode[text]);
+      if (matchedLegacy) return matchedLegacy;
+    }
+
+    // 4. จับคู่ด้วย Code ตรงตัว หรือเลข 1-7
+    const numOnly = text.replace(/\D/g, "");
+    if (numOnly) {
+      const paddedNum = numOnly.padStart(2, "0");
+      const matchedByPadded = checkpoints.find(
+        (cp) => cp.code === paddedNum || String(cp.order) === numOnly
+      );
+      if (matchedByPadded) return matchedByPadded;
+    }
+
+    // 5. จับคู่ด้วยชื่อจุดตรวจ (เผื่อกรณีสแกนข้อความชื่ออาคาร)
+    const matchedByName = checkpoints.find(
+      (cp) => cp.name.toLowerCase() === text.toLowerCase() || text.includes(cp.name)
+    );
+    if (matchedByName) return matchedByName;
+
+    // 6. กรณีสแกนได้เป็น URL ที่มีพารามิเตอร์ cp= หรือ scan=
     try {
       if (text.includes("?") || text.includes("&")) {
         const queryPart = text.includes("?") ? text.split("?")[1] : text;
@@ -197,7 +235,6 @@ export default function PatrolPage() {
     }
   };
 
-  // GPS Location State
   const [gpsLocation, setGpsLocation] = useState<{
     lat: number;
     lng: number;
@@ -205,9 +242,9 @@ export default function PatrolPage() {
     timestamp: string;
     isReal: boolean;
   }>({
-    lat: 15.81462,
-    lng: 102.60124,
-    accuracy: 4.5,
+    lat: 15.816506,
+    lng: 102.6082934,
+    accuracy: 8.8,
     timestamp: new Date().toLocaleTimeString("th-TH"),
     isReal: false,
   });
@@ -310,13 +347,16 @@ export default function PatrolPage() {
   const handleSubmit = async () => {
     if (!selectedCheckpoint) return;
 
-    // ตรวจสอบระยะพิกัด GPS เทียบกับจุดตรวจจริง (ระยะไม่เกิน 30 เมตร)
+    // ตรวจสอบระยะพิกัด GPS เทียบกับจุดตรวจจริง (เผื่อความคลาดเคลื่อน GPS ใต้อาคาร/ชั้นล่าง)
     const distance = (selectedCheckpoint.coords && gpsLocation)
       ? calculateDistanceMeters(gpsLocation.lat, gpsLocation.lng, selectedCheckpoint.coords.lat, selectedCheckpoint.coords.lng)
       : 0;
 
-    if (distance > 30) {
-      alert(`⚠️ อยู่นอกระยะจุดตรวจ! คุณอยู่ห่างจากจุดตรวจ ${distance} เมตร (กำหนดไม่เกิน 30 ม.) ต้องเดินเข้าไปใกล้จุดตรวจเพื่อเช็คอิน`);
+    // รัศมีที่ยอมรับได้: ขั้นต่ำ 50 เมตร หรือตามความแม่นยำของดาวเทียมมือถือ (ไม่เกิน 100 เมตร)
+    const allowedRadius = Math.max(50, Math.min(100, Math.round((gpsLocation.accuracy || 10) + 25)));
+
+    if (gpsLocation.isReal && distance > allowedRadius) {
+      alert(`⚠️ อยู่นอกระยะจุดตรวจ! คุณอยู่ห่างจากจุดตรวจ ${distance} เมตร (ระบบกำหนดไม่เกิน ${allowedRadius} ม. เผื่อความคลาดเคลื่อน GPS ใต้อาคาร) กรุณาเดินเข้าไปใกล้จุดตรวจเพื่อเช็คอิน`);
       return;
     }
 

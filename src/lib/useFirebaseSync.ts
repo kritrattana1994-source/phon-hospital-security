@@ -7,6 +7,7 @@ import { useStore, PatrolLog, ParkingScan, Incident, Checkpoint, StaffVehicle, G
 import { 
   seedFirestoreIfEmpty, 
   saveCheckpointToCloud, 
+  deleteCheckpointFromCloud,
   saveIncidentToCloud, 
   saveGoogleDriveWebhookToCloud, 
   saveGeminiApiKeyToCloud,
@@ -117,19 +118,51 @@ export function useFirebaseSync() {
     const unsubCheckpoints = onSnapshot(collection(db, "checkpoints"), (snapshot) => {
       setIsConnected(true);
       if (!snapshot.empty) {
-        let cloudCps = snapshot.docs.map(doc => doc.data() as Checkpoint);
-        cloudCps.sort((a, b) => (a.order || 0) - (b.order || 0));
+        // Automatically purge any dummy checkpoints (cp01 - cp07) from Firestore
+        snapshot.docs.forEach(docSnap => {
+          if (docSnap.id.match(/^cp0[1-7]$/)) {
+            deleteCheckpointFromCloud(docSnap.id);
+          }
+        });
 
-        // Auto-migrate legacy checkpoint codes (e.g. A1-01, A2-01) to simple sequential numbers (01, 02, 03...)
-        const hasLegacyCodes = cloudCps.some(cp => !/^\d{2,}$/.test(cp.code?.trim() || ""));
-        if (hasLegacyCodes) {
-          cloudCps = cloudCps.map((cp, idx) => {
-            const sequentialCode = String(cp.order || idx + 1).padStart(2, '0');
-            const updatedCp = { ...cp, code: sequentialCode, order: cp.order || idx + 1 };
-            saveCheckpointToCloud(updatedCp);
-            return updatedCp;
-          });
+        const rawCps = snapshot.docs
+          .map(doc => doc.data() as Checkpoint)
+          .filter(cp => !cp.id.match(/^cp0[1-7]$/));
+
+        // Deduplicate checkpoints by code
+        const seenCodes = new Set<string>();
+        const seenIds = new Set<string>();
+        let cloudCps: Checkpoint[] = [];
+
+        for (const cp of rawCps) {
+          const code = cp.code?.trim() || "";
+          if (code && !seenCodes.has(code) && !seenIds.has(cp.id)) {
+            seenCodes.add(code);
+            seenIds.add(cp.id);
+            cloudCps.push(cp);
+          } else if (seenCodes.has(code)) {
+            // Duplicate code found in Firestore -> purge duplicate doc
+            deleteCheckpointFromCloud(cp.id);
+          }
         }
+
+        cloudCps.sort((a, b) => {
+          const numA = parseInt(a.code || "0", 10) || a.order || 0;
+          const numB = parseInt(b.code || "0", 10) || b.order || 0;
+          return numA - numB;
+        });
+
+        // Ensure orders and codes are sequential 01, 02, 03...
+        cloudCps = cloudCps.map((cp, idx) => {
+          const expectedCode = String(idx + 1).padStart(2, '0');
+          const expectedOrder = idx + 1;
+          if (cp.code !== expectedCode || cp.order !== expectedOrder) {
+            const updated = { ...cp, code: expectedCode, order: expectedOrder };
+            saveCheckpointToCloud(updated);
+            return updated;
+          }
+          return cp;
+        });
 
         const currentBuildings = useStore.getState().buildings || [];
         const cpBuildings = cloudCps.map((cp) => cp.building?.trim()).filter((b): b is string => Boolean(b));
