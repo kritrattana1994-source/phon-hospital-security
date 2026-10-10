@@ -665,10 +665,11 @@ function VehicleContent() {
     setOcrStatusText("กำลังประมวลผลข้อมูลป้ายทะเบียน...");
     try {
       let detectedPlate = "";
+      let serverEvaluated = false;
 
-      // 1. ส่งตรวจจับผ่าน Server API (Gemini 1.5 Flash Vision API)
+      // 1. ส่งตรวจจับผ่าน Server API (Gemini Vision API)
       const controller = new AbortController();
-      const abortTimer = setTimeout(() => controller.abort(), 9500);
+      const abortTimer = setTimeout(() => controller.abort(), 6500);
       try {
         const res = await fetch("/api/ocr-plate", {
           method: "POST",
@@ -681,6 +682,7 @@ function VehicleContent() {
         });
         clearTimeout(abortTimer);
         if (res.ok) {
+          serverEvaluated = true;
           const data = await res.json();
           if (data.success && data.plateNumber) {
             detectedPlate = data.plateNumber;
@@ -692,17 +694,11 @@ function VehicleContent() {
         clearTimeout(abortTimer);
       }
 
-      // 2. ถ้ายังไม่พบ และมี canvas ให้ลองใช้ Client-Side WebAssembly OCR สำรอง
-      if (!detectedPlate && canvasElement) {
-        const clientRes = await recognizePlateFromCanvas(canvasElement);
-        if (clientRes.success && clientRes.plateNumber) {
-          detectedPlate = clientRes.plateNumber;
-        }
-      }
-
-      // 3. หากตัดกรอบกลางแล้วไม่พบ ลองสแกนภาพเต็มมุมกว้างสำรอง
+      // 2. หากตัดกรอบกลางแล้วไม่พบ ลองสแกนภาพเต็มมุมกว้างสำรอง (กรณีป้ายหลุดกรอบเล็ง)
       if (!detectedPlate && fullImageUrl && fullImageUrl !== dataUrl) {
         setOcrStatusText("กำลังประมวลผลภาพมุมกว้างสำรอง...");
+        const controller2 = new AbortController();
+        const abortTimer2 = setTimeout(() => controller2.abort(), 6500);
         try {
           const fallbackRes = await fetch("/api/ocr-plate", {
             method: "POST",
@@ -711,14 +707,27 @@ function VehicleContent() {
               image: fullImageUrl,
               geminiApiKey: geminiApiKey || undefined
             }),
+            signal: controller2.signal,
           });
+          clearTimeout(abortTimer2);
           if (fallbackRes.ok) {
+            serverEvaluated = true;
             const fallbackData = await fallbackRes.json();
             if (fallbackData.success && fallbackData.plateNumber) {
               detectedPlate = fallbackData.plateNumber;
             }
           }
-        } catch {}
+        } catch {} finally {
+          clearTimeout(abortTimer2);
+        }
+      }
+
+      // 3. ถ้า Server ออฟไลน์ ไม่สามารถติดต่อ API ได้ ให้ใช้ Client-Side WebAssembly OCR สำรอง
+      if (!detectedPlate && !serverEvaluated && canvasElement) {
+        const clientRes = await recognizePlateFromCanvas(canvasElement);
+        if (clientRes.success && clientRes.plateNumber) {
+          detectedPlate = clientRes.plateNumber;
+        }
       }
 
       if (detectedPlate) {
@@ -815,10 +824,11 @@ function VehicleContent() {
 
       try {
         let detectedPlate = "";
+        let serverEvaluated = false;
 
         // 1. ส่งตรวจจับผ่าน Server API (Gemini Vision API)
         const controller = new AbortController();
-        const abortTimer = setTimeout(() => controller.abort(), 9500);
+        const abortTimer = setTimeout(() => controller.abort(), 6500);
         try {
           const res = await fetch("/api/ocr-plate", {
             method: "POST",
@@ -831,6 +841,7 @@ function VehicleContent() {
           });
           clearTimeout(abortTimer);
           if (res.ok) {
+            serverEvaluated = true;
             const data = await res.json();
             if (data.success && data.plateNumber) {
               detectedPlate = data.plateNumber;
@@ -842,16 +853,10 @@ function VehicleContent() {
           clearTimeout(abortTimer);
         }
 
-        // 2. ถ้ายังไม่พบ ใช้ Client-side WebAssembly OCR สำรอง
-        if (!detectedPlate && nextItem.canvas) {
-          const clientRes = await recognizePlateFromCanvas(nextItem.canvas);
-          if (clientRes.success && clientRes.plateNumber) {
-            detectedPlate = clientRes.plateNumber;
-          }
-        }
-
-        // 3. ถ้ายังไม่พบ ลองตรวจจากภาพเต็มมุมกว้าง
-        if (!detectedPlate && nextItem.fullDataUrl) {
+        // 2. ถ้ายังไม่พบและมีภาพเต็มมุมกว้าง ลองตรวจจากภาพเต็มมุมกว้างสำรอง (กรณีป้ายหลุดกรอบเล็ง)
+        if (!detectedPlate && nextItem.fullDataUrl && nextItem.fullDataUrl !== nextItem.thumbnailUrl) {
+          const controller2 = new AbortController();
+          const abortTimer2 = setTimeout(() => controller2.abort(), 6500);
           try {
             const fallbackRes = await fetch("/api/ocr-plate", {
               method: "POST",
@@ -860,14 +865,27 @@ function VehicleContent() {
                 image: nextItem.fullDataUrl,
                 geminiApiKey: geminiApiKey || undefined,
               }),
+              signal: controller2.signal,
             });
+            clearTimeout(abortTimer2);
             if (fallbackRes.ok) {
+              serverEvaluated = true;
               const fallbackData = await fallbackRes.json();
               if (fallbackData.success && fallbackData.plateNumber) {
                 detectedPlate = fallbackData.plateNumber;
               }
             }
-          } catch {}
+          } catch {} finally {
+            clearTimeout(abortTimer2);
+          }
+        }
+
+        // 3. ถ้า Server ออฟไลน์ ไม่สามารถติดต่อ API ได้ ให้ใช้ Client-side WebAssembly OCR สำรอง
+        if (!detectedPlate && !serverEvaluated && nextItem.canvas) {
+          const clientRes = await recognizePlateFromCanvas(nextItem.canvas);
+          if (clientRes.success && clientRes.plateNumber) {
+            detectedPlate = clientRes.plateNumber;
+          }
         }
 
         if (detectedPlate) {

@@ -119,9 +119,7 @@ async function recognizeWithGemini(
 
   const candidateModels = [
     "gemini-flash-latest",
-    "gemini-2.5-flash",
-    "gemini-3.8-flash",
-    "gemini-3.5-flash-lite",
+    "gemini-1.5-flash-latest",
     "gemini-1.5-flash",
   ];
 
@@ -234,16 +232,26 @@ export async function POST(req: NextRequest) {
 
     if (apiKey) {
       const geminiResult = await recognizeWithGemini(image, apiKey);
-      if (geminiResult && geminiResult.success && geminiResult.plateNumber) {
+      if (geminiResult) {
+        if (geminiResult.success && geminiResult.plateNumber) {
+          return NextResponse.json({
+            success: true,
+            engine: geminiResult.model || "gemini-flash",
+            rawText: geminiResult.rawText,
+            plateNumber: geminiResult.plateNumber,
+            fullPlate: geminiResult.plateNumber,
+            digits: geminiResult.digits,
+            letters: geminiResult.letters,
+            matches: [geminiResult.plateNumber],
+          });
+        }
+        // Gemini has evaluated the image and concluded there is no valid license plate.
+        // Return immediately without falling back to heavy Tesseract download.
         return NextResponse.json({
-          success: true,
+          success: false,
           engine: geminiResult.model || "gemini-flash",
-          rawText: geminiResult.rawText,
-          plateNumber: geminiResult.plateNumber,
-          fullPlate: geminiResult.plateNumber,
-          digits: geminiResult.digits,
-          letters: geminiResult.letters,
-          matches: [geminiResult.plateNumber],
+          rawText: geminiResult.rawText || "",
+          error: "ไม่พบป้ายทะเบียนในภาพ",
         });
       }
     }
