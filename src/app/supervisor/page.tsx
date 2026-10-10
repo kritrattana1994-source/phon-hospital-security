@@ -176,7 +176,7 @@ export default function SupervisorPage() {
         sessionStorage.setItem("supervisor_auth_unlocked", "true");
       }
     } else {
-      setPinError("รหัสผ่านไม่ถูกต้อง (กรุณาระบุรหัสผ่าน 9999)");
+      setPinError("รหัสผ่านไม่ถูกต้อง โปรดลองอีกครั้ง");
       setPin("");
     }
   };
@@ -1508,10 +1508,7 @@ export default function SupervisorPage() {
           {pinError ? (
             <p className="text-rose-600 text-xs font-bold animate-pulse">{pinError}</p>
           ) : (
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-sky-50 border border-sky-200 rounded-full text-[11px] text-sky-800 font-semibold">
-              <Sparkles className="w-3 h-3 text-sky-600" />
-              <span>รหัสผ่านเข้าใช้งาน: <strong className="font-mono text-sky-900">9999</strong></span>
-            </div>
+            <p className="text-slate-400 text-xs">เฉพาะหัวหน้างานรักษาความปลอดภัยเท่านั้น</p>
           )}
         </div>
 
@@ -1559,7 +1556,7 @@ export default function SupervisorPage() {
             className="w-full py-3.5 bg-gradient-to-r from-sky-600 to-blue-700 hover:from-sky-500 hover:to-blue-600 disabled:opacity-40 text-white font-bold text-sm rounded-2xl shadow-md shadow-sky-600/25 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
           >
             <ShieldCheck className="w-4 h-4" />
-            <span>เข้าสู่ระบบหัวหน้างาน (9999)</span>
+            <span>เข้าสู่ระบบหัวหน้างาน</span>
           </button>
         </div>
       </main>
@@ -6241,13 +6238,13 @@ export default function SupervisorPage() {
 
             <div className="space-y-2">
               <label className="block text-xs font-bold text-slate-700">
-                เพื่อความปลอดภัย พิมพ์คำว่า <span className="font-mono text-rose-600 font-black">CONFIRM</span> หรือกรอก PIN หัวหน้างาน (9999):
+                เพื่อความปลอดภัย พิมพ์คำว่า <span className="font-mono text-rose-600 font-black">CONFIRM</span> หรือกรอก PIN หัวหน้างาน:
               </label>
               <input
                 type="text"
                 value={purgeConfirmText}
                 onChange={(e) => setPurgeConfirmText(e.target.value)}
-                placeholder="พิมพ์ CONFIRM หรือ 9999"
+                placeholder="พิมพ์ CONFIRM หรือ PIN หัวหน้างาน"
                 className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-center font-bold tracking-wider text-slate-900 focus:bg-white focus:ring-2 focus:ring-rose-500"
               />
             </div>

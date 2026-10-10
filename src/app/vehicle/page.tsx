@@ -2045,7 +2045,7 @@ function VehicleContent() {
                   type="text"
                   value={cameraInputPlate}
                   onChange={(e) => setCameraInputPlate(e.target.value)}
-                  placeholder="เช่น 1234 หรือ 9999"
+                  placeholder="เช่น 1234 หรือ 5678"
                   className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 placeholder-slate-400 font-mono text-base font-bold focus:outline-none focus:border-sky-500 focus:bg-white focus:ring-1 focus:ring-sky-500"
                 />
                 <button

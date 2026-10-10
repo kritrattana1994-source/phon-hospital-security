@@ -142,7 +142,7 @@ export default function Home() {
             </div>
 
             <div className="pt-6 mt-6 border-t border-blue-100 flex items-center justify-between text-xs font-bold text-blue-700 group-hover:text-blue-800">
-              <span>เข้าสู่ศูนย์ควบคุมและบริหารจัดการ (PIN: 9999) &gt;</span>
+              <span>เข้าสู่ศูนย์ควบคุมและบริหารจัดการ &gt;</span>
               <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center group-hover:translate-x-1 transition-transform">
                 <ArrowRight className="w-4 h-4" />
               </div>
