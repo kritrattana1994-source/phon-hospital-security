@@ -1,18 +1,10 @@
 "use client";
 
-import { ShieldCheck, Smartphone, Monitor, QrCode, Wifi, ArrowRight, CheckCircle2 } from "lucide-react";
+import { ShieldCheck, Smartphone, Monitor, ArrowRight, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
 import HospitalBrand from "@/components/HospitalBrand";
 
 export default function Home() {
-  const [lanIp, setLanIp] = useState("192.168.1.111:3000");
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      setLanIp(`${window.location.hostname}:${window.location.port || "3000"}`);
-    }
-  }, []);
 
   return (
     <main className="min-h-screen bg-[#f0f6fa] text-slate-800 flex flex-col justify-between p-4 sm:p-6 relative overflow-hidden font-['Sarabun',sans-serif]">
@@ -147,30 +139,6 @@ export default function Home() {
                 <ArrowRight className="w-4 h-4" />
               </div>
             </div>
-          </Link>
-        </div>
-
-        {/* Mobile LAN Connection Info Box */}
-        <div className="p-5 bg-white border border-sky-200 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
-              <QrCode className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="font-bold text-slate-800 text-sm">เปิดใช้งานบนโทรศัพท์มือถือ รปภ. (Wi-Fi เดียวกัน):</p>
-              <p className="text-xs text-slate-500 mt-0.5">
-                เปิดเบราว์เซอร์บนมือถือ แล้วพิมพ์ที่อยู่:{" "}
-                <span className="text-sky-700 font-mono font-bold bg-sky-50 px-2.5 py-0.5 rounded-md border border-sky-200">
-                  http://{lanIp}/guard
-                </span>
-              </p>
-            </div>
-          </div>
-          <Link
-            href="/guard"
-            className="px-5 py-2.5 bg-sky-600 hover:bg-sky-500 text-white font-bold rounded-2xl text-xs active:scale-95 transition-all shadow-md shadow-sky-600/20 shrink-0"
-          >
-            เปิดหน้า รปภ. บนเครื่องนี้
           </Link>
         </div>
       </div>
