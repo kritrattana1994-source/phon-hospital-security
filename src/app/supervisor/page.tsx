@@ -71,7 +71,8 @@ import {
   Eye,
   EyeOff,
   Lock,
-  Delete
+  Delete,
+  Filter
 } from "lucide-react";
 import Link from "next/link";
 import { useFirebaseSync } from "@/lib/useFirebaseSync";
@@ -263,6 +264,11 @@ export default function SupervisorPage() {
   const [tempRounds, setTempRounds] = useState<PatrolRound[]>([]);
   const [selectedPhotoModal, setSelectedPhotoModal] = useState<{ url: string; title: string; timestamp?: string } | null>(null);
   const [incidentTabFilter, setIncidentTabFilter] = useState<"all" | "active" | "resolved">("all");
+
+  // Checkpoint Photo Evidence Gallery State (จัดแยกหัวข้อแต่ละจุด และแต่ละรอบเวลา)
+  const [galleryViewMode, setGalleryViewMode] = useState<"round" | "checkpoint">("round");
+  const [galleryRoundFilter, setGalleryRoundFilter] = useState<string>("all");
+  const [galleryCheckpointFilter, setGalleryCheckpointFilter] = useState<string>("all");
 
   // Google Drive Webhook Test State
   const [testDriveLoading, setTestDriveLoading] = useState(false);
@@ -2815,55 +2821,446 @@ export default function SupervisorPage() {
               </div>
             </div>
 
-            {/* SECTION 5: CHECKPOINT PHOTO EVIDENCE GALLERY */}
-            <div className="bg-white border border-sky-100 rounded-3xl p-6 shadow-xs space-y-4">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2">
-                    <Camera className="w-5 h-5 text-sky-600" />
-                    แกลเลอรีรูปถ่ายยืนยันจุดตรวจวันนี้ ({todayPhotosLogs.length} ภาพ)
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    ภาพถ่ายจริงที่ รปภ. ถ่ายส่งมาจากจุดตรวจ พร้อมบันทึกระยะห่าง GPS (แตะเพื่อดูภาพขยาย)
-                  </p>
-                </div>
-              </div>
+            {/* SECTION 5: CHECKPOINT PHOTO EVIDENCE GALLERY (จัดแยกหัวข้อแต่ละจุด และแต่ละรอบเวลา) */}
+            {(() => {
+              // 1. กรองรูปภาพตามเงื่อนไขที่เลือก
+              const filteredGalleryLogs = todayPhotosLogs.filter((log) => {
+                if (galleryRoundFilter !== "all") {
+                  const matchRound = log.roundId === galleryRoundFilter || log.roundName?.includes(galleryRoundFilter);
+                  if (!matchRound) return false;
+                }
+                if (galleryCheckpointFilter !== "all") {
+                  if (log.checkpointId !== galleryCheckpointFilter) return false;
+                }
+                return true;
+              });
 
-              {todayPhotosLogs.length === 0 ? (
-                <div className="p-8 border-2 border-dashed border-slate-200 rounded-2xl text-center text-slate-400 text-xs">
-                  ยังไม่มีรูปถ่ายจุดตรวจสำหรับวันนี้ (จะปรากฏขึ้นอัตโนมัติเมื่อ รปภ. สแกนและถ่ายรูป)
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
-                  {todayPhotosLogs.map((log) => {
-                    const cp = checkpoints.find((c) => c.id === log.checkpointId);
-                    return (
-                      <div
-                        key={log.id}
-                        onClick={() => setSelectedPhotoModal({
-                          url: log.imageUrl!,
-                          title: `${cp?.name || "จุดตรวจ"} (${cp?.code || "-"})`,
-                          timestamp: log.timestamp
-                        })}
-                        className="group relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-900 aspect-square cursor-pointer hover:shadow-md transition-all active:scale-95"
-                      >
-                        <img
-                          src={log.imageUrl}
-                          alt="Checkpoint photo"
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent flex flex-col justify-end p-2 text-white text-[10px]">
-                          <span className="font-bold truncate">{cp?.code}: {cp?.name}</span>
-                          <span className="text-[9px] text-sky-300 truncate">
-                            {log.guardName} • {log.distanceMeters ?? 0} ม.
-                          </span>
-                        </div>
+              // 2. จัดกลุ่มแยกตามรอบเวลา (By Round)
+              const roundGroups = supervisorRounds
+                .map((round) => {
+                  const logsInThisRound = filteredGalleryLogs
+                    .filter((l) => l.roundId === round.id || l.roundName === round.name || (l.timestamp && getCurrentRound(supervisorRounds, new Date(l.timestamp)).id === round.id))
+                    .sort((a, b) => {
+                      const cpA = checkpoints.find((c) => c.id === a.checkpointId);
+                      const cpB = checkpoints.find((c) => c.id === b.checkpointId);
+                      return (cpA?.order || 999) - (cpB?.order || 999);
+                    });
+                  return {
+                    round,
+                    logs: logsInThisRound,
+                  };
+                })
+                .filter((g) => g.logs.length > 0);
+
+              // รวมรูปภาพที่อยู่นอกรอบมาตรฐาน (ถ้ามี)
+              const matchedLogIds = new Set(roundGroups.flatMap((g) => g.logs.map((l) => l.id)));
+              const otherLogs = filteredGalleryLogs
+                .filter((l) => !matchedLogIds.has(l.id))
+                .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+              if (otherLogs.length > 0) {
+                roundGroups.push({
+                  round: {
+                    id: "other",
+                    name: "รอบตรวจอื่นๆ / นอกเวลา",
+                    startTime: "--:--",
+                    endTime: "--:--",
+                    deadlineTime: "--:--",
+                    period: "day" as const,
+                    shift: "morning" as const,
+                    frequencyHours: 2,
+                    isActive: true,
+                  },
+                  logs: otherLogs,
+                });
+              }
+
+              // 3. จัดกลุ่มแยกตามจุดตรวจ (By Checkpoint)
+              const checkpointGroups = [...checkpoints]
+                .sort((a, b) => (a.order || 0) - (b.order || 0))
+                .map((cp) => {
+                  const logsAtThisCp = filteredGalleryLogs
+                    .filter((l) => l.checkpointId === cp.id)
+                    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+                  return {
+                    cp,
+                    logs: logsAtThisCp,
+                  };
+                })
+                .filter((g) => g.logs.length > 0);
+
+              // คำนวณสถิติภาพรวม
+              const distinctCpsWithPhotos = new Set(todayPhotosLogs.map((l) => l.checkpointId)).size;
+              const distinctRoundsWithPhotos = new Set(todayPhotosLogs.map((l) => l.roundId || (l.timestamp && getCurrentRound(supervisorRounds, new Date(l.timestamp)).id))).size;
+
+              return (
+                <div className="bg-white border border-sky-100 rounded-3xl p-6 shadow-xs space-y-5">
+                  {/* Header & Controls */}
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2">
+                          <Camera className="w-5 h-5 text-sky-600" />
+                          แกลเลอรีรูปถ่ายยืนยันจุดตรวจวันนี้ ({todayPhotosLogs.length} ภาพ)
+                        </h3>
+                        <span className="px-2.5 py-0.5 rounded-full bg-sky-100 text-sky-800 text-[11px] font-bold">
+                          {distinctCpsWithPhotos}/{checkpoints.length} จุดตรวจ • {distinctRoundsWithPhotos} รอบเวลา
+                        </span>
                       </div>
-                    );
-                  })}
+                      <p className="text-xs text-slate-500 mt-1">
+                        จัดแยกหมวดหมู่ตามรอบเวลาและจุดตรวจอย่างเป็นระเบียบ พร้อมพิกัด GPS ระยะห่าง และชื่อเจ้าหน้าที่ รปภ. ผู้ตรวจ
+                      </p>
+                    </div>
+
+                    {/* View Switcher Tabs */}
+                    <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200 self-start lg:self-auto shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setGalleryViewMode("round")}
+                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                          galleryViewMode === "round"
+                            ? "bg-sky-600 text-white shadow-xs"
+                            : "text-slate-600 hover:text-slate-900 hover:bg-white/60"
+                        }`}
+                      >
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>แยกตามรอบเวลา</span>
+                        <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/20">
+                          {roundGroups.length}
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setGalleryViewMode("checkpoint")}
+                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                          galleryViewMode === "checkpoint"
+                            ? "bg-sky-600 text-white shadow-xs"
+                            : "text-slate-600 hover:text-slate-900 hover:bg-white/60"
+                        }`}
+                      >
+                        <MapPin className="w-3.5 h-3.5" />
+                        <span>แยกตามจุดตรวจ</span>
+                        <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/20">
+                          {checkpointGroups.length}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Filter Toolbar */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-50/80 rounded-2xl border border-slate-200/80 text-xs">
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      <span className="text-slate-500 font-bold flex items-center gap-1">
+                        <Filter className="w-3.5 h-3.5 text-slate-400" />
+                        ตัวกรอง:
+                      </span>
+
+                      {/* Round Selector */}
+                      <div className="flex items-center gap-1 bg-white px-2.5 py-1.5 rounded-xl border border-slate-200">
+                        <Clock className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                        <select
+                          value={galleryRoundFilter}
+                          onChange={(e) => setGalleryRoundFilter(e.target.value)}
+                          className="bg-transparent text-slate-700 font-semibold focus:outline-none cursor-pointer pr-1 text-xs"
+                        >
+                          <option value="all">แสดงทุกลำดับรอบตรวจ ({supervisorRounds.length} รอบ)</option>
+                          {supervisorRounds.map((r) => (
+                            <option key={r.id} value={r.id}>
+                              {r.name} ({r.startTime} - {r.deadlineTime} น.)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Checkpoint Selector */}
+                      <div className="flex items-center gap-1 bg-white px-2.5 py-1.5 rounded-xl border border-slate-200">
+                        <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <select
+                          value={galleryCheckpointFilter}
+                          onChange={(e) => setGalleryCheckpointFilter(e.target.value)}
+                          className="bg-transparent text-slate-700 font-semibold focus:outline-none cursor-pointer pr-1 text-xs"
+                        >
+                          <option value="all">แสดงทุกจุดตรวจ ({checkpoints.length} จุด)</option>
+                          {checkpoints.map((cp) => (
+                            <option key={cp.id} value={cp.id}>
+                              จุด {cp.code}: {cp.name} ({cp.building})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Clear Filter Button */}
+                      {(galleryRoundFilter !== "all" || galleryCheckpointFilter !== "all") && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setGalleryRoundFilter("all");
+                            setGalleryCheckpointFilter("all");
+                          }}
+                          className="px-2.5 py-1 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-[11px] transition-all cursor-pointer"
+                        >
+                          ล้างตัวกรอง
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="text-slate-500 font-medium text-[11px]">
+                      แสดง <strong>{filteredGalleryLogs.length}</strong> จาก {todayPhotosLogs.length} ภาพ
+                    </div>
+                  </div>
+
+                  {/* Empty State */}
+                  {todayPhotosLogs.length === 0 ? (
+                    <div className="p-12 border-2 border-dashed border-slate-200 rounded-3xl text-center text-slate-400 space-y-2">
+                      <Camera className="w-8 h-8 text-slate-300 mx-auto" />
+                      <p className="font-bold text-sm text-slate-600">ยังไม่มีรูปถ่ายจุดตรวจสำหรับวันนี้</p>
+                      <p className="text-xs text-slate-400">ภาพจะปรากฏขึ้นอัตโนมัติเมื่อเจ้าหน้าที่ รปภ. สแกนและถ่ายรูปยืนยันหน้างาน</p>
+                    </div>
+                  ) : filteredGalleryLogs.length === 0 ? (
+                    <div className="p-8 border-2 border-dashed border-slate-200 rounded-3xl text-center text-slate-400 space-y-2">
+                      <p className="font-semibold text-xs text-slate-600">ไม่พบรูปภาพตรงตามตัวกรองที่เลือก</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setGalleryRoundFilter("all");
+                          setGalleryCheckpointFilter("all");
+                        }}
+                        className="px-3 py-1.5 bg-sky-100 text-sky-800 font-bold text-xs rounded-xl cursor-pointer"
+                      >
+                        แสดงรูปภาพทั้งหมด
+                      </button>
+                    </div>
+                  ) : galleryViewMode === "round" ? (
+                    /* ========================================================================= */
+                    /* VIEW MODE 1: GROUPED BY PATROL ROUND (แยกตามรอบเวลา)                        */
+                    /* ========================================================================= */
+                    <div className="space-y-6">
+                      {roundGroups.map(({ round, logs }) => {
+                        const uniqueGuards = Array.from(new Set(logs.map((l) => l.guardName).filter(Boolean)));
+                        const isNight = round.shift === "night";
+
+                        return (
+                          <div
+                            key={round.id}
+                            className="p-4 sm:p-5 rounded-3xl bg-slate-50/70 border border-sky-100 space-y-3.5 shadow-2xs"
+                          >
+                            {/* Round Group Header */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/70 pb-3">
+                              <div className="flex items-center gap-2.5">
+                                <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                                  isNight ? "bg-slate-900 text-amber-300" : "bg-sky-600 text-white"
+                                }`}>
+                                  {isNight ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <h4 className="font-bold text-sm text-slate-900">
+                                      {round.name}
+                                    </h4>
+                                    <span className="text-[10px] text-slate-500 font-mono">
+                                      ({round.startTime} - {round.deadlineTime} น.)
+                                    </span>
+                                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                                      isNight ? "bg-slate-200 text-slate-800" : "bg-sky-100 text-sky-800"
+                                    }`}>
+                                      {isNight ? "🌙 กะดึก" : "☀️ กะเช้า"}
+                                    </span>
+                                  </div>
+                                  <p className="text-[11px] text-slate-500 mt-0.5">
+                                    ผู้ตรวจเวร: <strong className="text-slate-700">{uniqueGuards.join(", ") || "เจ้าหน้าที่ รปภ."}</strong>
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 self-start sm:self-center">
+                                <span className="px-2.5 py-1 rounded-full bg-white border border-sky-200 text-sky-800 font-bold text-xs shadow-2xs">
+                                  📷 บันทึกแล้ว {logs.length} จุดตรวจ
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Photos Grid for this Round */}
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
+                              {logs.map((log) => {
+                                const cp = checkpoints.find((c) => c.id === log.checkpointId);
+                                const timeStr = log.timestamp
+                                  ? new Date(log.timestamp).toLocaleTimeString("th-TH", {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })
+                                  : "";
+                                const isNear = (log.distanceMeters ?? 0) <= 30;
+                                const isIssue = log.status === "issue";
+
+                                return (
+                                  <div
+                                    key={log.id}
+                                    onClick={() => setSelectedPhotoModal({
+                                      url: log.imageUrl!,
+                                      title: `จุดตรวจ ${cp?.code || "-"}: ${cp?.name || "จุดตรวจ"} (${cp?.building || ""}) - ${round.name}`,
+                                      timestamp: log.timestamp,
+                                    })}
+                                    className="group relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-900 aspect-square cursor-pointer hover:shadow-md transition-all active:scale-95"
+                                  >
+                                    <img
+                                      src={log.imageUrl}
+                                      alt="Checkpoint photo"
+                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                    />
+
+                                    {/* Top badges */}
+                                    <div className="absolute top-1.5 inset-x-1.5 flex items-center justify-between gap-1 pointer-events-none">
+                                      <span className="bg-slate-900/85 backdrop-blur-xs px-2 py-0.5 rounded-lg text-[10px] font-bold text-amber-300 font-mono shadow-xs border border-white/10">
+                                        {cp?.code || "CP"}
+                                      </span>
+                                      {timeStr && (
+                                        <span className="bg-slate-900/85 backdrop-blur-xs px-1.5 py-0.5 rounded-lg text-[9px] font-mono text-emerald-300 font-bold shadow-xs border border-white/10">
+                                          {timeStr} น.
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {/* Bottom gradient info */}
+                                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950 via-slate-950/80 to-transparent p-2 pt-5 text-white text-[10px] space-y-0.5 pointer-events-none">
+                                      <p className="font-bold truncate text-[11px] leading-tight text-white drop-shadow-xs">
+                                        {cp?.name || "จุดตรวจ"}
+                                      </p>
+                                      <p className="text-[9px] text-slate-300 truncate">
+                                        {cp?.building || ""}
+                                      </p>
+                                      <div className="flex items-center justify-between gap-1 pt-0.5 text-[9px]">
+                                        <span className="text-sky-300 truncate font-medium">
+                                          {log.guardName}
+                                        </span>
+                                        <span className={`font-mono font-bold shrink-0 ${isNear ? "text-emerald-300" : "text-rose-300"}`}>
+                                          {log.distanceMeters ?? 0} ม.
+                                        </span>
+                                      </div>
+                                      {isIssue && (
+                                        <span className="mt-0.5 block text-center bg-rose-600/90 text-white rounded text-[8px] font-bold py-0.2">
+                                          ⚠️ พบสิ่งผิดปกติ
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    /* ========================================================================= */
+                    /* VIEW MODE 2: GROUPED BY CHECKPOINT (แยกตามแต่ละจุดตรวจ)                     */
+                    /* ========================================================================= */
+                    <div className="space-y-6">
+                      {checkpointGroups.map(({ cp, logs }) => {
+                        return (
+                          <div
+                            key={cp.id}
+                            className="p-4 sm:p-5 rounded-3xl bg-slate-50/70 border border-emerald-100 space-y-3.5 shadow-2xs"
+                          >
+                            {/* Checkpoint Group Header */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/70 pb-3">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white font-mono font-bold text-sm flex items-center justify-center shrink-0 shadow-xs">
+                                  {cp.code}
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <h4 className="font-bold text-sm text-slate-900">
+                                      จุดตรวจ {cp.code}: {cp.name}
+                                    </h4>
+                                    <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-800">
+                                      🏢 {cp.building} • {cp.floor}
+                                    </span>
+                                  </div>
+                                  <p className="text-[11px] text-slate-500 mt-0.5">
+                                    ลำดับที่ {cp.order} • พิกัดตรวจ: {cp.coords ? `${cp.coords.lat.toFixed(5)}, ${cp.coords.lng.toFixed(5)}` : "ยังไม่บันทึกพิกัด"}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 self-start sm:self-center">
+                                <span className="px-2.5 py-1 rounded-full bg-white border border-emerald-200 text-emerald-800 font-bold text-xs shadow-2xs">
+                                  📷 ตรวจแล้ว {logs.length} รอบเวลา
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Photos Grid for this Checkpoint */}
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                              {logs.map((log) => {
+                                const timeStr = log.timestamp
+                                  ? new Date(log.timestamp).toLocaleTimeString("th-TH", {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })
+                                  : "";
+                                const isNear = (log.distanceMeters ?? 0) <= 30;
+                                const isIssue = log.status === "issue";
+                                const roundTitle = log.roundName || (log.roundId ? `รอบ ${log.roundId} น.` : "รอบตรวจ");
+
+                                return (
+                                  <div
+                                    key={log.id}
+                                    onClick={() => setSelectedPhotoModal({
+                                      url: log.imageUrl!,
+                                      title: `จุดตรวจ ${cp.code}: ${cp.name} - ${roundTitle}`,
+                                      timestamp: log.timestamp,
+                                    })}
+                                    className="group relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-900 aspect-square cursor-pointer hover:shadow-md transition-all active:scale-95"
+                                  >
+                                    <img
+                                      src={log.imageUrl}
+                                      alt="Checkpoint photo"
+                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                    />
+
+                                    {/* Top badges */}
+                                    <div className="absolute top-1.5 inset-x-1.5 flex items-center justify-between gap-1 pointer-events-none">
+                                      <span className="bg-slate-900/85 backdrop-blur-xs px-2 py-0.5 rounded-lg text-[10px] font-bold text-sky-300 shadow-xs border border-white/10 truncate max-w-[90px]">
+                                        ⏰ {log.roundId ? `${log.roundId} น.` : roundTitle}
+                                      </span>
+                                      {timeStr && (
+                                        <span className="bg-slate-900/85 backdrop-blur-xs px-1.5 py-0.5 rounded-lg text-[9px] font-mono text-emerald-300 font-bold shadow-xs border border-white/10 shrink-0">
+                                          {timeStr} น.
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {/* Bottom gradient info */}
+                                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950 via-slate-950/80 to-transparent p-2 pt-5 text-white text-[10px] space-y-0.5 pointer-events-none">
+                                      <p className="font-bold truncate text-[11px] leading-tight text-white drop-shadow-xs">
+                                        👤 {log.guardName}
+                                      </p>
+                                      <div className="flex items-center justify-between gap-1 text-[9px] pt-0.5">
+                                        <span className="text-slate-300 font-mono">
+                                          GPS ห่าง:
+                                        </span>
+                                        <span className={`font-mono font-bold ${isNear ? "text-emerald-300" : "text-rose-300"}`}>
+                                          {log.distanceMeters ?? 0} ม.
+                                        </span>
+                                      </div>
+                                      {isIssue && (
+                                        <span className="mt-0.5 block text-center bg-rose-600/90 text-white rounded text-[8px] font-bold py-0.2">
+                                          ⚠️ พบสิ่งผิดปกติ
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              );
+            })()}
           </div>
         )}
 
