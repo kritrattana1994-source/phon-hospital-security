@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { 
   savePatrolLogToCloud, 
   saveParkingScanToCloud, 
@@ -515,20 +515,25 @@ export const useStore = create<AppState>()(
       },
 
       loginSupervisor: (pin: string) => {
-        const matchingGuard = get().guards.find(g => g.pin === pin && (g.role === 'supervisor' || g.name.includes('หัวหน้า')));
-        if (pin === '9999' || matchingGuard) {
-          const sup = matchingGuard || get().guards.find(g => g.role === 'supervisor') || {
-            id: 'sup-1',
-            name: 'หัวหน้างานความปลอดภัย',
-            pin: '9999',
-            shift: 'morning' as const,
-            phone: '089-999-8877',
-            role: 'supervisor' as const
-          };
-          set({ supervisorUser: sup });
-          return true;
+        try {
+          const matchingGuard = get().guards.find(g => g.pin === pin && (g.role === 'supervisor' || g.name.includes('หัวหน้า')));
+          if (pin === '9999' || matchingGuard) {
+            const sup = matchingGuard || get().guards.find(g => g.role === 'supervisor') || {
+              id: 'sup-1',
+              name: 'หัวหน้างานความปลอดภัย',
+              pin: '9999',
+              shift: 'morning' as const,
+              phone: '089-999-8877',
+              role: 'supervisor' as const
+            };
+            set({ supervisorUser: sup });
+            return true;
+          }
+          return false;
+        } catch (err) {
+          console.error('[Store] loginSupervisor error:', err);
+          return false;
         }
-        return false;
       },
 
       logoutGuard: () => set({ currentUser: null }),
@@ -872,7 +877,93 @@ export const useStore = create<AppState>()(
     }),
     {
       name: 'smart-hospital-security-v5',
+      storage: createJSONStorage(() => ({
+        getItem: (name: string): string | null => {
+          if (typeof window === 'undefined') return null;
+          try {
+            return localStorage.getItem(name);
+          } catch {
+            return null;
+          }
+        },
+        setItem: (name: string, value: string): void => {
+          if (typeof window === 'undefined') return;
+          try {
+            localStorage.setItem(name, value);
+          } catch (err) {
+            console.warn('[Storage] LocalStorage quota exceeded, executing emergency cleanup...', err);
+            try {
+              // Clear legacy bloated stores if present
+              const obsoleteKeys = [
+                'smart-hospital-security',
+                'smart-hospital-security-v1',
+                'smart-hospital-security-v2',
+                'smart-hospital-security-v3',
+                'smart-hospital-security-v4',
+              ];
+              for (const k of obsoleteKeys) {
+                localStorage.removeItem(k);
+              }
+              // Attempt write again
+              localStorage.setItem(name, value);
+            } catch (err2) {
+              console.warn('[Storage] Quota still exceeded after legacy cleanup. State remains safely in memory without crashing:', err2);
+              // CRITICAL: NEVER throw QuotaExceededError!
+            }
+          }
+        },
+        removeItem: (name: string): void => {
+          if (typeof window === 'undefined') return;
+          try {
+            localStorage.removeItem(name);
+          } catch {}
+        },
+      })),
+      partialize: (state) => ({
+        currentUser: state.currentUser,
+        // Do NOT persist supervisorUser (requires fresh PIN entry each session)
+        supervisorUser: null,
+        checkpoints: state.checkpoints,
+        buildings: state.buildings,
+        checklistTemplates: state.checklistTemplates,
+        patrolRounds: state.patrolRounds,
+        guards: state.guards,
+        googleDriveWebhookUrl: state.googleDriveWebhookUrl,
+        geminiApiKey: state.geminiApiKey,
+        staffVehicles: state.staffVehicles,
+        // Strip out bloated base64 data URLs from saved logs and keep only last 50 entries
+        patrolLogs: (state.patrolLogs || []).slice(0, 50).map((l) => ({
+          ...l,
+          imageUrl: l.imageUrl && l.imageUrl.startsWith('data:') && l.imageUrl.length > 50000 ? undefined : l.imageUrl,
+        })),
+        parkingScans: (state.parkingScans || []).slice(0, 50).map((s) => ({
+          ...s,
+          imageUrl: s.imageUrl && s.imageUrl.startsWith('data:') && s.imageUrl.length > 50000 ? undefined : s.imageUrl,
+        })),
+        incidents: (state.incidents || []).slice(0, 25).map((i) => ({
+          ...i,
+          imageUrl: i.imageUrl && i.imageUrl.startsWith('data:') && i.imageUrl.length > 50000 ? undefined : i.imageUrl,
+        })),
+        shiftReports: (state.shiftReports || []).slice(0, 20),
+        dailyAISummaries: (state.dailyAISummaries || []).slice(0, 10),
+        archiveAuditLogs: (state.archiveAuditLogs || []).slice(0, 10),
+      }),
       onRehydrateStorage: () => (state) => {
+        if (typeof window !== 'undefined') {
+          try {
+            // Remove legacy keys to free origin storage quota
+            const obsoleteKeys = [
+              'smart-hospital-security',
+              'smart-hospital-security-v1',
+              'smart-hospital-security-v2',
+              'smart-hospital-security-v3',
+              'smart-hospital-security-v4',
+            ];
+            for (const k of obsoleteKeys) {
+              localStorage.removeItem(k);
+            }
+          } catch {}
+        }
         if (state) {
           if (Array.isArray(state.checkpoints)) {
             // Remove legacy mock checkpoints (cp01 - cp07)
