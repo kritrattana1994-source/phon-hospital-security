@@ -253,6 +253,8 @@ function VehicleContent() {
   });
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const reticleRef = useRef<HTMLDivElement | null>(null);
+  const [zoomLevel, setZoomLevel] = useState<number>(1);
   const streamRef = useRef<MediaStream | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
@@ -537,21 +539,61 @@ function VehicleContent() {
       fullCtx.drawImage(video, 0, 0, fullCanvas.width, fullCanvas.height);
       const fullDataUrl = fullCanvas.toDataURL("image/jpeg", 0.85);
 
-      // ตัดเฉพาะกรอบกลาง (ความกว้าง 78% ความสูง 45% ตรงเป้าเล็ง เผื่อขอบรอบป้ายทะเบียนเพื่อความแม่นยำสูงสุด)
-      const cropW = Math.round(vw * 0.78);
-      const cropH = Math.round(vh * 0.45);
-      const cropX = Math.round((vw - cropW) / 2);
-      const cropY = Math.round((vh - cropH) / 2);
+      // ตัดเฉพาะกรอบกลางที่ผู้ใช้เล็งเห็นบนหน้าจอเป๊ะๆ (Pixel-Perfect Bounding Box Cropping)
+      let cropX = 0;
+      let cropY = 0;
+      let cropW = 0;
+      let cropH = 0;
 
-      const targetWidth = Math.min(cropW, 640);
+      if (reticleRef.current) {
+        const videoRect = video.getBoundingClientRect();
+        const reticleRect = reticleRef.current.getBoundingClientRect();
+
+        if (videoRect.width > 0 && videoRect.height > 0) {
+          const currentZoom = zoomLevel || 1;
+          const scale = Math.max(videoRect.width / vw, videoRect.height / vh) * currentZoom;
+          const visibleW = videoRect.width / scale;
+          const visibleH = videoRect.height / scale;
+          const offsetX = (vw - visibleW) / 2;
+          const offsetY = (vh - visibleH) / 2;
+
+          const relX = reticleRect.left - videoRect.left;
+          const relY = reticleRect.top - videoRect.top;
+
+          cropX = Math.round(offsetX + (relX / videoRect.width) * visibleW);
+          cropY = Math.round(offsetY + (relY / videoRect.height) * visibleH);
+          cropW = Math.round((reticleRect.width / videoRect.width) * visibleW);
+          cropH = Math.round((reticleRect.height / videoRect.height) * visibleH);
+        }
+      }
+
+      // Fallback กรณีไม่ได้ค่าจาก DOM
+      if (cropW <= 0 || cropH <= 0) {
+        const currentZoom = zoomLevel || 1;
+        cropW = Math.round((vw * 0.65) / currentZoom);
+        cropH = Math.round(cropW / 2.3);
+        cropX = Math.round((vw - cropW) / 2);
+        cropY = Math.round((vh - cropH) / 2);
+      }
+
+      // เผื่อขอบรอบป้ายทะเบียนเล็กน้อย 4% ป้องกันตัวอักษรตกขอบ
+      const padW = Math.round(cropW * 0.04);
+      const padH = Math.round(cropH * 0.05);
+      cropX = Math.max(0, cropX - padW);
+      cropY = Math.max(0, cropY - padH);
+      cropW = Math.min(vw - cropX, cropW + padW * 2);
+      cropH = Math.min(vh - cropY, cropH + padH * 2);
+
+      const targetWidth = Math.min(Math.max(cropW, 480), 640);
+      const targetHeight = Math.round((targetWidth * cropH) / cropW);
       const cropCanvas = document.createElement("canvas");
       cropCanvas.width = targetWidth;
-      cropCanvas.height = Math.round((targetWidth * cropH) / cropW);
+      cropCanvas.height = targetHeight;
       const cropCtx = cropCanvas.getContext("2d", { willReadFrequently: true });
       if (!cropCtx) return null;
 
       cropCtx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropCanvas.width, cropCanvas.height);
-      const cropDataUrl = cropCanvas.toDataURL("image/jpeg", 0.78);
+      const cropDataUrl = cropCanvas.toDataURL("image/jpeg", 0.85);
 
       // คำนวณค่าความคมชัดและความเปรียบต่างของขอบตัวอักษรป้าย (Luminance Edge Contrast / Sharpness)
       let sharpness = 0;
@@ -998,9 +1040,41 @@ function VehicleContent() {
     if (!file) return;
     try {
       setIsOcrProcessing(true);
-      setOcrStatusText("กำลังปรับขนาดและประมวลผลรูปภาพ...");
-      const dataUrl = await resizeImageBase64(file, 1280);
-      await performOcrOnImage(dataUrl, targetMode);
+      setOcrStatusText("กำลังปรับขนาดและตัดเฉพาะโซนป้ายทะเบียน...");
+      const fullDataUrl = await resizeImageBase64(file, 1280);
+
+      // สร้างภาพตัดกรอบกลางความแม่นยำสูง (Center-focused crop) ตามสัดส่วนป้ายทะเบียนไทย
+      let cropDataUrl = fullDataUrl;
+      try {
+        const img = new Image();
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = reject;
+          img.src = fullDataUrl;
+        });
+
+        const iw = img.width;
+        const ih = img.height;
+        // ป้ายทะเบียนมักอยู่ช่วงกึ่งกลางภาพ (ความกว้าง 72%, สัดส่วน 2.3:1)
+        const cw = Math.round(iw * 0.72);
+        const ch = Math.round(cw / 2.3);
+        if (ch < ih) {
+          const cx = Math.round((iw - cw) / 2);
+          const cy = Math.round((ih - ch) / 2);
+          const cropCanvas = document.createElement("canvas");
+          cropCanvas.width = 640;
+          cropCanvas.height = Math.round((640 * ch) / cw);
+          const cCtx = cropCanvas.getContext("2d");
+          if (cCtx) {
+            cCtx.drawImage(img, cx, cy, cw, ch, 0, 0, cropCanvas.width, cropCanvas.height);
+            cropDataUrl = cropCanvas.toDataURL("image/jpeg", 0.85);
+          }
+        }
+      } catch (cropErr) {
+        console.warn("FileInput crop notice:", cropErr);
+      }
+
+      await performOcrOnImage(cropDataUrl, targetMode, fullDataUrl);
     } catch (err) {
       console.error("File processing error:", err);
       alert("ไม่สามารถประมวลผลไฟล์ภาพได้ กรุณาลองใหม่อีกครั้ง");
@@ -1772,42 +1846,57 @@ function VehicleContent() {
             </div>
 
             {/* Viewfinder Camera Box */}
-            <div className="relative aspect-4/3 sm:aspect-16/11 bg-slate-950 rounded-3xl overflow-hidden border-2 border-sky-300 shadow-lg flex flex-col justify-between p-4">
+            <div className="relative aspect-4/3 sm:aspect-16/11 bg-slate-950 rounded-3xl overflow-hidden border-2 border-sky-300 shadow-lg flex flex-col justify-between p-3 sm:p-4">
               <video
                 ref={videoRef}
                 playsInline
                 autoPlay
                 muted
+                style={{
+                  transform: `scale(${zoomLevel})`,
+                  transformOrigin: "center center",
+                  transition: "transform 0.2s ease-out",
+                }}
                 className="absolute inset-0 w-full h-full object-cover"
               />
 
               {/* Shutter flash animation on capture */}
               {shutterFlash && (
-                <div className="absolute inset-0 bg-white/75 z-30 pointer-events-none animate-out fade-out duration-200" />
+                <div className="absolute inset-0 bg-white/80 z-30 pointer-events-none animate-out fade-out duration-200" />
               )}
 
-              {/* LIVE VIEWFINDER RETICLE */}
+              {/* LIVE VIEWFINDER RETICLE & DARKENED LETTERBOX MASK */}
               <div 
                 onClick={() => {
                   if (cameraActive) handleVideoShutter("patrol");
                 }}
-                className="absolute inset-0 flex flex-col items-center justify-center p-6 z-10 cursor-pointer"
-                title="แตะที่หน้าจอเพื่อจับภาพทันที"
+                className="absolute inset-0 flex flex-col items-center justify-center p-4 z-10 cursor-pointer overflow-hidden"
+                title="แตะที่หน้าจอเพื่อถ่ายภาพป้ายทะเบียนทันที"
               >
-                <div className="w-full max-w-[280px] h-28 border-2 border-emerald-400/80 rounded-2xl relative shadow-2xl transition-all duration-300 flex items-center justify-center">
-                  <div className="absolute -top-1 -left-1 w-4 h-4 border-t-4 border-l-4 border-emerald-400 rounded-tl-lg" />
-                  <div className="absolute -top-1 -right-1 w-4 h-4 border-t-4 border-r-4 border-emerald-400 rounded-tr-lg" />
-                  <div className="absolute -bottom-1 -left-1 w-4 h-4 border-b-4 border-l-4 border-emerald-400 rounded-bl-lg" />
-                  <div className="absolute -bottom-1 -right-1 w-4 h-4 border-b-4 border-r-4 border-emerald-400 rounded-br-lg" />
+                {/* Targeting Box with shadow mask (box-shadow creates darkened overlay outside the box) */}
+                <div 
+                  ref={reticleRef}
+                  className="w-full max-w-[320px] sm:max-w-[360px] h-32 sm:h-36 border-2 border-emerald-400 rounded-2xl relative transition-all duration-300 flex items-center justify-center shadow-[0_0_0_9999px_rgba(0,0,0,0.52)]"
+                >
+                  {/* Glowing Corner Accents */}
+                  <div className="absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4 border-emerald-400 rounded-tl-xl shadow-[0_0_12px_rgba(52,211,153,0.9)]" />
+                  <div className="absolute -top-1 -right-1 w-6 h-6 border-t-4 border-r-4 border-emerald-400 rounded-tr-xl shadow-[0_0_12px_rgba(52,211,153,0.9)]" />
+                  <div className="absolute -bottom-1 -left-1 w-6 h-6 border-b-4 border-l-4 border-emerald-400 rounded-bl-xl shadow-[0_0_12px_rgba(52,211,153,0.9)]" />
+                  <div className="absolute -bottom-1 -right-1 w-6 h-6 border-b-4 border-r-4 border-emerald-400 rounded-br-xl shadow-[0_0_12px_rgba(52,211,153,0.9)]" />
 
-                  {/* Centered Reticle Helper */}
-                  <div className="text-center px-3 py-1 bg-slate-950/70 rounded-xl backdrop-blur-xs border border-emerald-400/30 pointer-events-none">
-                    <span className="text-[11px] font-bold text-emerald-300 block">
-                      {autoScanActive ? "⚡ โหมดสแกนอัตโนมัติ" : "🎯 เล็งป้ายทะเบียนในกรอบนี้"}
-                    </span>
-                    <span className="text-[9px] text-slate-300 block">
-                      {autoScanActive ? "ถือกล้องนิ่งๆ ส่องที่ป้าย" : "แตะที่จอ หรือกดปุ่มถ่ายภาพด้านล่าง"}
-                    </span>
+                  {/* Horizontal Laser Scanning Line */}
+                  <div className="absolute inset-x-2 h-0.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_8px_#34d399] animate-pulse pointer-events-none" />
+
+                  {/* Top Target Guide Badge */}
+                  <div className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap px-3 py-1 bg-emerald-500 text-slate-950 font-black text-[11px] rounded-full shadow-lg flex items-center gap-1.5 pointer-events-none">
+                    <Scan className="w-3.5 h-3.5" />
+                    <span>🎯 ส่องป้ายทะเบียนให้เต็มกรอบนี้</span>
+                  </div>
+
+                  {/* Bottom Helper Info */}
+                  <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap px-3 py-1 bg-slate-950/90 backdrop-blur-md border border-emerald-400/40 text-emerald-300 font-bold text-[10px] rounded-full shadow-lg flex items-center gap-1.5 pointer-events-none">
+                    <Sparkles className="w-3 h-3 text-emerald-400" />
+                    <span>⚡ AI จะตัดเฉพาะภาพในกรอบนี้ไปวิเคราะห์ (เร็วและแม่นขึ้น)</span>
                   </div>
                 </div>
               </div>
@@ -1817,8 +1906,30 @@ function VehicleContent() {
                 <div className="flex items-center gap-2">
                   <span className="px-2.5 py-1 rounded-full bg-slate-900/80 backdrop-blur-md text-[10px] font-mono text-emerald-400 flex items-center gap-1.5 border border-emerald-500/30">
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                    LIVE PATROL
+                    LIVE
                   </span>
+
+                  {/* Digital Zoom Controls */}
+                  <div className="flex items-center gap-1 bg-slate-900/85 backdrop-blur-md p-0.5 rounded-xl border border-white/10 shadow-xs">
+                    {[1, 1.5, 2].map((z) => (
+                      <button
+                        key={z}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setZoomLevel(z);
+                        }}
+                        className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                          zoomLevel === z
+                            ? "bg-emerald-500 text-slate-950 shadow-xs"
+                            : "text-slate-300 hover:text-white hover:bg-slate-800"
+                        }`}
+                        title={`ซูม ${z}x`}
+                      >
+                        {z}x
+                      </button>
+                    ))}
+                  </div>
 
                   <button
                     type="button"
@@ -1831,7 +1942,7 @@ function VehicleContent() {
                     title="เปิด/ปิดการตรวจจับอัตโนมัติ"
                   >
                     <Sparkles className="w-3 h-3" />
-                    <span>{autoScanActive ? "สแกนอัตโนมัติ: เปิด" : "สแกนอัตโนมัติ: ปิด"}</span>
+                    <span>{autoScanActive ? "ออโต้: เปิด" : "ออโต้: ปิด"}</span>
                   </button>
                 </div>
 
