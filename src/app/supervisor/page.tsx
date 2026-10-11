@@ -89,6 +89,9 @@ import {
   getRoundProgress, 
   calculateShiftKPIs, 
   calculateGuardKPIs,
+  getBangkokDateString,
+  getBangkokMonthString,
+  getLogDateString,
   PatrolRound 
 } from "@/lib/patrolSchedule";
 import { 
@@ -994,8 +997,8 @@ export default function SupervisorPage() {
   const shiftKPIs = calculateShiftKPIs(supervisorRounds, checkpoints, patrolLogs, shiftReports || [], supervisorNow);
   const guardKPIs = calculateGuardKPIs(onlyGuards, supervisorRounds, checkpoints, patrolLogs, shiftReports || [], supervisorNow, parkingScans);
   const allRoundsProgress = supervisorRounds.map((r) => getRoundProgress(r, checkpoints, patrolLogs, supervisorNow));
-  const todayDateStr = supervisorNow.toISOString().split("T")[0];
-  const todayPhotosLogs = patrolLogs.filter((l) => !!l.imageUrl && l.timestamp?.startsWith(todayDateStr));
+  const todayDateStr = getBangkokDateString(supervisorNow);
+  const todayPhotosLogs = patrolLogs.filter((l) => !!l.imageUrl && getLogDateString(l.timestamp) === todayDateStr);
 
   const handleOpenRoundsConfig = () => {
     setTempRounds(JSON.parse(JSON.stringify(supervisorRounds)));
@@ -1079,6 +1082,8 @@ export default function SupervisorPage() {
   const daysInSelectedMonth = new Date(selectedYearNum, selectedMonthNum, 0).getDate();
   const isSelectedCurrentMonth = selectedMonth === currentMonthKey;
   const currentDayNum = supervisorNow.getDate();
+  const selectedMonthName = THAI_MONTH_NAMES[selectedMonthNum - 1] || "ประจำเดือน";
+  const selectedYearTh = selectedYearNum + 543;
 
   interface DayAnalytics {
     dayNum: number;
@@ -1169,11 +1174,18 @@ export default function SupervisorPage() {
     : null;
 
   const monthPrefix = `${selectedYearStr}-${selectedMonthStr}`;
-  const monthPatrolLogs = patrolLogs.filter((p) => p.timestamp?.startsWith(monthPrefix));
-  const monthParkingScans = parkingScans.filter((s) => s.timestamp?.startsWith(monthPrefix));
-  const monthShiftReports = shiftReports.filter(
-    (r) => (r.dateString && r.dateString.startsWith(monthPrefix)) || (r.timestamp && r.timestamp.startsWith(monthPrefix))
-  );
+  const monthPatrolLogs = patrolLogs.filter((p) => {
+    const d = getLogDateString(p.timestamp);
+    return d.startsWith(monthPrefix) || p.timestamp?.startsWith(monthPrefix);
+  });
+  const monthParkingScans = parkingScans.filter((s) => {
+    const d = getLogDateString(s.timestamp);
+    return d.startsWith(monthPrefix) || s.timestamp?.startsWith(monthPrefix);
+  });
+  const monthShiftReports = shiftReports.filter((r) => {
+    const d = r.dateString || getLogDateString(r.timestamp);
+    return d.startsWith(monthPrefix) || r.timestamp?.startsWith(monthPrefix);
+  });
 
   const getShiftRealStats = (shiftId: 'morning' | 'afternoon' | 'night') => {
     const shiftLogs = monthPatrolLogs.filter((p) => p.shift === shiftId);
@@ -2021,12 +2033,17 @@ export default function SupervisorPage() {
               <div className="lg:col-span-7 bg-white border border-sky-100 rounded-3xl p-6 shadow-xs space-y-4">
                 <div className="border-b border-slate-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
-                    <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
-                      <Users className="w-4 h-4 text-sky-600" />
-                      ผลการประเมิน รปภ. รายบุคคลประจำเดือน
-                    </h3>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+                        <Users className="w-4 h-4 text-sky-600" />
+                        ผลการประเมิน รปภ. รายบุคคลประจำเดือน
+                      </h3>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+                        📅 ข้อมูลสะสมตลอดทั้งเดือน ({selectedMonthName} {selectedYearTh})
+                      </span>
+                    </div>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      ความตรงเวลา • วินัยส่งรายงานกะ (เช็คคนส่ง vs คนอู้) • ภาพถ่ายจุดตรวจ
+                      ความตรงเวลา • วินัยส่งรายงานกะ • ภาพถ่ายสะสมรวมทั้งเดือน (1 {selectedMonthName} ถึงปัจจุบัน)
                     </p>
                   </div>
                   <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 self-start sm:self-auto">
@@ -2044,7 +2061,10 @@ export default function SupervisorPage() {
                         <th className="pb-2 font-bold text-center text-sky-900 bg-sky-50/70 rounded-t-lg">รวมสแกนทั้งหมด</th>
                         <th className="pb-2 font-bold text-center">ตรงเวลา (1 ชม.)</th>
                         <th className="pb-2 font-bold text-center">รายงานส่งเวร</th>
-                        <th className="pb-2 font-bold text-center">ภาพถ่าย</th>
+                        <th className="pb-2 font-bold text-center" title="นับภาพถ่ายจุดตรวจสะสมตั้งแต่วันที่ 1 ของเดือน">
+                          ภาพถ่ายสะสม
+                          <span className="block text-[9px] font-normal text-slate-400 font-sans">(ทั้งเดือน)</span>
+                        </th>
                         <th className="pb-2 font-bold text-center">เกรดประเมิน</th>
                       </tr>
                     </thead>
@@ -2101,7 +2121,7 @@ export default function SupervisorPage() {
                               )}
                             </div>
                           </td>
-                          <td className="py-2.5 text-center text-slate-600">
+                          <td className="py-2.5 text-center text-slate-700 font-semibold" title="ภาพถ่ายสะสมตลอดทั้งเดือน">
                             📷 {item.photosCount} รูป
                           </td>
                           <td className="py-2.5 text-center">
@@ -2709,16 +2729,39 @@ export default function SupervisorPage() {
               </div>
             </div>
 
-            {/* SECTION 4: INDIVIDUAL GUARD KPIS (ประเมินพนักงาน รปภ. 5 นาย) */}
-            <div className="bg-white border border-sky-100 rounded-3xl p-6 shadow-xs space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            {/* SECTION 4: INDIVIDUAL GUARD DAILY KPIS (ตารางสรุปผลงาน รปภ. ประจำวัน) */}
+            <div className="bg-white border border-indigo-100 rounded-3xl p-6 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
                 <div>
-                  <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2">
-                    <Users className="w-5 h-5 text-indigo-600" />
-                    KPI ผลงานรายบุคคล (ประเมินพนักงาน รปภ. {onlyGuards.length} นาย)
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    ติดตามสถิติการสแกนจุดตรวจ สแกนตรวจยานพาหนะ อัตราตรงเวลา 1 ชม. แรก และการส่งมอบงานประจำกะ
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2">
+                      <Users className="w-5 h-5 text-indigo-600" />
+                      ☀️ ตารางสรุปผลงาน รปภ. ประจำวัน (วันนี้)
+                    </h3>
+                    <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                      📅 วันนี้: {supervisorNow.toLocaleDateString("th-TH", { day: "numeric", month: "long", year: "numeric" })}
+                    </span>
+                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                      รีเซ็ตยอดทุกเที่ยงคืน 24:00 น.
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    สถิติการสแกนจุดตรวจ, ตรวจรถ, ความตรงเวลา และรูปถ่ายยืนยันจุดตรวจ <strong>เฉพาะการปฏิบัติงานของวันนี้</strong>
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <span className="text-xs font-bold px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 block sm:inline-block">
+                    เจ้าหน้าที่ปฏิบัติการ {onlyGuards.length} นาย
+                  </span>
+                </div>
+              </div>
+
+              {/* Info banner explaining connection with Monthly table & Gallery */}
+              <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-start gap-2.5">
+                <Sparkles className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <p>
+                    <strong>💡 คำชี้แจงการนับจำนวนรูปถ่าย:</strong> ตารางนี้แสดงรูปถ่ายที่ รปภ. แต่ละท่านถ่ายส่งเข้ามา <strong>เฉพาะวันนี้</strong> (ซึ่งจะตรงกับยอดรูปใน <em>"แกลเลอรีรูปถ่ายยืนยันจุดตรวจวันนี้"</em> ด้านล่าง) หากต้องการดูยอดรูปภาพสะสมรวมตลอดทั้งเดือน กรุณาดูที่หัวข้อ <strong>"ผลการประเมิน รปภ. รายบุคคลประจำเดือน"</strong> ด้านบน
                   </p>
                 </div>
               </div>
@@ -2739,7 +2782,10 @@ export default function SupervisorPage() {
                       <th className="py-3 px-3 text-center bg-indigo-50/60 text-indigo-900">
                         ส่งรายงานกะ (ครั้ง)
                       </th>
-                      <th className="py-3 px-3 text-center">รูปถ่ายจุดตรวจ</th>
+                      <th className="py-3 px-3 text-center" title="จำนวนรูปถ่ายที่ส่งเฉพาะวันนี้ (ตรงกับแกลเลอรีด้านล่าง)">
+                        รูปถ่ายวันนี้
+                        <span className="block text-[9px] font-normal text-slate-400 font-sans">(ตรงกับแกลเลอรี)</span>
+                      </th>
                       <th className="py-3 px-3 text-center">ปัญหาที่แจ้ง</th>
                       <th className="py-3 px-3 text-center">เกรดประเมิน</th>
                     </tr>
@@ -2790,8 +2836,8 @@ export default function SupervisorPage() {
                               {gData.reportsSent} ครั้ง
                             </span>
                           </td>
-                          <td className="py-3 px-3 text-center font-bold text-slate-700">
-                            {gData.photosUploaded} รูป
+                          <td className="py-3 px-3 text-center font-bold text-slate-800" title="รูปถ่ายที่ส่งเฉพาะวันนี้">
+                            📷 {gData.photosUploaded} รูป
                           </td>
                           <td className="py-3 px-3 text-center font-bold text-slate-700">
                             {gData.issuesReported} ข้อ
@@ -2905,9 +2951,12 @@ export default function SupervisorPage() {
                         <span className="px-2.5 py-0.5 rounded-full bg-sky-100 text-sky-800 text-[11px] font-bold">
                           {distinctCpsWithPhotos}/{checkpoints.length} จุดตรวจ • {distinctRoundsWithPhotos} รอบเวลา
                         </span>
+                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold">
+                          ☀️ ภาพถ่ายเฉพาะวันนี้
+                        </span>
                       </div>
                       <p className="text-xs text-slate-500 mt-1">
-                        จัดแยกหมวดหมู่ตามรอบเวลาและจุดตรวจอย่างเป็นระเบียบ พร้อมพิกัด GPS ระยะห่าง และชื่อเจ้าหน้าที่ รปภ. ผู้ตรวจ
+                        รวมภาพถ่ายยืนยันจุดตรวจที่ส่งเข้ามาในวันนี้ จัดแยกหมวดหมู่ตามรอบเวลาและจุดตรวจ (ตรงกับยอดรูปถ่ายในตารางผลงานประจำวันด้านบน)
                       </p>
                     </div>
 

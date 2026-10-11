@@ -271,16 +271,53 @@ export function isScanOnTime(timestamp: string, round: PatrolRound): boolean {
 }
 
 /**
+ * คืนค่า YYYY-MM-DD ตามเขตเวลาประเทศไทย (Asia/Bangkok GMT+7)
+ */
+export function getBangkokDateString(date: Date = new Date()): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Bangkok",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(date);
+  } catch {
+    return date.toISOString().split("T")[0];
+  }
+}
+
+/**
+ * คืนค่า YYYY-MM ตามเขตเวลาประเทศไทย (Asia/Bangkok GMT+7)
+ */
+export function getBangkokMonthString(date: Date = new Date()): string {
+  return getBangkokDateString(date).slice(0, 7);
+}
+
+/**
+ * คืนค่า YYYY-MM-DD ของ Log timestamp โดยรองรับทั้ง ISO UTC, Local string และ Date object
+ */
+export function getLogDateString(timestamp: string): string {
+  if (!timestamp) return "";
+  try {
+    const d = new Date(timestamp);
+    if (!isNaN(d.getTime())) {
+      return getBangkokDateString(d);
+    }
+  } catch {}
+  return timestamp.split("T")[0] || "";
+}
+
+/**
  * กรอง Logs ของรอบตรวจในวันปัจจุบัน
  */
 export function getLogsForRound(
   round: PatrolRound,
   patrolLogs: PatrolLog[],
-  targetDateStr: string = new Date().toISOString().split("T")[0]
+  targetDateStr: string = getBangkokDateString()
 ): PatrolLog[] {
   return patrolLogs.filter((log) => {
     if (!log.timestamp) return false;
-    const logDateStr = log.timestamp.split("T")[0];
+    const logDateStr = getLogDateString(log.timestamp);
     if (logDateStr !== targetDateStr) return false;
 
     // หาก Log มีการบันทึก roundId ไว้ ให้ตรวจตรง id
@@ -324,7 +361,7 @@ export function getRoundProgress(
   patrolLogs: PatrolLog[],
   now: Date = new Date()
 ): RoundProgress {
-  const todayStr = now.toISOString().split("T")[0];
+  const todayStr = getBangkokDateString(now);
   const logsInRound = getLogsForRound(round, patrolLogs, todayStr);
 
   const completedIds = new Set(logsInRound.map((l) => l.checkpointId));
@@ -394,7 +431,7 @@ export function calculateShiftKPIs(
   shiftReports: ShiftReportLog[] = [],
   now: Date = new Date()
 ) {
-  const todayStr = now.toISOString().split("T")[0];
+  const todayStr = getBangkokDateString(now);
 
   return hospitalShifts.map((shift) => {
     const shiftRounds = rounds.filter((r) => r.shift === shift.id && r.isActive);
@@ -415,7 +452,7 @@ export function calculateShiftKPIs(
 
     // ตรวจสอบรายงานประจำกะที่ส่งเข้ามา
     const reportForShift = shiftReports.find(
-      (sr) => sr.shiftId === shift.id && sr.dateString === todayStr
+      (sr) => sr.shiftId === shift.id && (sr.dateString === todayStr || getLogDateString(sr.timestamp) === todayStr)
     );
 
     return {
@@ -447,9 +484,9 @@ export function calculateGuardKPIs(
   now: Date = new Date(),
   parkingScans: ParkingScan[] = []
 ) {
-  const todayStr = now.toISOString().split("T")[0];
-  const todayLogs = patrolLogs.filter((l) => l.timestamp?.startsWith(todayStr));
-  const todayVehicles = parkingScans.filter((s) => s.timestamp?.startsWith(todayStr));
+  const todayStr = getBangkokDateString(now);
+  const todayLogs = patrolLogs.filter((l) => getLogDateString(l.timestamp) === todayStr);
+  const todayVehicles = parkingScans.filter((s) => getLogDateString(s.timestamp) === todayStr);
 
   return guards.map((guard) => {
     const guardLogs = todayLogs.filter((l) => l.guardId === guard.id || l.guardName === guard.name);
@@ -478,7 +515,7 @@ export function calculateGuardKPIs(
 
     // การส่งรายงานประจำกะ (ตรวจสอบว่าส่งมอบเวรหรือไม่)
     const reportsSent = shiftReports.filter(
-      (r) => (r.guardId === guard.id || r.guardName === guard.name) && r.dateString === todayStr
+      (r) => (r.guardId === guard.id || r.guardName === guard.name) && (r.dateString === todayStr || getLogDateString(r.timestamp) === todayStr)
     ).length;
 
     // คะแนนประเมินเบื้องต้น
