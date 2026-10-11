@@ -14,7 +14,8 @@ import {
   saveShiftReportToCloud,
   saveDailyAISummaryToCloud,
   saveGoogleDriveWebhookToCloud,
-  saveGeminiApiKeyToCloud
+  saveGeminiApiKeyToCloud,
+  batchDeleteRecordsFromCloud
 } from './firebaseService';
 import { 
   PatrolRound, 
@@ -197,6 +198,7 @@ interface AppState {
   patrolRounds: PatrolRound[];
   updatePatrolRounds: (rounds: PatrolRound[]) => void;
   resetPatrolRoundsToDefault: () => void;
+  cleanDuplicatePatrolLogs: () => Promise<number>;
 
   // Shift Reports (ส่งรายงานประจำกะช่วงต่อกะ)
   shiftReports: ShiftReportLog[];
@@ -656,13 +658,31 @@ export const useStore = create<AppState>()(
         const activeRound = getCurrentRound(currentRounds, now);
         const activeShift = getCurrentShift(now);
         const onTime = isScanOnTime(now.toISOString(), activeRound);
+        const guardId = user?.id || 'unknown';
+        const guardName = user?.name || 'รปภ. เวร';
+        const roundId = log.roundId || activeRound.id;
+
+        // Deduplication Guard: ไม่บันทึกซ้ำหากเป็นจุดเดิม ในรอบเดิม โดย รปภ. คนเดิม ภายใน 45 วินาที
+        const existingLogs = get().patrolLogs;
+        const isDuplicate = existingLogs.some((l) => {
+          if (l.checkpointId !== log.checkpointId) return false;
+          if (l.roundId !== roundId) return false;
+          if (l.guardId !== guardId && l.guardName !== guardName) return false;
+          const logTime = new Date(l.timestamp || 0).getTime();
+          return Math.abs(logTime - now.getTime()) < 45000;
+        });
+
+        if (isDuplicate) {
+          console.warn('[PatrolLog] Duplicate scan blocked within 45s, skipping duplicate entry.');
+          return;
+        }
 
         const newLog: PatrolLog = {
           ...log,
           id: 'patrol-' + Date.now(),
-          guardId: user?.id || 'unknown',
-          guardName: user?.name || 'รปภ. เวร',
-          roundId: log.roundId || activeRound.id,
+          guardId,
+          guardName,
+          roundId,
           roundName: log.roundName || activeRound.name,
           shift: log.shift || activeShift.id,
           isOnTime: log.isOnTime !== undefined ? log.isOnTime : onTime,
@@ -672,6 +692,52 @@ export const useStore = create<AppState>()(
         set((state) => ({
           patrolLogs: [newLog, ...state.patrolLogs]
         }));
+      },
+
+      cleanDuplicatePatrolLogs: async () => {
+        const allLogs = get().patrolLogs;
+        if (!allLogs || allLogs.length === 0) return 0;
+
+        // ตรวจจับ log ที่ซ้ำกัน (จุดเดียวกัน รอบเดียวกัน ผู้ตรวจคนเดียวกัน เวลาห่างกันไม่เกิน 90 วินาที)
+        const sorted = [...allLogs].sort((a, b) => {
+          const tA = new Date(a.timestamp || 0).getTime();
+          const tB = new Date(b.timestamp || 0).getTime();
+          return tA - tB;
+        });
+
+        const duplicateIds: string[] = [];
+        const keptLogs: typeof allLogs = [];
+
+        for (const log of sorted) {
+          const logTime = new Date(log.timestamp || 0).getTime();
+          const isDup = keptLogs.some((kept) => {
+            if (kept.checkpointId !== log.checkpointId) return false;
+            if (kept.roundId !== log.roundId) return false;
+            const sameGuard = kept.guardId === log.guardId || kept.guardName === log.guardName;
+            const keptTime = new Date(kept.timestamp || 0).getTime();
+            return sameGuard && Math.abs(logTime - keptTime) <= 90000;
+          });
+
+          if (isDup) {
+            duplicateIds.push(log.id);
+          } else {
+            keptLogs.push(log);
+          }
+        }
+
+        if (duplicateIds.length > 0) {
+          try {
+            await batchDeleteRecordsFromCloud("patrolLogs", duplicateIds);
+          } catch (e) {
+            console.warn("Failed to delete duplicate patrol logs from cloud:", e);
+          }
+          const dupSet = new Set(duplicateIds);
+          set((state) => ({
+            patrolLogs: state.patrolLogs.filter((l) => !dupSet.has(l.id)),
+          }));
+        }
+
+        return duplicateIds.length;
       },
 
       // Shift Reports

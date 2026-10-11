@@ -46,10 +46,11 @@ export default function PatrolPage() {
   const [checklistItems, setChecklistItems] = useState<string[]>([]);
   const [checkedMap, setCheckedMap] = useState<Record<string, boolean>>({});
 
-  // Photo state (จุดละ 1 รูป)
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const lastSubmitTimeRef = useRef<{ checkpointId: string; time: number } | null>(null);
 
   // Helper สำหรับค้นหาจุดตรวจจากข้อความที่สแกนได้ หรือ URL parameter
   const resolveCheckpoint = (input: string): Checkpoint | null => {
@@ -345,7 +346,18 @@ export default function PatrolPage() {
   };
 
   const handleSubmit = async () => {
-    if (!selectedCheckpoint) return;
+    if (!selectedCheckpoint || isSubmitting) return;
+
+    // ระบบ Cooldown: ป้องกันการกดบันทึกจุดเดิมซ้ำซ้อนภายใน 30 วินาที
+    const nowMs = Date.now();
+    if (
+      lastSubmitTimeRef.current &&
+      lastSubmitTimeRef.current.checkpointId === selectedCheckpoint.id &&
+      nowMs - lastSubmitTimeRef.current.time < 30000
+    ) {
+      alert(`⚠️ จุดตรวจนี้เพิ่งได้รับการบันทึกไปเมื่อสักครู่ (${Math.round((nowMs - lastSubmitTimeRef.current.time) / 1000)} วินาทีที่แล้ว) ระบบข้ามการบันทึกซ้ำ`);
+      return;
+    }
 
     // ตรวจสอบระยะพิกัด GPS เทียบกับจุดตรวจจริง (เผื่อความคลาดเคลื่อน GPS ใต้อาคาร/ชั้นล่าง)
     const distance = (selectedCheckpoint.coords && gpsLocation)
@@ -366,70 +378,80 @@ export default function PatrolPage() {
       return;
     }
 
-    const failedItems = checklistItems.filter((item) => checkedMap[item] === false);
-    let resolvedNotes = notes.trim();
-    if (!resolvedNotes) {
-      if (status === "issue" && failedItems.length > 0) {
-        resolvedNotes = `พบปัญหา: ${failedItems.join(", ")}`;
-      } else if (status === "normal") {
-        resolvedNotes = `ตรวจเช็กเรียบร้อยปกติครบถ้วน (${checklistItems.length} รายการ)`;
-      } else {
-        resolvedNotes = "พบสิ่งผิดปกติหน้างาน";
+    setIsSubmitting(true);
+    lastSubmitTimeRef.current = { checkpointId: selectedCheckpoint.id, time: nowMs };
+
+    try {
+      const failedItems = checklistItems.filter((item) => checkedMap[item] === false);
+      let resolvedNotes = notes.trim();
+      if (!resolvedNotes) {
+        if (status === "issue" && failedItems.length > 0) {
+          resolvedNotes = `พบปัญหา: ${failedItems.join(", ")}`;
+        } else if (status === "normal") {
+          resolvedNotes = `ตรวจเช็กเรียบร้อยปกติครบถ้วน (${checklistItems.length} รายการ)`;
+        } else {
+          resolvedNotes = "พบสิ่งผิดปกติหน้างาน";
+        }
       }
-    }
 
-    const scanTimeIso = new Date().toISOString();
-    const onTime = isScanOnTime(scanTimeIso, activeRound);
+      const scanTimeIso = new Date().toISOString();
+      const onTime = isScanOnTime(scanTimeIso, activeRound);
 
-    // อัปโหลดภาพเข้า Google Drive โฟลเดอร์ "ภาพถ่ายจุดตรวจ (Patrol Logs)"
-    let finalPhotoUrl = capturedPhoto;
-    if (capturedPhoto && capturedPhoto.startsWith("data:image")) {
-      try {
-        finalPhotoUrl = (await uploadImageToDrive({
-          image: capturedPhoto,
-          title: `CP_${selectedCheckpoint.code}_${activeRound.id}`,
-          subfolder: "ภาพถ่ายจุดตรวจ (Patrol Logs)",
-          webhookUrl: googleDriveWebhookUrl,
-        })) || capturedPhoto;
-      } catch (uploadErr) {
-        console.warn("Drive upload fallback:", uploadErr);
+      // อัปโหลดภาพเข้า Google Drive โฟลเดอร์ "ภาพถ่ายจุดตรวจ (Patrol Logs)"
+      let finalPhotoUrl = capturedPhoto;
+      if (capturedPhoto && capturedPhoto.startsWith("data:image")) {
+        try {
+          finalPhotoUrl = (await uploadImageToDrive({
+            image: capturedPhoto,
+            title: `CP_${selectedCheckpoint.code}_${activeRound.id}`,
+            subfolder: "ภาพถ่ายจุดตรวจ (Patrol Logs)",
+            webhookUrl: googleDriveWebhookUrl,
+          })) || capturedPhoto;
+        } catch (uploadErr) {
+          console.warn("Drive upload fallback:", uploadErr);
+        }
       }
+
+      addPatrolLog({
+        checkpointId: selectedCheckpoint.id,
+        timestamp: scanTimeIso,
+        status,
+        notes: resolvedNotes,
+        coords: {
+          lat: gpsLocation.lat,
+          lng: gpsLocation.lng,
+          accuracy: gpsLocation.accuracy,
+        },
+        roundId: activeRound.id,
+        roundName: activeRound.name,
+        shift: activeShift.id,
+        imageUrl: finalPhotoUrl,
+        distanceMeters: distance,
+        isOnTime: onTime,
+      });
+
+      const recordedCheckpointName = selectedCheckpoint.name;
+      const recordedCode = selectedCheckpoint.code;
+      const guardName = currentUser?.name || "เจ้าหน้าที่ รปภ.";
+
+      setSelectedCheckpoint(null);
+      setStatus("normal");
+      setNotes("");
+      setCapturedPhoto(null);
+      setPhotoError(null);
+
+      alert(
+        `✅ บันทึกผลการตรวจเรียบร้อย\n\n` +
+        `📍 จุดตรวจ: ${recordedCheckpointName} (รหัส ${recordedCode})\n` +
+        `👤 ผู้ปฏิบัติงาน: ${guardName}\n` +
+        `⏰ เวลา: ${new Date(scanTimeIso).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.`
+      );
+    } catch (err: any) {
+      console.error("Submit patrol log error:", err);
+      alert("❌ เกิดข้อผิดพลาดในการบันทึกข้อมูล: " + (err?.message || err));
+    } finally {
+      setIsSubmitting(false);
     }
-
-    addPatrolLog({
-      checkpointId: selectedCheckpoint.id,
-      timestamp: scanTimeIso,
-      status,
-      notes: resolvedNotes,
-      coords: {
-        lat: gpsLocation.lat,
-        lng: gpsLocation.lng,
-        accuracy: gpsLocation.accuracy,
-      },
-      roundId: activeRound.id,
-      roundName: activeRound.name,
-      shift: activeShift.id,
-      imageUrl: finalPhotoUrl,
-      distanceMeters: distance,
-      isOnTime: onTime,
-    });
-
-    const recordedCheckpointName = selectedCheckpoint.name;
-    const recordedCode = selectedCheckpoint.code;
-    const guardName = currentUser?.name || "เจ้าหน้าที่ รปภ.";
-
-    setSelectedCheckpoint(null);
-    setStatus("normal");
-    setNotes("");
-    setCapturedPhoto(null);
-    setPhotoError(null);
-
-    alert(
-      `✅ บันทึกผลการตรวจเรียบร้อย\n\n` +
-      `📍 จุดตรวจ: ${recordedCheckpointName} (รหัส ${recordedCode})\n` +
-      `👤 ผู้ปฏิบัติงาน: ${guardName}\n` +
-      `⏰ เวลา: ${new Date(scanTimeIso).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.`
-    );
   };
 
   return (
@@ -806,14 +828,21 @@ export default function PatrolPage() {
                 <button
                   type="button"
                   onClick={handleSubmit}
-                  disabled={!canSubmit}
+                  disabled={!canSubmit || isSubmitting}
                   className={`w-full py-4 rounded-2xl font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 ${
-                    canSubmit
+                    isSubmitting
+                      ? "bg-slate-300 text-slate-600 cursor-wait shadow-none animate-pulse"
+                      : canSubmit
                       ? "bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white shadow-sky-500/25 active:scale-95 cursor-pointer"
                       : "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
                   }`}
                 >
-                  {!isWithin30m ? (
+                  {isSubmitting ? (
+                    <div className="flex items-center gap-2">
+                      <span className="w-4 h-4 border-2 border-slate-600 border-t-transparent rounded-full animate-spin" />
+                      <span>⏳ กำลังบันทึกข้อมูลและส่งรูปภาพ... (ห้ามกดย้ำ)</span>
+                    </div>
+                  ) : !isWithin30m ? (
                     <span>❌ อยู่นอกระยะจุดตรวจ (ห่าง {distance} ม. - กำหนด ≤ 30 ม.)</span>
                   ) : !capturedPhoto ? (
                     <span>📷 กรุณาถ่ายรูปจุดตรวจ 1 รูปก่อนบันทึก</span>

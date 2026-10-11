@@ -350,6 +350,7 @@ function SupervisorDashboard({ onLogout }: { onLogout: () => void }) {
     setGeminiApiKey,
     dailyAISummaries,
     addDailyAISummary,
+    cleanDuplicatePatrolLogs,
   } = useStore();
 
   const isCloudConnected = true;
@@ -357,6 +358,24 @@ function SupervisorDashboard({ onLogout }: { onLogout: () => void }) {
   const [activeTab, setActiveTab] = useState<"overview" | "rounds" | "checkpoints" | "staff" | "vehicles" | "incidents" | "ai" | "archive" | "parkingIntelligence">("overview");
   const [lineSent, setLineSent] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
+  const [isCleaningDuplicates, setIsCleaningDuplicates] = useState(false);
+
+  const handleCleanDuplicateLogs = async () => {
+    if (!confirm("ต้องการสแกนตรวจจับและลบประวัติการสแกนที่เบิ้ลซ้ำซ้อน (จุดเดียวกันในรอบเดียวกันที่กดรัวๆ ซ้ำภายใน 90 วินาที) ออกจากระบบ ใช่หรือไม่?")) return;
+    setIsCleaningDuplicates(true);
+    try {
+      const removedCount = await cleanDuplicatePatrolLogs();
+      if (removedCount > 0) {
+        alert(`✅ ทำความสะอาดข้อมูลเรียบร้อยแล้ว!\n\nตรวจพบและลบรายการสแกนที่เบิ้ลซ้ำซ้อนออกทั้งหมด ${removedCount} รายการ\nยอดสแกนและรูปภาพในระบบได้รับการปรับให้ถูกต้องตรงตามจริงแล้ว`);
+      } else {
+        alert("ℹ️ ไม่พบรายการสแกนที่เบิ้ลซ้ำซ้อนในระบบ ข้อมูลปัจจุบันถูกต้องและปกติ 100%");
+      }
+    } catch (e: any) {
+      alert("❌ เกิดข้อผิดพลาดในการล้างข้อมูล: " + (e?.message || e));
+    } finally {
+      setIsCleaningDuplicates(false);
+    }
+  };
 
   // 90-Day Parking Intelligence & Weekend Squatter Detection State
   const [parkingCutoffDays, setParkingCutoffDays] = useState<number>(90);
@@ -2822,7 +2841,25 @@ function SupervisorDashboard({ onLogout }: { onLogout: () => void }) {
                     สถิติการสแกนจุดตรวจ, ตรวจรถ, ความตรงเวลา และรูปถ่ายยืนยันจุดตรวจ <strong>เฉพาะการปฏิบัติงานของวันนี้</strong>
                   </p>
                 </div>
-                <div className="text-right shrink-0">
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <button
+                    onClick={handleCleanDuplicateLogs}
+                    disabled={isCleaningDuplicates}
+                    className="px-3 py-1 text-xs font-bold rounded-full bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 shadow-xs flex items-center gap-1.5 transition-all disabled:opacity-50"
+                    title="กดเพื่อล้างรายการสแกนจุดตรวจที่ส่งเบิ้ลซ้ำๆ ในนาทีเดียวกันออกจากระบบ"
+                  >
+                    {isCleaningDuplicates ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                        <span>กำลังล้างข้อมูลซ้ำ...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                        <span>🧹 ล้างข้อมูลสแกนซ้ำซ้อน</span>
+                      </>
+                    )}
+                  </button>
                   <span className="text-xs font-bold px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 block sm:inline-block">
                     เจ้าหน้าที่ปฏิบัติการ {onlyGuards.length} นาย
                   </span>
@@ -2883,6 +2920,11 @@ function SupervisorDashboard({ onLogout }: { onLogout: () => void }) {
                           </td>
                           <td className="py-3 px-3 text-center font-bold font-mono text-slate-800">
                             {gData.checkpointsScanned} จุด
+                            {gData.hasDuplicates && (
+                              <span className="block text-[10px] text-amber-600 font-sans font-medium" title={`กดสแกนรวม ${gData.rawCheckpointsScanned} ครั้ง`}>
+                                (สแกน {gData.rawCheckpointsScanned} ครั้ง)
+                              </span>
+                            )}
                           </td>
                           <td className="py-3 px-3 text-center font-bold font-mono text-sky-700">
                             {gData.vehiclesScanned} คัน

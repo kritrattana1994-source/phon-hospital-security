@@ -504,25 +504,32 @@ export function calculateGuardKPIs(
 
   return guards.map((guard) => {
     const guardLogs = todayLogs.filter((l) => l.guardId === guard.id || l.guardName === guard.name);
-    const checkpointsScanned = guardLogs.length;
+    
+    // นับจำนวนจุดตรวจจริงที่ไม่ซ้ำในแต่ละรอบ (1 จุด ต่อ 1 รอบ) เพื่อไม่ให้ยอดบวมจากการกดย้ำ
+    const uniqueRoundCheckpoints = new Set(guardLogs.map((l) => `${l.roundId || 'r'}_${l.checkpointId}`)).size;
+    const rawCheckpointsScanned = guardLogs.length;
+    const hasDuplicates = rawCheckpointsScanned > uniqueRoundCheckpoints;
 
     // สแกนตรวจยานพาหนะ
     const vehiclesScanned = todayVehicles.filter(
       (s) => s.guardName === guard.name || s.guardName?.includes(guard.name)
     ).length;
 
-    // ยอดรวมการสแกนทั้งหมด (จุดตรวจ + ตรวจรถ) สำหรับเปรียบเทียบผลงาน
-    const totalScans = checkpointsScanned + vehiclesScanned;
+    // ยอดรวมการสแกนจริง (จุดตรวจที่ไม่ซ้ำ + ตรวจรถ) สำหรับเปรียบเทียบผลงาน
+    const totalScans = uniqueRoundCheckpoints + vehiclesScanned;
 
     // รอบที่มีส่วนร่วมตรวจ
     const roundsInvolved = new Set(guardLogs.map((l) => l.roundId).filter(Boolean)).size;
 
     // อัตราตรงเวลา
     const onTimeCount = guardLogs.filter((l) => l.isOnTime !== false).length;
-    const onTimeRate = checkpointsScanned > 0 ? Math.round((onTimeCount / checkpointsScanned) * 100) : 0;
+    const onTimeRate = rawCheckpointsScanned > 0 ? Math.round((onTimeCount / rawCheckpointsScanned) * 100) : 0;
 
-    // รูปถ่ายที่ส่ง
-    const photosUploaded = guardLogs.filter((l) => !!l.imageUrl).length;
+    // รูปถ่ายที่ส่ง (นับเฉพาะจุดตรวจที่ไม่ซ้ำในรอบ)
+    const photosUploaded = new Set(
+      guardLogs.filter((l) => !!l.imageUrl).map((l) => `${l.roundId || 'r'}_${l.checkpointId}`)
+    ).size;
+    const rawPhotosUploaded = guardLogs.filter((l) => !!l.imageUrl).length;
 
     // ปัญหาที่แจ้ง
     const issuesReported = guardLogs.filter((l) => l.status === "issue").length;
@@ -535,27 +542,30 @@ export function calculateGuardKPIs(
     // คะแนนประเมินเบื้องต้น
     let ratingGrade: "A" | "B" | "C" = "B";
     let ratingText = "ผ่านเกณฑ์มาตรฐาน";
-    if ((checkpointsScanned >= checkpoints.length || totalScans >= 15) && (onTimeRate >= 80 || checkpointsScanned === 0) && reportsSent > 0) {
+    if ((uniqueRoundCheckpoints >= checkpoints.length || totalScans >= 15) && (onTimeRate >= 80 || uniqueRoundCheckpoints === 0) && reportsSent > 0) {
       ratingGrade = "A";
       ratingText = "ดีเยี่ยม (ตรงเวลา + ส่งงานครบ)";
-    } else if (checkpointsScanned === 0 && vehiclesScanned === 0 && reportsSent === 0) {
+    } else if (uniqueRoundCheckpoints === 0 && vehiclesScanned === 0 && reportsSent === 0) {
       ratingGrade = "C";
       ratingText = "ยังไม่มีบันทึกปฏิบัติการ";
     }
 
     return {
       guard,
-      checkpointsScanned,
+      checkpointsScanned: uniqueRoundCheckpoints,
+      rawCheckpointsScanned,
+      hasDuplicates,
       vehiclesScanned,
       totalScans,
       roundsInvolved,
       onTimeRate,
       photosUploaded,
+      rawPhotosUploaded,
       issuesReported,
       reportsSent,
       ratingGrade,
       ratingText,
       lastActive: guardLogs[0]?.timestamp || todayVehicles.find((s) => s.guardName === guard.name)?.timestamp,
     };
-  }).sort((a, b) => b.totalScans - a.totalScans); // เรียงลำดับ รปภ. ที่มียอดสแกนรวมสูงสุดอยู่บนสุด
+  }).sort((a, b) => b.totalScans - a.totalScans || b.checkpointsScanned - a.checkpointsScanned); // เรียงลำดับ รปภ. ที่มียอดสแกนรวมสูงสุดอยู่บนสุด
 }

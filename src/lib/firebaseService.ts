@@ -128,6 +128,14 @@ export async function savePatrolLogToCloud(log: PatrolLog) {
   }
 }
 
+export async function deletePatrolLogFromCloud(id: string) {
+  try {
+    await deleteDoc(doc(db, "patrolLogs", id));
+  } catch (err) {
+    console.warn("Cloud delete patrolLog failed:", err);
+  }
+}
+
 // Parking Scans
 export async function saveParkingScanToCloud(scan: ParkingScan) {
   try {
