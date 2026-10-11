@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { 
   useStore, 
   Checkpoint, 
@@ -100,7 +100,196 @@ import {
   AnalyzedVehicle 
 } from "@/lib/parkingAnalytics";
 
-export default function SupervisorPage() {
+// ==========================================
+// 1. ISOLATED LIGHTWEIGHT SUPERVISOR PIN AUTH GATE (0ms Instant Input)
+// ==========================================
+function SupervisorPinAuth({ onSuccess }: { onSuccess: () => void }) {
+  const { loginSupervisor } = useStore();
+  const [pin, setPin] = useState("");
+  const [pinError, setPinError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handlePinSubmit = (codeToTest?: string) => {
+    const code = (codeToTest !== undefined ? codeToTest : pin).trim();
+    const success = loginSupervisor(code);
+    if (success) {
+      setIsSubmitting(true);
+      setPinError("");
+      setPin("");
+      onSuccess();
+    } else {
+      setPinError("รหัสผ่านไม่ถูกต้อง โปรดลองอีกครั้ง");
+      setPin("");
+    }
+  };
+
+  const handleKeyPress = (num: string) => {
+    if (isSubmitting) return;
+    if (pin.length < 4) {
+      const nextPin = pin + num;
+      setPin(nextPin);
+      setPinError("");
+      if (nextPin.length === 4) {
+        setTimeout(() => handlePinSubmit(nextPin), 80);
+      }
+    }
+  };
+
+  const handleDelete = () => {
+    if (isSubmitting) return;
+    setPin((prev) => prev.slice(0, -1));
+    setPinError("");
+  };
+
+  const handleClear = () => {
+    if (isSubmitting) return;
+    setPin("");
+    setPinError("");
+  };
+
+  // ดักฟังการพิมพ์ตัวเลขจากแป้นพิมพ์คอมพิวเตอร์
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key >= "0" && e.key <= "9") {
+        handleKeyPress(e.key);
+      } else if (e.key === "Backspace") {
+        handleDelete();
+      } else if (e.key === "Enter") {
+        handlePinSubmit();
+      } else if (e.key === "Escape") {
+        handleClear();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [pin, isSubmitting]);
+
+  return (
+    <main className="min-h-screen bg-[#f0f6fa] text-slate-800 flex flex-col justify-between p-4 sm:p-6 select-none relative overflow-hidden max-w-md mx-auto border-x border-sky-100 shadow-xl font-['Sarabun',sans-serif]">
+      {/* Top Header */}
+      <div className="flex flex-col gap-2 z-10">
+        <div className="flex justify-between items-center">
+          <Link
+            href="/"
+            className="p-2 -ml-2 rounded-xl bg-slate-100 text-slate-600 hover:text-slate-900 active:scale-95 transition-all flex items-center gap-1.5 text-xs font-bold"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>หน้าแรก</span>
+          </Link>
+          <span className="text-[10px] font-bold text-sky-800 bg-sky-100 px-2.5 py-1 rounded-full border border-sky-200 uppercase tracking-wider">
+            SUPERVISOR PORTAL
+          </span>
+        </div>
+
+        <div className="pt-2">
+          <HospitalBrand badgeText="ศูนย์ควบคุมความปลอดภัย" />
+        </div>
+      </div>
+
+      {/* Ambient background glows */}
+      <div className="absolute top-1/4 -left-32 w-80 h-80 bg-sky-200/40 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-1/2 -right-32 w-80 h-80 bg-blue-100/50 rounded-full blur-3xl pointer-events-none" />
+
+      {/* PIN Indicators & Card */}
+      <div className="w-full max-w-xs mx-auto text-center my-auto py-4 z-10">
+        <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-sky-600 to-blue-700 flex items-center justify-center text-white mx-auto mb-3 shadow-lg shadow-sky-600/30 ring-4 ring-sky-100">
+          <Lock className="w-8 h-8" />
+        </div>
+        <h1 className="text-2xl font-black tracking-tight text-slate-900">
+          เข้าสู่ระบบหัวหน้างาน
+        </h1>
+        <p className="text-xs text-slate-500 mt-1">
+          กรุณาระบุรหัสผ่าน 4 หลัก เพื่อเข้าใช้งานระบบควบคุม
+        </p>
+
+        <div className="flex justify-center gap-4 my-5">
+          {[0, 1, 2, 3].map((index) => {
+            const isFilled = pin.length > index;
+            return (
+              <div
+                key={index}
+                className={`w-5 h-5 rounded-full transition-all duration-200 ${
+                  isFilled
+                    ? "bg-sky-600 scale-110 shadow-md shadow-sky-500/40 ring-2 ring-sky-200"
+                    : "bg-white border-2 border-slate-300"
+                }`}
+              />
+            );
+          })}
+        </div>
+
+        {pinError ? (
+          <p className="text-rose-600 text-xs font-bold animate-pulse">{pinError}</p>
+        ) : isSubmitting ? (
+          <p className="text-sky-600 text-xs font-bold flex items-center justify-center gap-1.5 animate-pulse">
+            <span className="w-2 h-2 rounded-full bg-sky-600 animate-ping" />
+            กำลังตรวจสอบรหัสผ่านและเข้าสู่ระบบ...
+          </p>
+        ) : (
+          <p className="text-slate-400 text-xs">เฉพาะหัวหน้างานรักษาความปลอดภัยเท่านั้น</p>
+        )}
+      </div>
+
+      {/* Keypad */}
+      <div className="w-full max-w-xs mx-auto z-10 pb-6">
+        <div className="grid grid-cols-3 gap-2.5 mb-3">
+          {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((n) => (
+            <button
+              key={n}
+              type="button"
+              disabled={isSubmitting}
+              onClick={() => handleKeyPress(n)}
+              className="h-14 rounded-2xl bg-white border border-slate-200 text-2xl font-bold text-slate-800 hover:bg-sky-50 active:scale-95 active:bg-sky-600 active:text-white transition-all flex items-center justify-center shadow-xs cursor-pointer disabled:opacity-50"
+            >
+              {n}
+            </button>
+          ))}
+          <button
+            type="button"
+            disabled={isSubmitting}
+            onClick={handleClear}
+            className="h-14 rounded-2xl bg-slate-100 text-xs font-bold text-slate-500 hover:text-slate-800 active:scale-95 transition-all flex items-center justify-center cursor-pointer disabled:opacity-50"
+          >
+            ล้าง
+          </button>
+          <button
+            type="button"
+            disabled={isSubmitting}
+            onClick={() => handleKeyPress("0")}
+            className="h-14 rounded-2xl bg-white border border-slate-200 text-2xl font-bold text-slate-800 hover:bg-sky-50 active:scale-95 active:bg-sky-600 active:text-white transition-all flex items-center justify-center shadow-xs cursor-pointer disabled:opacity-50"
+          >
+            0
+          </button>
+          <button
+            type="button"
+            disabled={isSubmitting}
+            onClick={handleDelete}
+            className="h-14 rounded-2xl bg-slate-100 text-slate-500 hover:text-slate-800 active:scale-95 transition-all flex items-center justify-center cursor-pointer disabled:opacity-50"
+            title="ลบตัวเลข"
+          >
+            <Delete className="w-6 h-6" />
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => handlePinSubmit()}
+          disabled={pin.length < 4 || isSubmitting}
+          className="w-full py-3.5 bg-gradient-to-r from-sky-600 to-blue-700 hover:from-sky-500 hover:to-blue-600 disabled:opacity-40 text-white font-bold text-sm rounded-2xl shadow-md shadow-sky-600/25 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+        >
+          <ShieldCheck className="w-4 h-4" />
+          <span>{isSubmitting ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบหัวหน้างาน"}</span>
+        </button>
+      </div>
+    </main>
+  );
+}
+
+// ==========================================
+// 2. MAIN SUPERVISOR DASHBOARD VIEW
+// ==========================================
+function SupervisorDashboard({ onLogout }: { onLogout: () => void }) {
   const { 
     supervisorUser, 
     patrolLogs, 
@@ -143,96 +332,9 @@ export default function SupervisorPage() {
     setGeminiApiKey,
     dailyAISummaries,
     addDailyAISummary,
-    loginSupervisor,
-    logoutSupervisor
   } = useStore();
 
-  const { isConnected: isCloudConnected } = useFirebaseSync();
-
-  // --- Supervisor PIN Authentication (รหัสผ่าน 9999) ---
-  const [pin, setPin] = useState("");
-  const [pinError, setPinError] = useState("");
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [isCheckingAuth, setIsCheckingAuth] = useState<boolean>(true);
-
-  // ตรวจสอบสถานะการเข้าสู่ระบบจาก sessionStorage
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const savedAuth = sessionStorage.getItem("supervisor_auth_unlocked");
-      if (savedAuth === "true") {
-        loginSupervisor("9999");
-        setIsAuthenticated(true);
-      } else {
-        setIsAuthenticated(false);
-      }
-      setIsCheckingAuth(false);
-    }
-  }, [loginSupervisor]);
-
-  const handlePinSubmit = (pinToTest?: string) => {
-    const code = (pinToTest !== undefined ? pinToTest : pin).trim();
-    if (code === "9999" || loginSupervisor(code)) {
-      loginSupervisor(code);
-      setIsAuthenticated(true);
-      setPinError("");
-      setPin("");
-      if (typeof window !== "undefined") {
-        sessionStorage.setItem("supervisor_auth_unlocked", "true");
-      }
-    } else {
-      setPinError("รหัสผ่านไม่ถูกต้อง โปรดลองอีกครั้ง");
-      setPin("");
-    }
-  };
-
-  const handleKeyPress = (num: string) => {
-    if (pin.length < 4) {
-      const nextPin = pin + num;
-      setPin(nextPin);
-      setPinError("");
-      if (nextPin.length === 4) {
-        setTimeout(() => handlePinSubmit(nextPin), 150);
-      }
-    }
-  };
-
-  const handleDelete = () => {
-    setPin((prev) => prev.slice(0, -1));
-    setPinError("");
-  };
-
-  const handleClear = () => {
-    setPin("");
-    setPinError("");
-  };
-
-  const handleLogout = () => {
-    if (typeof window !== "undefined") {
-      sessionStorage.removeItem("supervisor_auth_unlocked");
-    }
-    logoutSupervisor();
-    setIsAuthenticated(false);
-    setPin("");
-  };
-
-  // ดักฟังการพิมพ์ตัวเลขจากแป้นพิมพ์คอมพิวเตอร์
-  useEffect(() => {
-    if (isAuthenticated) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (e.key >= "0" && e.key <= "9") {
-        handleKeyPress(e.key);
-      } else if (e.key === "Backspace") {
-        handleDelete();
-      } else if (e.key === "Enter") {
-        handlePinSubmit();
-      } else if (e.key === "Escape") {
-        handleClear();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [pin, isAuthenticated]);
+  const isCloudConnected = true;
 
   const [activeTab, setActiveTab] = useState<"overview" | "rounds" | "checkpoints" | "staff" | "vehicles" | "incidents" | "ai" | "archive" | "parkingIntelligence">("overview");
   const [lineSent, setLineSent] = useState(false);
@@ -983,22 +1085,58 @@ export default function SupervisorPage() {
     setGuardForm({ name: "", pin: "", shift: "morning", phone: "", role: "guard" });
   };
 
-  const onlyGuards = guards.filter((g) => g.role !== "supervisor" && g.id !== "s1" && !g.name.includes("หัวหน้า"));
-  const completedCheckpoints = new Set(patrolLogs.map((l) => l.checkpointId));
-  const complianceRate = Math.min(100, Math.round((completedCheckpoints.size / Math.max(checkpoints.length, 1)) * 100));
-  const issuesFound = patrolLogs.filter((l) => l.status === "issue").length;
-  const unknownCars = parkingScans.filter((s) => !s.isStaff).length;
+  const onlyGuards = useMemo(
+    () => guards.filter((g) => g.role !== "supervisor" && g.id !== "s1" && !g.name.includes("หัวหน้า")),
+    [guards]
+  );
+  const completedCheckpoints = useMemo(
+    () => new Set(patrolLogs.map((l) => l.checkpointId)),
+    [patrolLogs]
+  );
+  const complianceRate = useMemo(
+    () => Math.min(100, Math.round((completedCheckpoints.size / Math.max(checkpoints.length, 1)) * 100)),
+    [completedCheckpoints, checkpoints.length]
+  );
+  const issuesFound = useMemo(
+    () => patrolLogs.filter((l) => l.status === "issue").length,
+    [patrolLogs]
+  );
+  const unknownCars = useMemo(
+    () => parkingScans.filter((s) => !s.isStaff).length,
+    [parkingScans]
+  );
 
   // Patrol Rounds & Shift KPI Calculations
-  const supervisorRounds = (patrolRounds && patrolRounds.length > 0) ? patrolRounds : defaultPatrolRounds;
-  const supervisorNow = new Date();
-  const currentActiveRound = getCurrentRound(supervisorRounds, supervisorNow);
-  const currentActiveShift = getCurrentShift(supervisorNow);
-  const shiftKPIs = calculateShiftKPIs(supervisorRounds, checkpoints, patrolLogs, shiftReports || [], supervisorNow);
-  const guardKPIs = calculateGuardKPIs(onlyGuards, supervisorRounds, checkpoints, patrolLogs, shiftReports || [], supervisorNow, parkingScans);
-  const allRoundsProgress = supervisorRounds.map((r) => getRoundProgress(r, checkpoints, patrolLogs, supervisorNow));
-  const todayDateStr = getBangkokDateString(supervisorNow);
-  const todayPhotosLogs = patrolLogs.filter((l) => !!l.imageUrl && getLogDateString(l.timestamp) === todayDateStr);
+  const supervisorRounds = useMemo(
+    () => ((patrolRounds && patrolRounds.length > 0) ? patrolRounds : defaultPatrolRounds),
+    [patrolRounds]
+  );
+  const supervisorNow = useMemo(() => new Date(), [patrolLogs.length, parkingScans.length]);
+  const currentActiveRound = useMemo(
+    () => getCurrentRound(supervisorRounds, supervisorNow),
+    [supervisorRounds, supervisorNow]
+  );
+  const currentActiveShift = useMemo(
+    () => getCurrentShift(supervisorNow),
+    [supervisorNow]
+  );
+  const shiftKPIs = useMemo(
+    () => calculateShiftKPIs(supervisorRounds, checkpoints, patrolLogs, shiftReports || [], supervisorNow),
+    [supervisorRounds, checkpoints, patrolLogs, shiftReports, supervisorNow]
+  );
+  const guardKPIs = useMemo(
+    () => calculateGuardKPIs(onlyGuards, supervisorRounds, checkpoints, patrolLogs, shiftReports || [], supervisorNow, parkingScans),
+    [onlyGuards, supervisorRounds, checkpoints, patrolLogs, shiftReports, supervisorNow, parkingScans]
+  );
+  const allRoundsProgress = useMemo(
+    () => supervisorRounds.map((r) => getRoundProgress(r, checkpoints, patrolLogs, supervisorNow)),
+    [supervisorRounds, checkpoints, patrolLogs, supervisorNow]
+  );
+  const todayDateStr = useMemo(() => getBangkokDateString(supervisorNow), [supervisorNow]);
+  const todayPhotosLogs = useMemo(
+    () => patrolLogs.filter((l) => !!l.imageUrl && getLogDateString(l.timestamp) === todayDateStr),
+    [patrolLogs, todayDateStr]
+  );
 
   const handleOpenRoundsConfig = () => {
     setTempRounds(JSON.parse(JSON.stringify(supervisorRounds)));
@@ -1018,39 +1156,61 @@ export default function SupervisorPage() {
   };
 
   // 365-Day Archival Calculations
-  const currentFiscalYear = getThaiFiscalYear(new Date());
-  const filterByArchiveCriteria = (item: { timestamp: string }) => {
-    if (!item.timestamp) return false;
-    if (!isOlderThanDays(item.timestamp, archiveCutoffDays)) return false;
-    if (archiveSelectedFiscalYear !== "ALL") {
-      const fy = getThaiFiscalYear(item.timestamp);
-      if (fy.code !== archiveSelectedFiscalYear) return false;
-    }
-    return true;
-  };
+  const currentFiscalYear = useMemo(() => getThaiFiscalYear(new Date()), []);
+  const {
+    previewEligiblePatrol,
+    previewEligibleParking,
+    previewEligibleIncidents,
+    previewTotal,
+    totalCloudRecords,
+    expired90Total,
+    expired365Total,
+    availableFiscalYears,
+  } = useMemo(() => {
+    const filterByArchiveCriteria = (item: { timestamp: string }) => {
+      if (!item.timestamp) return false;
+      if (!isOlderThanDays(item.timestamp, archiveCutoffDays)) return false;
+      if (archiveSelectedFiscalYear !== "ALL") {
+        const fy = getThaiFiscalYear(item.timestamp);
+        if (fy.code !== archiveSelectedFiscalYear) return false;
+      }
+      return true;
+    };
 
-  const previewEligiblePatrol = patrolLogs.filter(filterByArchiveCriteria);
-  const previewEligibleParking = parkingScans.filter(filterByArchiveCriteria);
-  const previewEligibleIncidents = incidents.filter(filterByArchiveCriteria);
-  const previewTotal = previewEligiblePatrol.length + previewEligibleParking.length + previewEligibleIncidents.length;
+    const eligiblePatrol = patrolLogs.filter(filterByArchiveCriteria);
+    const eligibleParking = parkingScans.filter(filterByArchiveCriteria);
+    const eligibleIncidents = incidents.filter(filterByArchiveCriteria);
+    const prevTotal = eligiblePatrol.length + eligibleParking.length + eligibleIncidents.length;
 
-  const totalCloudRecords = patrolLogs.length + parkingScans.length + incidents.length;
-  const expired90Total =
-    patrolLogs.filter((p) => isOlderThanDays(p.timestamp, 90)).length +
-    parkingScans.filter((s) => isOlderThanDays(s.timestamp, 90)).length +
-    incidents.filter((i) => isOlderThanDays(i.timestamp, 90)).length;
-  const expired365Total =
-    patrolLogs.filter((p) => isOlderThanDays(p.timestamp, 365)).length +
-    parkingScans.filter((s) => isOlderThanDays(s.timestamp, 365)).length +
-    incidents.filter((i) => isOlderThanDays(i.timestamp, 365)).length;
+    const cloudTotal = patrolLogs.length + parkingScans.length + incidents.length;
+    const exp90 =
+      patrolLogs.filter((p) => isOlderThanDays(p.timestamp, 90)).length +
+      parkingScans.filter((s) => isOlderThanDays(s.timestamp, 90)).length +
+      incidents.filter((i) => isOlderThanDays(i.timestamp, 90)).length;
+    const exp365 =
+      patrolLogs.filter((p) => isOlderThanDays(p.timestamp, 365)).length +
+      parkingScans.filter((s) => isOlderThanDays(s.timestamp, 365)).length +
+      incidents.filter((i) => isOlderThanDays(i.timestamp, 365)).length;
 
-  const availableFiscalYears = Array.from(
-    new Set([
-      ...patrolLogs.map((p) => getThaiFiscalYear(p.timestamp).code),
-      ...parkingScans.map((s) => getThaiFiscalYear(s.timestamp).code),
-      ...incidents.map((i) => getThaiFiscalYear(i.timestamp).code),
-    ])
-  ).sort().reverse();
+    const fiscalYears = Array.from(
+      new Set([
+        ...patrolLogs.map((p) => getThaiFiscalYear(p.timestamp).code),
+        ...parkingScans.map((s) => getThaiFiscalYear(s.timestamp).code),
+        ...incidents.map((i) => getThaiFiscalYear(i.timestamp).code),
+      ])
+    ).sort().reverse();
+
+    return {
+      previewEligiblePatrol: eligiblePatrol,
+      previewEligibleParking: eligibleParking,
+      previewEligibleIncidents: eligibleIncidents,
+      previewTotal: prevTotal,
+      totalCloudRecords: cloudTotal,
+      expired90Total: exp90,
+      expired365Total: exp365,
+      availableFiscalYears: fiscalYears,
+    };
+  }, [patrolLogs, parkingScans, incidents, archiveCutoffDays, archiveSelectedFiscalYear]);
 
   // Month-by-Month Analytics & Fleet Vehicle Calculations
   const THAI_MONTH_NAMES = [
@@ -1058,7 +1218,7 @@ export default function SupervisorPage() {
     "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"
   ];
 
-  const availableMonths = (() => {
+  const availableMonths = useMemo(() => {
     const list: Array<{ key: string; label: string; yearThai: number; monthName: string }> = [];
     const base = new Date();
     for (let i = 0; i < 6; i++) {
@@ -1074,7 +1234,7 @@ export default function SupervisorPage() {
       });
     }
     return list;
-  })();
+  }, []);
 
   const [selectedYearStr, selectedMonthStr] = (selectedMonth || currentMonthKey).split("-");
   const selectedYearNum = parseInt(selectedYearStr, 10);
@@ -1098,251 +1258,269 @@ export default function SupervisorPage() {
     hasRealLogs: boolean;
   }
 
-  const monthlyDaysData: DayAnalytics[] = [];
-  for (let d = 1; d <= daysInSelectedMonth; d++) {
-    const dateStr = `${selectedYearStr}-${selectedMonthStr}-${String(d).padStart(2, "0")}`;
-    const isFuture = isSelectedCurrentMonth && d > currentDayNum;
-    const isToday = isSelectedCurrentMonth && d === currentDayNum;
+  const monthlyDaysData: DayAnalytics[] = useMemo(() => {
+    const data: DayAnalytics[] = [];
+    for (let d = 1; d <= daysInSelectedMonth; d++) {
+      const dateStr = `${selectedYearStr}-${selectedMonthStr}-${String(d).padStart(2, "0")}`;
+      const isFuture = isSelectedCurrentMonth && d > currentDayNum;
+      const isToday = isSelectedCurrentMonth && d === currentDayNum;
 
-    const dayPatrol = patrolLogs.filter((p) => p.timestamp?.startsWith(dateStr));
-    const dayParking = parkingScans.filter((s) => s.timestamp?.startsWith(dateStr));
-    const dayReports = shiftReports.filter(
-      (r) => (r.dateString && r.dateString === dateStr) || (r.timestamp && r.timestamp.startsWith(dateStr))
-    );
+      const dayPatrol = patrolLogs.filter((p) => p.timestamp?.startsWith(dateStr));
+      const dayParking = parkingScans.filter((s) => s.timestamp?.startsWith(dateStr));
+      const dayReports = shiftReports.filter(
+        (r) => (r.dateString && r.dateString === dateStr) || (r.timestamp && r.timestamp.startsWith(dateStr))
+      );
 
-    const hasRealLogs = dayPatrol.length > 0 || dayParking.length > 0 || dayReports.length > 0;
+      const hasRealLogs = dayPatrol.length > 0 || dayParking.length > 0 || dayReports.length > 0;
 
-    if (isFuture) {
-      monthlyDaysData.push({
-        dayNum: d,
-        dateStr,
-        isToday: false,
-        isFuture: true,
-        complianceRate: 0,
-        onTimeRate: 0,
-        scansCount: 0,
-        vehiclesCount: 0,
-        reportsCount: 0,
-        hasRealLogs: false,
-      });
-    } else if (hasRealLogs) {
-      const uniqueCp = new Set(dayPatrol.map((p) => p.checkpointId)).size;
-      const comp = checkpoints.length > 0 ? Math.min(100, Math.round((uniqueCp / checkpoints.length) * 100)) : 0;
-      const onTimeScans = dayPatrol.filter((p) => p.isOnTime !== false).length;
-      const onTimeRate = dayPatrol.length > 0 ? Math.round((onTimeScans / dayPatrol.length) * 100) : 0;
+      if (isFuture) {
+        data.push({
+          dayNum: d,
+          dateStr,
+          isToday: false,
+          isFuture: true,
+          complianceRate: 0,
+          onTimeRate: 0,
+          scansCount: 0,
+          vehiclesCount: 0,
+          reportsCount: 0,
+          hasRealLogs: false,
+        });
+      } else if (hasRealLogs) {
+        const uniqueCp = new Set(dayPatrol.map((p) => p.checkpointId)).size;
+        const comp = checkpoints.length > 0 ? Math.min(100, Math.round((uniqueCp / checkpoints.length) * 100)) : 0;
+        const onTimeScans = dayPatrol.filter((p) => p.isOnTime !== false).length;
+        const onTimeRate = dayPatrol.length > 0 ? Math.round((onTimeScans / dayPatrol.length) * 100) : 0;
 
-      monthlyDaysData.push({
-        dayNum: d,
-        dateStr,
-        isToday,
-        isFuture: false,
-        complianceRate: comp,
-        onTimeRate: onTimeRate,
-        scansCount: dayPatrol.length,
-        vehiclesCount: dayParking.length,
-        reportsCount: dayReports.length,
-        hasRealLogs: true,
-      });
-    } else {
-      // ไม่มีข้อมูลจริงสำหรับวันนี้ -> ค่าเป็น 0 ทั้งหมด (ไม่มีการจำลองข้อมูล)
-      monthlyDaysData.push({
-        dayNum: d,
-        dateStr,
-        isToday,
-        isFuture: false,
-        complianceRate: 0,
-        onTimeRate: 0,
-        scansCount: 0,
-        vehiclesCount: 0,
-        reportsCount: 0,
-        hasRealLogs: false,
-      });
-    }
-  }
-
-  const daysWithLogs = monthlyDaysData.filter((d) => d.hasRealLogs);
-  const monthlyAvgCompliance = daysWithLogs.length > 0
-    ? Math.round(daysWithLogs.reduce((acc, d) => acc + d.complianceRate, 0) / daysWithLogs.length)
-    : 0;
-  const monthlyAvgOnTime = daysWithLogs.length > 0
-    ? Math.round(daysWithLogs.reduce((acc, d) => acc + d.onTimeRate, 0) / daysWithLogs.length)
-    : 0;
-  const monthlyTotalVehicles = monthlyDaysData.reduce((acc, d) => acc + d.vehiclesCount, 0);
-  const monthlyTotalReports = monthlyDaysData.reduce((acc, d) => acc + d.reportsCount, 0);
-  const bestDay = daysWithLogs.length > 0
-    ? [...daysWithLogs].sort((a, b) => (b.complianceRate + b.onTimeRate) - (a.complianceRate + a.onTimeRate))[0]
-    : null;
-
-  const monthPrefix = `${selectedYearStr}-${selectedMonthStr}`;
-  const monthPatrolLogs = patrolLogs.filter((p) => {
-    const d = getLogDateString(p.timestamp);
-    return d.startsWith(monthPrefix) || p.timestamp?.startsWith(monthPrefix);
-  });
-  const monthParkingScans = parkingScans.filter((s) => {
-    const d = getLogDateString(s.timestamp);
-    return d.startsWith(monthPrefix) || s.timestamp?.startsWith(monthPrefix);
-  });
-  const monthShiftReports = shiftReports.filter((r) => {
-    const d = r.dateString || getLogDateString(r.timestamp);
-    return d.startsWith(monthPrefix) || r.timestamp?.startsWith(monthPrefix);
-  });
-
-  const getShiftRealStats = (shiftId: 'morning' | 'afternoon' | 'night') => {
-    const shiftLogs = monthPatrolLogs.filter((p) => p.shift === shiftId);
-    const shiftReportsCount = monthShiftReports.filter((r) => r.shiftId === shiftId).length;
-    
-    const uniqueCp = new Set(shiftLogs.map((p) => p.checkpointId)).size;
-    const compRate = (shiftLogs.length > 0 && checkpoints.length > 0)
-      ? Math.min(100, Math.round((uniqueCp / checkpoints.length) * 100))
-      : 0;
-    
-    const onTimeScans = shiftLogs.filter((p) => p.isOnTime !== false).length;
-    const onTimeRate = shiftLogs.length > 0 ? Math.round((onTimeScans / shiftLogs.length) * 100) : 0;
-    
-    const shiftRounds = supervisorRounds.filter((r) => r.shift === shiftId).map((r) => r.id);
-    const vehiclesInShift = monthParkingScans.filter((s) => shiftRounds.includes(s.round || "")).length;
-    const avgVehicles = daysWithLogs.length > 0 ? Math.round(vehiclesInShift / daysWithLogs.length) : vehiclesInShift;
-    
-    return {
-      scansCount: shiftLogs.length,
-      complianceRate: compRate,
-      onTimeRate,
-      vehiclesCount: vehiclesInShift,
-      avgVehicles,
-      reportsCount: shiftReportsCount,
-    };
-  };
-
-  const morningStats = getShiftRealStats("morning");
-  const afternoonStats = getShiftRealStats("afternoon");
-  const nightStats = getShiftRealStats("night");
-
-  const monthlyShiftStats = [
-    {
-      id: "morning",
-      name: "กะเช้า",
-      timeWindow: "08:00 - 16:00 น.",
-      icon: Sun,
-      color: "from-amber-500 to-orange-500",
-      bgLight: "bg-amber-50 border-amber-200 text-amber-900",
-      badgeBg: "bg-amber-100 text-amber-800",
-      roundsCount: supervisorRounds.filter((r) => r.shift === "morning").length,
-      complianceRate: morningStats.complianceRate,
-      onTimeRate: morningStats.onTimeRate,
-      avgVehicles: morningStats.avgVehicles,
-      reportsCount: morningStats.reportsCount,
-      rank: 1,
-      highlight: "หนาแน่นช่วงเปิดบริการ OPD และลานแพทย์",
-    },
-    {
-      id: "afternoon",
-      name: "กะบ่าย",
-      timeWindow: "16:00 - 24:00 น.",
-      icon: Coffee,
-      color: "from-sky-500 to-blue-600",
-      bgLight: "bg-sky-50 border-sky-200 text-sky-900",
-      badgeBg: "bg-sky-100 text-sky-800",
-      roundsCount: supervisorRounds.filter((r) => r.shift === "afternoon").length,
-      complianceRate: afternoonStats.complianceRate,
-      onTimeRate: afternoonStats.onTimeRate,
-      avgVehicles: afternoonStats.avgVehicles,
-      reportsCount: afternoonStats.reportsCount,
-      rank: 2,
-      highlight: "ตรวจช่วงเปลี่ยนเวรและปิดอาคารผู้ป่วยนอก",
-    },
-    {
-      id: "night",
-      name: "กะดึก",
-      timeWindow: "24:00 - 08:00 น.",
-      icon: Moon,
-      color: "from-indigo-600 to-slate-900",
-      bgLight: "bg-indigo-50 border-indigo-200 text-indigo-900",
-      badgeBg: "bg-indigo-100 text-indigo-800",
-      roundsCount: supervisorRounds.filter((r) => r.shift === "night").length,
-      complianceRate: nightStats.complianceRate,
-      onTimeRate: nightStats.onTimeRate,
-      avgVehicles: nightStats.avgVehicles,
-      reportsCount: nightStats.reportsCount,
-      rank: 3,
-      highlight: "เน้นตรวจรถค้างคืน และความปลอดภัยรอบรั้ว รพ.",
-    },
-  ];
-
-  const monthlyGuardStats = onlyGuards.map((guard) => {
-    const guardLogs = monthPatrolLogs.filter((p) => p.guardName?.includes(guard.name) || p.guardId === guard.id);
-    const guardReports = monthShiftReports.filter((r) => r.guardName?.includes(guard.name) || r.guardId === guard.id);
-    const guardPhotos = guardLogs.filter((p) => !!p.imageUrl).length;
-
-    const totalScans = guardLogs.length;
-    const onTimeScans = guardLogs.filter((p) => p.isOnTime !== false).length;
-    const onTimeRate = totalScans > 0 ? Math.round((onTimeScans / totalScans) * 100) : 0;
-    const reportsCount = guardReports.length;
-    const photosCount = guardPhotos;
-    const vehiclesContributed = monthParkingScans.filter((s) => s.guardName?.includes(guard.name)).length;
-    const totalAllScans = totalScans + vehiclesContributed;
-
-    let grade = "-";
-    let gradeColor = "text-slate-500 bg-slate-100 border-slate-200";
-    if (totalScans > 0 || vehiclesContributed > 0 || reportsCount > 0) {
-      if (onTimeRate >= 95 && reportsCount >= 10) {
-        grade = "A+";
-        gradeColor = "text-emerald-800 bg-emerald-100 border-emerald-400";
-      } else if (onTimeRate >= 90) {
-        grade = "A";
-        gradeColor = "text-sky-800 bg-sky-100 border-sky-300";
-      } else if (onTimeRate >= 80) {
-        grade = "B+";
-        gradeColor = "text-amber-800 bg-amber-100 border-amber-300";
+        data.push({
+          dayNum: d,
+          dateStr,
+          isToday,
+          isFuture: false,
+          complianceRate: comp,
+          onTimeRate: onTimeRate,
+          scansCount: dayPatrol.length,
+          vehiclesCount: dayParking.length,
+          reportsCount: dayReports.length,
+          hasRealLogs: true,
+        });
       } else {
-        grade = "B";
-        gradeColor = "text-rose-800 bg-rose-100 border-rose-300";
+        // ไม่มีข้อมูลจริงสำหรับวันนี้ -> ค่าเป็น 0 ทั้งหมด (ไม่มีการจำลองข้อมูล)
+        data.push({
+          dayNum: d,
+          dateStr,
+          isToday,
+          isFuture: false,
+          complianceRate: 0,
+          onTimeRate: 0,
+          scansCount: 0,
+          vehiclesCount: 0,
+          reportsCount: 0,
+          hasRealLogs: false,
+        });
       }
     }
+    return data;
+  }, [daysInSelectedMonth, selectedYearStr, selectedMonthStr, isSelectedCurrentMonth, currentDayNum, patrolLogs, parkingScans, shiftReports, checkpoints.length]);
 
-    return {
-      guard,
-      name: guard.name,
-      shift: guard.shift === "morning" ? "กะเช้า" : "กะดึก",
-      phone: guard.phone || "08x-xxx-xxxx",
-      totalScans,
-      onTimeRate,
-      reportsCount,
-      photosCount,
-      vehiclesContributed,
-      totalAllScans,
-      grade,
-      gradeColor,
-      isDiligent: reportsCount >= 10,
+  const daysWithLogs = useMemo(() => monthlyDaysData.filter((d) => d.hasRealLogs), [monthlyDaysData]);
+  const monthlyAvgCompliance = useMemo(() => (daysWithLogs.length > 0
+    ? Math.round(daysWithLogs.reduce((acc, d) => acc + d.complianceRate, 0) / daysWithLogs.length)
+    : 0), [daysWithLogs]);
+  const monthlyAvgOnTime = useMemo(() => (daysWithLogs.length > 0
+    ? Math.round(daysWithLogs.reduce((acc, d) => acc + d.onTimeRate, 0) / daysWithLogs.length)
+    : 0), [daysWithLogs]);
+  const monthlyTotalVehicles = useMemo(() => monthlyDaysData.reduce((acc, d) => acc + d.vehiclesCount, 0), [monthlyDaysData]);
+  const monthlyTotalReports = useMemo(() => monthlyDaysData.reduce((acc, d) => acc + d.reportsCount, 0), [monthlyDaysData]);
+  const bestDay = useMemo(() => (daysWithLogs.length > 0
+    ? [...daysWithLogs].sort((a, b) => (b.complianceRate + b.onTimeRate) - (a.complianceRate + a.onTimeRate))[0]
+    : null), [daysWithLogs]);
+
+  const monthPrefix = `${selectedYearStr}-${selectedMonthStr}`;
+  const monthPatrolLogs = useMemo(() => patrolLogs.filter((p) => {
+    const d = getLogDateString(p.timestamp);
+    return d.startsWith(monthPrefix) || p.timestamp?.startsWith(monthPrefix);
+  }), [patrolLogs, monthPrefix]);
+  const monthParkingScans = useMemo(() => parkingScans.filter((s) => {
+    const d = getLogDateString(s.timestamp);
+    return d.startsWith(monthPrefix) || s.timestamp?.startsWith(monthPrefix);
+  }), [parkingScans, monthPrefix]);
+  const monthShiftReports = useMemo(() => shiftReports.filter((r) => {
+    const d = r.dateString || getLogDateString(r.timestamp);
+    return d.startsWith(monthPrefix) || r.timestamp?.startsWith(monthPrefix);
+  }), [shiftReports, monthPrefix]);
+
+  const monthlyShiftStats = useMemo(() => {
+    const getShiftRealStats = (shiftId: 'morning' | 'afternoon' | 'night') => {
+      const shiftLogs = monthPatrolLogs.filter((p) => p.shift === shiftId);
+      const shiftReportsCount = monthShiftReports.filter((r) => r.shiftId === shiftId).length;
+      
+      const uniqueCp = new Set(shiftLogs.map((p) => p.checkpointId)).size;
+      const compRate = (shiftLogs.length > 0 && checkpoints.length > 0)
+        ? Math.min(100, Math.round((uniqueCp / checkpoints.length) * 100))
+        : 0;
+      
+      const onTimeScans = shiftLogs.filter((p) => p.isOnTime !== false).length;
+      const onTimeRate = shiftLogs.length > 0 ? Math.round((onTimeScans / shiftLogs.length) * 100) : 0;
+      
+      const shiftRounds = supervisorRounds.filter((r) => r.shift === shiftId).map((r) => r.id);
+      const vehiclesInShift = monthParkingScans.filter((s) => shiftRounds.includes(s.round || "")).length;
+      const avgVehicles = daysWithLogs.length > 0 ? Math.round(vehiclesInShift / daysWithLogs.length) : vehiclesInShift;
+      
+      return {
+        scansCount: shiftLogs.length,
+        complianceRate: compRate,
+        onTimeRate,
+        vehiclesCount: vehiclesInShift,
+        avgVehicles,
+        reportsCount: shiftReportsCount,
+      };
     };
-  }).sort((a, b) => b.totalAllScans - a.totalAllScans || (b.reportsCount - a.reportsCount));
+
+    const morningStats = getShiftRealStats("morning");
+    const afternoonStats = getShiftRealStats("afternoon");
+    const nightStats = getShiftRealStats("night");
+
+    return [
+      {
+        id: "morning",
+        name: "กะเช้า",
+        timeWindow: "08:00 - 16:00 น.",
+        icon: Sun,
+        color: "from-amber-500 to-orange-500",
+        bgLight: "bg-amber-50 border-amber-200 text-amber-900",
+        badgeBg: "bg-amber-100 text-amber-800",
+        roundsCount: supervisorRounds.filter((r) => r.shift === "morning").length,
+        complianceRate: morningStats.complianceRate,
+        onTimeRate: morningStats.onTimeRate,
+        avgVehicles: morningStats.avgVehicles,
+        reportsCount: morningStats.reportsCount,
+        rank: 1,
+        highlight: "หนาแน่นช่วงเปิดบริการ OPD และลานแพทย์",
+      },
+      {
+        id: "afternoon",
+        name: "กะบ่าย",
+        timeWindow: "16:00 - 24:00 น.",
+        icon: Coffee,
+        color: "from-sky-500 to-blue-600",
+        bgLight: "bg-sky-50 border-sky-200 text-sky-900",
+        badgeBg: "bg-sky-100 text-sky-800",
+        roundsCount: supervisorRounds.filter((r) => r.shift === "afternoon").length,
+        complianceRate: afternoonStats.complianceRate,
+        onTimeRate: afternoonStats.onTimeRate,
+        avgVehicles: afternoonStats.avgVehicles,
+        reportsCount: afternoonStats.reportsCount,
+        rank: 2,
+        highlight: "ตรวจช่วงเปลี่ยนเวรและปิดอาคารผู้ป่วยนอก",
+      },
+      {
+        id: "night",
+        name: "กะดึก",
+        timeWindow: "24:00 - 08:00 น.",
+        icon: Moon,
+        color: "from-indigo-600 to-slate-900",
+        bgLight: "bg-indigo-50 border-indigo-200 text-indigo-900",
+        badgeBg: "bg-indigo-100 text-indigo-800",
+        roundsCount: supervisorRounds.filter((r) => r.shift === "night").length,
+        complianceRate: nightStats.complianceRate,
+        onTimeRate: nightStats.onTimeRate,
+        avgVehicles: nightStats.avgVehicles,
+        reportsCount: nightStats.reportsCount,
+        rank: 3,
+        highlight: "เน้นตรวจรถค้างคืน และความปลอดภัยรอบรั้ว รพ.",
+      },
+    ];
+  }, [monthPatrolLogs, monthShiftReports, checkpoints.length, supervisorRounds, monthParkingScans, daysWithLogs.length]);
+
+  const monthlyGuardStats = useMemo(() => {
+    return onlyGuards.map((guard) => {
+      const guardLogs = monthPatrolLogs.filter((p) => p.guardName?.includes(guard.name) || p.guardId === guard.id);
+      const guardReports = monthShiftReports.filter((r) => r.guardName?.includes(guard.name) || r.guardId === guard.id);
+      const guardPhotos = guardLogs.filter((p) => !!p.imageUrl).length;
+
+      const totalScans = guardLogs.length;
+      const onTimeScans = guardLogs.filter((p) => p.isOnTime !== false).length;
+      const onTimeRate = totalScans > 0 ? Math.round((onTimeScans / totalScans) * 100) : 0;
+      const reportsCount = guardReports.length;
+      const photosCount = guardPhotos;
+      const vehiclesContributed = monthParkingScans.filter((s) => s.guardName?.includes(guard.name)).length;
+      const totalAllScans = totalScans + vehiclesContributed;
+
+      let grade = "-";
+      let gradeColor = "text-slate-500 bg-slate-100 border-slate-200";
+      if (totalScans > 0 || vehiclesContributed > 0 || reportsCount > 0) {
+        if (onTimeRate >= 95 && reportsCount >= 10) {
+          grade = "A+";
+          gradeColor = "text-emerald-800 bg-emerald-100 border-emerald-400";
+        } else if (onTimeRate >= 90) {
+          grade = "A";
+          gradeColor = "text-sky-800 bg-sky-100 border-sky-300";
+        } else if (onTimeRate >= 80) {
+          grade = "B+";
+          gradeColor = "text-amber-800 bg-amber-100 border-amber-300";
+        } else {
+          grade = "B";
+          gradeColor = "text-rose-800 bg-rose-100 border-rose-300";
+        }
+      }
+
+      return {
+        guard,
+        name: guard.name,
+        shift: guard.shift === "morning" ? "กะเช้า" : "กะดึก",
+        phone: guard.phone || "08x-xxx-xxxx",
+        totalScans,
+        onTimeRate,
+        reportsCount,
+        photosCount,
+        vehiclesContributed,
+        totalAllScans,
+        grade,
+        gradeColor,
+        isDiligent: reportsCount >= 10,
+      };
+    }).sort((a, b) => b.totalAllScans - a.totalAllScans || (b.reportsCount - a.reportsCount));
+  }, [onlyGuards, monthPatrolLogs, monthShiftReports, monthParkingScans]);
 
   // Selected Day Vehicle Patrol Breakdown (2 รอบมาตรฐาน: รอบดึก 22:00 น. และ รอบเช้า 06:00 น.)
-  const dayVehiclesScanned = parkingScans.filter((s) => s.timestamp?.startsWith(selectedVehiclePatrolDate));
-  const staffVehiclesDayCount = dayVehiclesScanned.filter((s) => s.isStaff).length;
-  const outsideVehiclesDayCount = dayVehiclesScanned.filter((s) => !s.isStaff).length;
+  const dayVehiclesScanned = useMemo(
+    () => parkingScans.filter((s) => s.timestamp?.startsWith(selectedVehiclePatrolDate)),
+    [parkingScans, selectedVehiclePatrolDate]
+  );
+  const staffVehiclesDayCount = useMemo(
+    () => dayVehiclesScanned.filter((s) => s.isStaff).length,
+    [dayVehiclesScanned]
+  );
+  const outsideVehiclesDayCount = useMemo(
+    () => dayVehiclesScanned.filter((s) => !s.isStaff).length,
+    [dayVehiclesScanned]
+  );
 
   const vehicleInspectionRounds = [
     { id: "22:00", name: "🌙 รอบดึก 22:00 น.", startTime: "21:00", endTime: "23:59", shift: "night", description: "ตรวจความปลอดภัยกลางคืน / เฝ้าระวังรถจอดค้างคืน" },
     { id: "06:00", name: "☀️ รอบเช้า 06:00 น.", startTime: "05:00", endTime: "08:00", shift: "morning", description: "ตรวจความเรียบร้อยและส่งมอบเวรเช้า" },
   ];
 
-  const roundsVehicleBreakdown = vehicleInspectionRounds.map((round) => {
-    const roundScans = dayVehiclesScanned.filter((s) => {
-      if (s.round === round.id || (s.roundName && s.roundName.includes(round.id))) return true;
-      if (!s.timestamp) return false;
-      const timePart = s.timestamp.split("T")[1]?.slice(0, 5);
-      if (!timePart) return false;
-      return timePart >= round.startTime && timePart <= round.endTime;
-    });
+  const roundsVehicleBreakdown = useMemo(() => {
+    return vehicleInspectionRounds.map((round) => {
+      const roundScans = dayVehiclesScanned.filter((s) => {
+        if (s.round === round.id || (s.roundName && s.roundName.includes(round.id))) return true;
+        if (!s.timestamp) return false;
+        const timePart = s.timestamp.split("T")[1]?.slice(0, 5);
+        if (!timePart) return false;
+        return timePart >= round.startTime && timePart <= round.endTime;
+      });
 
-    return {
-      round,
-      totalScans: roundScans.length,
-      staffCount: roundScans.filter((s) => s.isStaff).length,
-      outsideCount: roundScans.filter((s) => !s.isStaff).length,
-      scans: roundScans,
-    };
-  });
+      return {
+        round,
+        totalScans: roundScans.length,
+        staffCount: roundScans.filter((s) => s.isStaff).length,
+        outsideCount: roundScans.filter((s) => !s.isStaff).length,
+        scans: roundScans,
+      };
+    });
+  }, [dayVehiclesScanned]);
 
   const handleGenerateAndSaveDailyAI = async (targetDateStr: string) => {
     setAiGeneratingDaily(true);
@@ -1400,7 +1578,10 @@ export default function SupervisorPage() {
   const selectedSavedAISummary = dailyAISummaries.find((s) => s.dateString === selectedAiArchiveDate);
 
   // 90-Day Parking Intelligence & Weekend Squatter Analytics Calculation
-  const parkingAnalytics90d = analyze90DaysParking(parkingScans, staffVehicles, parkingCutoffDays);
+  const parkingAnalytics90d = useMemo(
+    () => analyze90DaysParking(parkingScans, staffVehicles, parkingCutoffDays),
+    [parkingScans, staffVehicles, parkingCutoffDays]
+  );
 
   const handleRun90DaysAI = async () => {
     setAi90Generating(true);
@@ -1455,132 +1636,6 @@ export default function SupervisorPage() {
     window.URL.revokeObjectURL(url);
   };
 
-  // 1. กำลังตรวจสอบสิทธิ์เซสชัน
-  if (isCheckingAuth) {
-    return (
-      <div className="min-h-screen bg-[#f0f6fa] flex items-center justify-center font-['Sarabun',sans-serif]">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-4 border-sky-200 border-t-sky-600 rounded-full animate-spin" />
-          <span className="text-xs text-slate-500 font-bold">กำลังตรวจสอบสิทธิ์...</span>
-        </div>
-      </div>
-    );
-  }
-
-  // 2. หน้าใส่รหัสผ่านหัวหน้างาน (PIN 9999)
-  if (!isAuthenticated) {
-    return (
-      <main className="min-h-screen bg-[#f0f6fa] text-slate-800 flex flex-col justify-between p-4 sm:p-6 select-none relative overflow-hidden max-w-md mx-auto border-x border-sky-100 shadow-xl font-['Sarabun',sans-serif]">
-        {/* Top Header */}
-        <div className="flex flex-col gap-2 z-10">
-          <div className="flex justify-between items-center">
-            <Link
-              href="/"
-              className="p-2 -ml-2 rounded-xl bg-slate-100 text-slate-600 hover:text-slate-900 active:scale-95 transition-all flex items-center gap-1.5 text-xs font-bold"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>หน้าแรก</span>
-            </Link>
-            <span className="text-[10px] font-bold text-sky-800 bg-sky-100 px-2.5 py-1 rounded-full border border-sky-200 uppercase tracking-wider">
-              SUPERVISOR PORTAL
-            </span>
-          </div>
-
-          <div className="pt-2">
-            <HospitalBrand badgeText="ศูนย์ควบคุมความปลอดภัย" />
-          </div>
-        </div>
-
-        {/* Ambient background glows */}
-        <div className="absolute top-1/4 -left-32 w-80 h-80 bg-sky-200/40 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute top-1/2 -right-32 w-80 h-80 bg-blue-100/50 rounded-full blur-3xl pointer-events-none" />
-
-        {/* PIN Indicators & Card */}
-        <div className="w-full max-w-xs mx-auto text-center my-auto py-4 z-10">
-          <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-sky-600 to-blue-700 flex items-center justify-center text-white mx-auto mb-3 shadow-lg shadow-sky-600/30 ring-4 ring-sky-100">
-            <Lock className="w-8 h-8" />
-          </div>
-          <h1 className="text-2xl font-black tracking-tight text-slate-900">
-            เข้าสู่ระบบหัวหน้างาน
-          </h1>
-          <p className="text-xs text-slate-500 mt-1">
-            กรุณาระบุรหัสผ่าน 4 หลัก เพื่อเข้าใช้งานระบบควบคุม
-          </p>
-
-          <div className="flex justify-center gap-4 my-5">
-            {[0, 1, 2, 3].map((index) => {
-              const isFilled = pin.length > index;
-              return (
-                <div
-                  key={index}
-                  className={`w-5 h-5 rounded-full transition-all duration-200 ${
-                    isFilled
-                      ? "bg-sky-600 scale-110 shadow-md shadow-sky-500/40 ring-2 ring-sky-200"
-                      : "bg-white border-2 border-slate-300"
-                  }`}
-                />
-              );
-            })}
-          </div>
-
-          {pinError ? (
-            <p className="text-rose-600 text-xs font-bold animate-pulse">{pinError}</p>
-          ) : (
-            <p className="text-slate-400 text-xs">เฉพาะหัวหน้างานรักษาความปลอดภัยเท่านั้น</p>
-          )}
-        </div>
-
-        {/* Keypad */}
-        <div className="w-full max-w-xs mx-auto z-10 pb-6">
-          <div className="grid grid-cols-3 gap-2.5 mb-3">
-            {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((n) => (
-              <button
-                key={n}
-                type="button"
-                onClick={() => handleKeyPress(n)}
-                className="h-14 rounded-2xl bg-white border border-slate-200 text-2xl font-bold text-slate-800 hover:bg-sky-50 active:scale-95 active:bg-sky-600 active:text-white transition-all flex items-center justify-center shadow-xs cursor-pointer"
-              >
-                {n}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={handleClear}
-              className="h-14 rounded-2xl bg-slate-100 text-xs font-bold text-slate-500 hover:text-slate-800 active:scale-95 transition-all flex items-center justify-center cursor-pointer"
-            >
-              ล้าง
-            </button>
-            <button
-              type="button"
-              onClick={() => handleKeyPress("0")}
-              className="h-14 rounded-2xl bg-white border border-slate-200 text-2xl font-bold text-slate-800 hover:bg-sky-50 active:scale-95 active:bg-sky-600 active:text-white transition-all flex items-center justify-center shadow-xs cursor-pointer"
-            >
-              0
-            </button>
-            <button
-              type="button"
-              onClick={handleDelete}
-              className="h-14 rounded-2xl bg-slate-100 text-slate-500 hover:text-slate-800 active:scale-95 transition-all flex items-center justify-center cursor-pointer"
-              title="ลบตัวเลข"
-            >
-              <Delete className="w-6 h-6" />
-            </button>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => handlePinSubmit()}
-            disabled={pin.length < 4}
-            className="w-full py-3.5 bg-gradient-to-r from-sky-600 to-blue-700 hover:from-sky-500 hover:to-blue-600 disabled:opacity-40 text-white font-bold text-sm rounded-2xl shadow-md shadow-sky-600/25 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
-          >
-            <ShieldCheck className="w-4 h-4" />
-            <span>เข้าสู่ระบบหัวหน้างาน</span>
-          </button>
-        </div>
-      </main>
-    );
-  }
-
   // DASHBOARD MAIN VIEW
   return (
     <div className="min-h-screen bg-[#f0f6fa] text-slate-800 flex flex-col font-['Sarabun',sans-serif]">
@@ -1611,7 +1666,7 @@ export default function SupervisorPage() {
 
             <button
               type="button"
-              onClick={handleLogout}
+              onClick={onLogout}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all active:scale-95 cursor-pointer"
               title="ออกจากระบบ / ล็อกหน้าจอหัวหน้างาน"
             >
@@ -7125,3 +7180,60 @@ export default function SupervisorPage() {
     </div>
   );
 }
+
+// ==========================================
+// 3. EXPORT DEFAULT SUPERVISOR PAGE
+// ==========================================
+export default function SupervisorPage() {
+  const { loginSupervisor, logoutSupervisor } = useStore();
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedAuth = sessionStorage.getItem("supervisor_auth_unlocked");
+      if (savedAuth === "true") {
+        loginSupervisor("9999");
+        setIsAuthenticated(true);
+      }
+      setIsCheckingAuth(false);
+    }
+  }, [loginSupervisor]);
+
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen bg-[#f0f6fa] flex items-center justify-center font-['Sarabun',sans-serif]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-sky-200 border-t-sky-600 rounded-full animate-spin" />
+          <span className="text-xs text-slate-500 font-bold">กำลังตรวจสอบสิทธิ์...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <SupervisorPinAuth
+        onSuccess={() => {
+          setIsAuthenticated(true);
+          if (typeof window !== "undefined") {
+            sessionStorage.setItem("supervisor_auth_unlocked", "true");
+          }
+        }}
+      />
+    );
+  }
+
+  return (
+    <SupervisorDashboard
+      onLogout={() => {
+        if (typeof window !== "undefined") {
+          sessionStorage.removeItem("supervisor_auth_unlocked");
+        }
+        logoutSupervisor();
+        setIsAuthenticated(false);
+      }}
+    />
+  );
+}
+

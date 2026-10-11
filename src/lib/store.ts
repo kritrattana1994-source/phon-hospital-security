@@ -515,8 +515,9 @@ export const useStore = create<AppState>()(
       },
 
       loginSupervisor: (pin: string) => {
-        if (pin === '9999') {
-          const sup = get().guards.find(g => g.role === 'supervisor') || {
+        const matchingGuard = get().guards.find(g => g.pin === pin && (g.role === 'supervisor' || g.name.includes('หัวหน้า')));
+        if (pin === '9999' || matchingGuard) {
+          const sup = matchingGuard || get().guards.find(g => g.role === 'supervisor') || {
             id: 'sup-1',
             name: 'หัวหน้างานความปลอดภัย',
             pin: '9999',
