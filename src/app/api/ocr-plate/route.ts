@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createWorker, PSM } from "tesseract.js";
 import fs from "fs";
 import path from "path";
+import { fetchGeminiApiKeyFromCloud } from "@/lib/firebaseService";
+
+let cachedCloudApiKey: string = "";
 
 function getLocalTessdataDir(): string | null {
   const candidates = [
@@ -114,20 +117,31 @@ async function recognizeWithGemini(
   base64Image: string,
   apiKey: string
 ): Promise<{ success: boolean; plateNumber: string; letters: string; digits: string; rawText: string; model: string } | null> {
-  const cleanBase64 = base64Image.replace(/^data:image\/[a-zA-Z]+;base64,/, "").trim();
+  let cleanBase64 = base64Image.trim();
+  let mimeType = "image/jpeg";
+
+  const matchMime = cleanBase64.match(/^data:(image\/[a-zA-Z0-9\-\+\.]+);base64,/);
+  if (matchMime) {
+    mimeType = matchMime[1];
+    cleanBase64 = cleanBase64.replace(/^data:image\/[a-zA-Z0-9\-\+\.]+;base64,/, "").trim();
+  } else {
+    cleanBase64 = cleanBase64.replace(/^data:[^;]+;base64,/, "").trim();
+  }
+
   if (!cleanBase64) return null;
 
+  // จัดลำดับโมเดลที่เร็วและเสถียรที่สุดก่อน (gemini-flash-lite-latest ทำงานเร็วเพียง ~1.5-2.5s)
   const candidateModels = [
+    "gemini-flash-lite-latest",
     "gemini-flash-latest",
-    "gemini-1.5-flash-latest",
-    "gemini-1.5-flash",
+    "gemini-2.5-flash",
   ];
 
   const promptText = `
 คุณคือ AI ตรวจจับป้ายทะเบียนรถในประเทศไทย สำหรับระบบรักษาความปลอดภัย โรงพยาบาลพล
 หน้าที่ของคุณ:
-1. วิเคราะห์และอ่านป้ายทะเบียนรถในภาพ (รองรับทั้งรถยนต์ รถกระบะ รถตู้ และรถจักรยานยนต์)
-2. ส่งคืนเฉพาะ "หมวดอักษรและตัวเลข" เท่านั้น เช่น "ขน 9789", "1กข 1234", "7กศ 8888", "AU 9789"
+1. วิเคราะห์และอ่านป้ายทะเบียนรถในภาพ (รองรับทั้งถ่ายจากรถจริง และถ่ายจากหน้าจอคอมพิวเตอร์/แท็บเล็ต หรือป้ายเอียง/มีเงาสะท้อน)
+2. ส่งคืนเฉพาะ "หมวดอักษรและตัวเลข" เท่านั้น เช่น "ภภ 3636", "1กข 1234", "7กศ 8888", "ขน 9789", "AU 9789"
 3. กฎสำคัญมาก (ห้ามผิดเด็ดขาด):
    - ห้ามระบุชื่อจังหวัดโดยเด็ดขาด (ตัดชื่อจังหวัดทิ้ง 100% ไม่ต้องส่งชื่อจังหวัดกลับมา เช่น คำว่า ขอนแก่น, กรุงเทพมหานคร ให้ตัดทิ้ง)
    - สำหรับป้ายรถจักรยานยนต์ (ป้าย 2-3 บรรทัด เช่น บรรทัดบน '1กผ' บรรทัดล่าง '1234'): ให้นำหมวดอักษรด้านบนมารวมกับตัวเลขด้านล่าง เป็น "1กผ 1234"
@@ -139,7 +153,7 @@ async function recognizeWithGemini(
   for (const model of candidateModels) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8500);
+    const timeoutId = setTimeout(() => controller.abort(), 7500);
 
     try {
       const res = await fetch(url, {
@@ -152,7 +166,7 @@ async function recognizeWithGemini(
                 { text: promptText },
                 {
                   inline_data: {
-                    mime_type: "image/jpeg",
+                    mime_type: mimeType,
                     data: cleanBase64,
                   },
                 },
@@ -161,7 +175,7 @@ async function recognizeWithGemini(
           ],
           generationConfig: {
             temperature: 0.1,
-            maxOutputTokens: 200,
+            maxOutputTokens: 60,
           },
         }),
         signal: controller.signal,
@@ -213,30 +227,55 @@ export async function POST(req: NextRequest) {
   let worker: any = null;
   try {
     const body = await req.json();
-    const { image, geminiApiKey: clientKey } = body;
+    const { image, fullImage, geminiApiKey: clientKey } = body;
 
-    if (!image) {
+    if (!image && !fullImage) {
       return NextResponse.json(
         { success: false, error: "Missing image data" },
         { status: 400 }
       );
     }
 
-    // 1. Try Gemini Flash Vision API first if API key is provided
-    const apiKey = (
+    // 1. ดึง Gemini API Key (จาก client, env หรือ Firestore systemSettings อัตโนมัติ)
+    let apiKey = (
       clientKey ||
       process.env.GEMINI_API_KEY ||
       process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
+      cachedCloudApiKey ||
       ""
     ).trim();
 
+    if (!apiKey) {
+      try {
+        apiKey = await fetchGeminiApiKeyFromCloud();
+        if (apiKey) cachedCloudApiKey = apiKey;
+      } catch (cloudErr) {
+        console.warn("Could not fetch gemini key from cloud:", cloudErr);
+      }
+    }
+
     if (apiKey) {
-      const geminiResult = await recognizeWithGemini(image, apiKey);
+      // 1.1 วิเคราะห์จากภาพเป้าหมายหลัก (โซนตัดกรอบเล็งเป้า)
+      const primaryTarget = image || fullImage;
+      let geminiResult = await recognizeWithGemini(primaryTarget, apiKey);
+
+      // 1.2 ถ้าภาพตัดกรอบยังอ่านไม่พบ และมีภาพเต็มมุมกว้าง (fullImage) สำรอง ให้ตรวจจากภาพเต็มมุมกว้างทันที
+      if (
+        (!geminiResult || !geminiResult.success || !geminiResult.plateNumber) &&
+        fullImage &&
+        fullImage !== primaryTarget
+      ) {
+        const fullResult = await recognizeWithGemini(fullImage, apiKey);
+        if (fullResult && fullResult.success && fullResult.plateNumber) {
+          geminiResult = fullResult;
+        }
+      }
+
       if (geminiResult) {
         if (geminiResult.success && geminiResult.plateNumber) {
           return NextResponse.json({
             success: true,
-            engine: geminiResult.model || "gemini-flash",
+            engine: geminiResult.model || "gemini-flash-lite",
             rawText: geminiResult.rawText,
             plateNumber: geminiResult.plateNumber,
             fullPlate: geminiResult.plateNumber,
@@ -245,58 +284,56 @@ export async function POST(req: NextRequest) {
             matches: [geminiResult.plateNumber],
           });
         }
-        // Gemini has evaluated the image and concluded there is no valid license plate.
-        // Return immediately without falling back to heavy Tesseract download.
         return NextResponse.json({
           success: false,
-          engine: geminiResult.model || "gemini-flash",
+          engine: geminiResult.model || "gemini-flash-lite",
           rawText: geminiResult.rawText || "",
-          error: "ไม่พบป้ายทะเบียนในภาพ",
+          error: "ไม่พบป้ายทะเบียนในภาพ (กรุณาจัดให้ป้ายทะเบียนอยู่ตรงกลางกรอบ)",
         });
       }
     }
 
-    // 2. Fallback to Tesseract OCR (Local same-origin / CDN)
-    let buffer: Buffer;
-    if (image.startsWith("data:")) {
-      const base64Data = image.split(",")[1];
-      buffer = Buffer.from(base64Data, "base64");
-    } else {
-      buffer = Buffer.from(image, "base64");
-    }
-
+    // 2. สำรองเฉพาะกรณีมีไฟล์ภาษาไทยบนเครื่องใน local tessdata (ห้ามดาวน์โหลดผ่านเน็ตใน Serverless เพราะจะทำให้ค้าง)
     const localDir = getLocalTessdataDir();
     if (localDir) {
+      const targetImg = image || fullImage;
+      let buffer: Buffer;
+      if (targetImg.startsWith("data:")) {
+        const base64Data = targetImg.split(",")[1];
+        buffer = Buffer.from(base64Data, "base64");
+      } else {
+        buffer = Buffer.from(targetImg, "base64");
+      }
+
       worker = await createWorker(["tha", "eng"], 1, {
         langPath: localDir,
         gzip: false,
         cacheMethod: "none",
       });
-    } else {
-      worker = await createWorker(["tha", "eng"], 1, {
-        langPath: "https://raw.githubusercontent.com/naptha/tessdata/gh-pages/4.0.0",
-        gzip: true,
-        cacheMethod: "readOnly",
+
+      await worker.setParameters({
+        tessedit_pageseg_mode: PSM.AUTO,
+      });
+
+      const { data } = await worker.recognize(buffer);
+      const rawText = data?.text || "";
+      const { fullPlate, plateNumber, digits, letters, candidates, cleanText } = extractLicensePlate(rawText);
+
+      return NextResponse.json({
+        success: !!fullPlate,
+        engine: "tesseract-local",
+        rawText: cleanText,
+        plateNumber: fullPlate,
+        fullPlate,
+        digits,
+        letters,
+        matches: candidates,
       });
     }
 
-    await worker.setParameters({
-      tessedit_pageseg_mode: PSM.AUTO,
-    });
-
-    const { data } = await worker.recognize(buffer);
-    const rawText = data?.text || "";
-    const { fullPlate, plateNumber, digits, letters, candidates, cleanText } = extractLicensePlate(rawText);
-
     return NextResponse.json({
-      success: !!fullPlate,
-      engine: "tesseract-fallback",
-      rawText: cleanText,
-      plateNumber: fullPlate,
-      fullPlate,
-      digits,
-      letters,
-      matches: candidates,
+      success: false,
+      error: "ไม่สามารถประมวลผลรูปภาพได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง",
     });
   } catch (error: any) {
     console.error("API /api/ocr-plate error:", error);

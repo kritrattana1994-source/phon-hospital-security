@@ -529,15 +529,28 @@ function VehicleContent() {
 
       const vw = video.videoWidth;
       const vh = video.videoHeight;
+      if (!vw || !vh) return null;
 
-      // ภาพเต็มความละเอียดสูง สำหรับบันทึกลงระบบและ Google Drive
+      // ภาพเต็มความละเอียดสูง (รักษาสัดส่วนภาพ Aspect Ratio เดิม ไม่บีบอัดเบี้ยวบนมือถือแนวตั้ง)
+      let fw = vw;
+      let fh = vh;
+      const maxDim = 1280;
+      if (fw > maxDim || fh > maxDim) {
+        if (fw >= fh) {
+          fh = Math.round((fh * maxDim) / fw);
+          fw = maxDim;
+        } else {
+          fw = Math.round((fw * maxDim) / fh);
+          fh = maxDim;
+        }
+      }
       const fullCanvas = document.createElement("canvas");
-      fullCanvas.width = Math.min(vw, 1280);
-      fullCanvas.height = Math.min(vh, 720);
+      fullCanvas.width = fw;
+      fullCanvas.height = fh;
       const fullCtx = fullCanvas.getContext("2d");
       if (!fullCtx) return null;
       fullCtx.drawImage(video, 0, 0, fullCanvas.width, fullCanvas.height);
-      const fullDataUrl = fullCanvas.toDataURL("image/jpeg", 0.85);
+      const fullDataUrl = fullCanvas.toDataURL("image/jpeg", 0.90);
 
       // ตัดเฉพาะกรอบกลางที่ผู้ใช้เล็งเห็นบนหน้าจอเป๊ะๆ (Pixel-Perfect Bounding Box Cropping)
       let cropX = 0;
@@ -545,47 +558,53 @@ function VehicleContent() {
       let cropW = 0;
       let cropH = 0;
 
-      if (reticleRef.current) {
-        const videoRect = video.getBoundingClientRect();
-        const reticleRect = reticleRef.current.getBoundingClientRect();
+      const container = (video.parentElement as HTMLElement) || video;
+      const containerRect = container.getBoundingClientRect();
+      const reticleRect = reticleRef.current ? reticleRef.current.getBoundingClientRect() : null;
 
-        if (videoRect.width > 0 && videoRect.height > 0) {
-          const currentZoom = zoomLevel || 1;
-          const scale = Math.max(videoRect.width / vw, videoRect.height / vh) * currentZoom;
-          const visibleW = videoRect.width / scale;
-          const visibleH = videoRect.height / scale;
-          const offsetX = (vw - visibleW) / 2;
-          const offsetY = (vh - visibleH) / 2;
+      if (reticleRect && containerRect.width > 0 && containerRect.height > 0) {
+        const cw = containerRect.width;
+        const ch = containerRect.height;
+        const currentZoom = Math.max(zoomLevel || 1, 1);
 
-          const relX = reticleRect.left - videoRect.left;
-          const relY = reticleRect.top - videoRect.top;
+        // คำนวณตาม CSS object-cover แบบพิกเซลแม่นยำ 100%
+        const baseScale = Math.max(cw / vw, ch / vh);
+        const effectiveScale = baseScale * currentZoom;
+        const displayedW = vw * effectiveScale;
+        const displayedH = vh * effectiveScale;
+        const originX = (cw - displayedW) / 2;
+        const originY = (ch - displayedH) / 2;
 
-          cropX = Math.round(offsetX + (relX / videoRect.width) * visibleW);
-          cropY = Math.round(offsetY + (relY / videoRect.height) * visibleH);
-          cropW = Math.round((reticleRect.width / videoRect.width) * visibleW);
-          cropH = Math.round((reticleRect.height / videoRect.height) * visibleH);
-        }
+        const relX = reticleRect.left - containerRect.left;
+        const relY = reticleRect.top - containerRect.top;
+        const relW = reticleRect.width;
+        const relH = reticleRect.height;
+
+        cropX = Math.round((relX - originX) / effectiveScale);
+        cropY = Math.round((relY - originY) / effectiveScale);
+        cropW = Math.round(relW / effectiveScale);
+        cropH = Math.round(relH / effectiveScale);
       }
 
       // Fallback กรณีไม่ได้ค่าจาก DOM
       if (cropW <= 0 || cropH <= 0) {
-        const currentZoom = zoomLevel || 1;
-        cropW = Math.round((vw * 0.65) / currentZoom);
+        const currentZoom = Math.max(zoomLevel || 1, 1);
+        cropW = Math.round((vw * 0.75) / currentZoom);
         cropH = Math.round(cropW / 2.3);
         cropX = Math.round((vw - cropW) / 2);
         cropY = Math.round((vh - cropH) / 2);
       }
 
-      // เผื่อขอบรอบป้ายทะเบียนเล็กน้อย 4% ป้องกันตัวอักษรตกขอบ
-      const padW = Math.round(cropW * 0.04);
-      const padH = Math.round(cropH * 0.05);
+      // เผื่อขอบรอบป้ายทะเบียน 15% แนวนอน และ 18% แนวตั้ง ป้องกันตัวอักษรหรือสระตกขอบเวลามือสั่น
+      const padW = Math.round(cropW * 0.15);
+      const padH = Math.round(cropH * 0.18);
       cropX = Math.max(0, cropX - padW);
       cropY = Math.max(0, cropY - padH);
       cropW = Math.min(vw - cropX, cropW + padW * 2);
       cropH = Math.min(vh - cropY, cropH + padH * 2);
 
-      const targetWidth = Math.min(Math.max(cropW, 480), 640);
-      const targetHeight = Math.round((targetWidth * cropH) / cropW);
+      const targetWidth = Math.min(Math.max(cropW, 640), 960);
+      const targetHeight = Math.max(Math.round((targetWidth * cropH) / cropW), 180);
       const cropCanvas = document.createElement("canvas");
       cropCanvas.width = targetWidth;
       cropCanvas.height = targetHeight;
@@ -593,7 +612,7 @@ function VehicleContent() {
       if (!cropCtx) return null;
 
       cropCtx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropCanvas.width, cropCanvas.height);
-      const cropDataUrl = cropCanvas.toDataURL("image/jpeg", 0.85);
+      const cropDataUrl = cropCanvas.toDataURL("image/jpeg", 0.90);
 
       // คำนวณค่าความคมชัดและความเปรียบต่างของขอบตัวอักษรป้าย (Luminance Edge Contrast / Sharpness)
       let sharpness = 0;
@@ -709,15 +728,16 @@ function VehicleContent() {
       let detectedPlate = "";
       let serverEvaluated = false;
 
-      // 1. ส่งตรวจจับผ่าน Server API (Gemini Vision API)
+      // 1. ส่งตรวจจับผ่าน Server API (Gemini Vision API - ประมวลผลทั้งภาพตัดกรอบและภาพเต็มมุมกว้าง)
       const controller = new AbortController();
-      const abortTimer = setTimeout(() => controller.abort(), 6500);
+      const abortTimer = setTimeout(() => controller.abort(), 12000);
       try {
         const res = await fetch("/api/ocr-plate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ 
             image: dataUrl,
+            fullImage: fullImageUrl,
             geminiApiKey: geminiApiKey || undefined
           }),
           signal: controller.signal,
@@ -736,11 +756,11 @@ function VehicleContent() {
         clearTimeout(abortTimer);
       }
 
-      // 2. หากตัดกรอบกลางแล้วไม่พบ ลองสแกนภาพเต็มมุมกว้างสำรอง (กรณีป้ายหลุดกรอบเล็ง)
-      if (!detectedPlate && fullImageUrl && fullImageUrl !== dataUrl) {
+      // 2. หากยังไม่พบและ Server ยังไม่ได้ประเมินผลสำเร็จ (เช่น ตัดการเชื่อมต่อ) ลองสแกนภาพเต็มมุมกว้างสำรอง
+      if (!detectedPlate && !serverEvaluated && fullImageUrl && fullImageUrl !== dataUrl) {
         setOcrStatusText("กำลังประมวลผลภาพมุมกว้างสำรอง...");
         const controller2 = new AbortController();
-        const abortTimer2 = setTimeout(() => controller2.abort(), 6500);
+        const abortTimer2 = setTimeout(() => controller2.abort(), 12000);
         try {
           const fallbackRes = await fetch("/api/ocr-plate", {
             method: "POST",
@@ -849,6 +869,19 @@ function VehicleContent() {
     enqueueOcrCapture(frames, targetMode);
   };
 
+  const handleRetryQueueItem = (itemId: string) => {
+    setOcrQueue((prev) =>
+      prev.map((it) => {
+        if (it.id !== itemId) return it;
+        return {
+          ...it,
+          status: "queued",
+          thumbnailUrl: it.fullDataUrl || it.thumbnailUrl,
+        };
+      })
+    );
+  };
+
   // --- Background OCR Queue Worker (ประมวลผลต่อคิวเป็นลำดับตาม FIFO) ---
   useEffect(() => {
     if (isQueueProcessingRef.current) return;
@@ -868,15 +901,16 @@ function VehicleContent() {
         let detectedPlate = "";
         let serverEvaluated = false;
 
-        // 1. ส่งตรวจจับผ่าน Server API (Gemini Vision API)
+        // 1. ส่งตรวจจับผ่าน Server API (Gemini Vision API - ประมวลผลทั้งภาพตัดกรอบและภาพเต็มมุมกว้าง)
         const controller = new AbortController();
-        const abortTimer = setTimeout(() => controller.abort(), 6500);
+        const abortTimer = setTimeout(() => controller.abort(), 12000);
         try {
           const res = await fetch("/api/ocr-plate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               image: nextItem.thumbnailUrl,
+              fullImage: nextItem.fullDataUrl,
               geminiApiKey: geminiApiKey || undefined,
             }),
             signal: controller.signal,
@@ -895,10 +929,10 @@ function VehicleContent() {
           clearTimeout(abortTimer);
         }
 
-        // 2. ถ้ายังไม่พบและมีภาพเต็มมุมกว้าง ลองตรวจจากภาพเต็มมุมกว้างสำรอง (กรณีป้ายหลุดกรอบเล็ง)
-        if (!detectedPlate && nextItem.fullDataUrl && nextItem.fullDataUrl !== nextItem.thumbnailUrl) {
+        // 2. ถ้ายังไม่พบและ Server ยังไม่ได้ตอบกลับ (เช่น สัญญาณเน็ตสะดุด) ให้ลองสแกนภาพเต็มมุมกว้างสำรอง
+        if (!detectedPlate && !serverEvaluated && nextItem.fullDataUrl && nextItem.fullDataUrl !== nextItem.thumbnailUrl) {
           const controller2 = new AbortController();
-          const abortTimer2 = setTimeout(() => controller2.abort(), 6500);
+          const abortTimer2 = setTimeout(() => controller2.abort(), 12000);
           try {
             const fallbackRes = await fetch("/api/ocr-plate", {
               method: "POST",
@@ -2076,12 +2110,16 @@ function VehicleContent() {
                             : "bg-rose-950/80 border-rose-400 text-rose-200"
                         }`}
                       >
-                        {/* Thumbnail Crop */}
-                        <div className="w-10 h-8 rounded-xl overflow-hidden border border-white/20 bg-black shrink-0 relative">
+                        {/* Thumbnail Crop - แตะเพื่อดูรูปขยาย */}
+                        <div 
+                          onClick={() => openFullImage(item.thumbnailUrl || item.fullDataUrl, `ภาพคันที่ ${item.orderNumber}`)}
+                          className="w-12 h-9 rounded-xl overflow-hidden border border-white/20 bg-black shrink-0 relative cursor-pointer group/thumb hover:border-sky-400 transition-all"
+                          title="แตะเพื่อดูภาพที่ถ่าย"
+                        >
                           <img
                             src={item.thumbnailUrl}
                             alt="Crop"
-                            className="w-full h-full object-cover"
+                            className="w-full h-full object-cover group-hover/thumb:scale-105 transition-transform"
                           />
                           {isProcessing && (
                             <div className="absolute inset-0 bg-sky-900/60 backdrop-blur-[1px] flex items-center justify-center">
@@ -2112,10 +2150,22 @@ function VehicleContent() {
                               </>
                             )}
                             {isFailed && (
-                              <>
+                              <div className="flex items-center gap-1.5">
                                 <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                                <span className="text-[10px] text-rose-300">ไม่ชัด / ข้าม</span>
-                              </>
+                                <span className="text-[10px] text-rose-300">ไม่ชัด</span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRetryQueueItem(item.id);
+                                  }}
+                                  className="px-1.5 py-0.5 rounded-md bg-rose-500/30 hover:bg-rose-500 text-rose-100 text-[10px] font-bold flex items-center gap-1 border border-rose-400/40 active:scale-95 transition-all cursor-pointer"
+                                  title="ลองสแกนภาพนี้ใหม่อีกครั้ง"
+                                >
+                                  <RotateCcw className="w-2.5 h-2.5" />
+                                  <span>ลองใหม่</span>
+                                </button>
+                              </div>
                             )}
                           </div>
 
