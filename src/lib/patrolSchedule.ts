@@ -247,6 +247,20 @@ export function getCurrentShift(now: Date = new Date()): {
 }
 
 /**
+ * คืนค่า shiftId ('morning' | 'afternoon' | 'night') จาก timestamp
+ */
+export function getShiftFromTimestamp(timestamp?: string): "morning" | "afternoon" | "night" {
+  if (!timestamp) return "morning";
+  try {
+    const d = new Date(timestamp);
+    if (!isNaN(d.getTime())) {
+      return getCurrentShift(d).id;
+    }
+  } catch {}
+  return "morning";
+}
+
+/**
  * ตรวจสอบว่าบันทึกการสแกนอยู่ในเส้นตาย 1 ชั่วโมงแรกของรอบหรือไม่
  */
 export function isScanOnTime(timestamp: string, round: PatrolRound): boolean {

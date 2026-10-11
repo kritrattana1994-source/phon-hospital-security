@@ -18,7 +18,8 @@ import {
   Send,
   FileText,
   Compass,
-  ExternalLink
+  ExternalLink,
+  Calendar
 } from "lucide-react";
 import Link from "next/link";
 import HospitalBrand from "@/components/HospitalBrand";
@@ -27,7 +28,10 @@ import {
   getCurrentRound, 
   getRoundProgress, 
   getCurrentShift, 
-  defaultPatrolRounds 
+  defaultPatrolRounds,
+  getBangkokDateString,
+  getLogDateString,
+  getShiftFromTimestamp
 } from "@/lib/patrolSchedule";
 
 export default function GuardPage() {
@@ -109,10 +113,40 @@ export default function GuardPage() {
   const progressPercent = roundProgress.percent;
   const completedInRound = roundProgress.completedCount;
 
-  const todayStr = now.toISOString().split("T")[0];
-  const todayScansCount = parkingScans.filter((s) => s.timestamp?.startsWith(todayStr)).length;
-  const activeRoundScansCount = parkingScans.filter((s) => {
-    if (!s.timestamp?.startsWith(todayStr)) return false;
+  const todayDateStr = getBangkokDateString(now);
+
+  // กรองเฉพาะบันทึกของวันปัจจุบัน (Today Only)
+  const todayPatrolLogs = patrolLogs.filter((p) => getLogDateString(p.timestamp) === todayDateStr);
+  const todayParkingScans = parkingScans.filter((s) => getLogDateString(s.timestamp) === todayDateStr);
+
+  // ยอดรวมวันปัจจุบัน
+  const todayPatrolCount = todayPatrolLogs.length;
+  const todayVehicleCount = todayParkingScans.length;
+
+  // แยกยอดตามกะ: เช้า (08:00 - 16:00), บ่าย (16:00 - 24:00), ดึก (24:00 - 08:00)
+  const morningPatrolCount = todayPatrolLogs.filter(
+    (p) => (p.shift === "morning" || getShiftFromTimestamp(p.timestamp) === "morning")
+  ).length;
+  const morningVehicleCount = todayParkingScans.filter(
+    (s) => getShiftFromTimestamp(s.timestamp) === "morning"
+  ).length;
+
+  const afternoonPatrolCount = todayPatrolLogs.filter(
+    (p) => (p.shift === "afternoon" || getShiftFromTimestamp(p.timestamp) === "afternoon")
+  ).length;
+  const afternoonVehicleCount = todayParkingScans.filter(
+    (s) => getShiftFromTimestamp(s.timestamp) === "afternoon"
+  ).length;
+
+  const nightPatrolCount = todayPatrolLogs.filter(
+    (p) => (p.shift === "night" || getShiftFromTimestamp(p.timestamp) === "night")
+  ).length;
+  const nightVehicleCount = todayParkingScans.filter(
+    (s) => getShiftFromTimestamp(s.timestamp) === "night"
+  ).length;
+
+  const todayScansCount = todayVehicleCount;
+  const activeRoundScansCount = todayParkingScans.filter((s) => {
     return s.round === activeRound.id || s.roundName === activeRound.name || s.round === activeRound.name;
   }).length;
 
@@ -560,13 +594,104 @@ export default function GuardPage() {
         </div>
       </main>
 
-      {/* Footer */}
-      <footer className="p-4 bg-white border-t border-sky-100 text-xs text-slate-500 flex items-center justify-between shadow-2xs">
-        <span>สแกนรถแล้ว: <strong className="text-slate-800">{parkingScans.length}</strong> คัน</span>
-        <span>ตรวจแล้ว: <strong className="text-slate-800">{patrolLogs.length}</strong> จุด</span>
-        <span className="text-emerald-600 flex items-center gap-1 font-semibold">
-          <CheckCircle2 className="w-3.5 h-3.5" /> เวรปกติ
-        </span>
+      {/* Footer: สรุปยอดเฉพาะวันปัจจุบัน แบ่งเป็น เช้า / บ่าย / ดึก */}
+      <footer className="bg-white border-t border-sky-100 p-3.5 shadow-lg space-y-2.5 text-xs">
+        {/* หัวข้อแถบสถานะ */}
+        <div className="flex items-center justify-between px-0.5">
+          <div className="flex items-center gap-1.5 font-bold text-slate-800 text-[11px]">
+            <Calendar className="w-3.5 h-3.5 text-sky-600" />
+            <span>ยอดปฏิบัติงานวันนี้ (แยกตามกะ)</span>
+          </div>
+          <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+            <span>ขณะนี้: {activeShift.name}</span>
+          </span>
+        </div>
+
+        {/* ตารางแบ่ง 3 กะ: เช้า / บ่าย / ดึก */}
+        <div className="grid grid-cols-3 gap-1.5 text-center">
+          {/* กะเช้า */}
+          <div className={`p-2 rounded-xl border transition-all ${
+            activeShift.id === "morning"
+              ? "bg-amber-50/90 border-amber-300 text-amber-950 ring-1 ring-amber-200 shadow-2xs"
+              : "bg-slate-50/80 border-slate-200/80 text-slate-600"
+          }`}>
+            <div className="flex items-center justify-center gap-1 font-bold text-[11px] mb-1">
+              <span>☀️ เช้า</span>
+              {activeShift.id === "morning" && (
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+              )}
+            </div>
+            <div className="text-[10px] space-y-0.5">
+              <div className="flex items-center justify-between px-0.5">
+                <span className="text-slate-400">จุดตรวจ:</span>
+                <strong className="font-mono font-bold text-slate-800">{morningPatrolCount}</strong>
+              </div>
+              <div className="flex items-center justify-between px-0.5">
+                <span className="text-slate-400">สแกนรถ:</span>
+                <strong className="font-mono font-bold text-sky-700">{morningVehicleCount}</strong>
+              </div>
+            </div>
+          </div>
+
+          {/* กะบ่าย */}
+          <div className={`p-2 rounded-xl border transition-all ${
+            activeShift.id === "afternoon"
+              ? "bg-sky-50/90 border-sky-300 text-sky-950 ring-1 ring-sky-200 shadow-2xs"
+              : "bg-slate-50/80 border-slate-200/80 text-slate-600"
+          }`}>
+            <div className="flex items-center justify-center gap-1 font-bold text-[11px] mb-1">
+              <span>🌤️ บ่าย</span>
+              {activeShift.id === "afternoon" && (
+                <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-ping" />
+              )}
+            </div>
+            <div className="text-[10px] space-y-0.5">
+              <div className="flex items-center justify-between px-0.5">
+                <span className="text-slate-400">จุดตรวจ:</span>
+                <strong className="font-mono font-bold text-slate-800">{afternoonPatrolCount}</strong>
+              </div>
+              <div className="flex items-center justify-between px-0.5">
+                <span className="text-slate-400">สแกนรถ:</span>
+                <strong className="font-mono font-bold text-sky-700">{afternoonVehicleCount}</strong>
+              </div>
+            </div>
+          </div>
+
+          {/* กะดึก */}
+          <div className={`p-2 rounded-xl border transition-all ${
+            activeShift.id === "night"
+              ? "bg-indigo-50/90 border-indigo-300 text-indigo-950 ring-1 ring-indigo-200 shadow-2xs"
+              : "bg-slate-50/80 border-slate-200/80 text-slate-600"
+          }`}>
+            <div className="flex items-center justify-center gap-1 font-bold text-[11px] mb-1">
+              <span>🌙 ดึก</span>
+              {activeShift.id === "night" && (
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-ping" />
+              )}
+            </div>
+            <div className="text-[10px] space-y-0.5">
+              <div className="flex items-center justify-between px-0.5">
+                <span className="text-slate-400">จุดตรวจ:</span>
+                <strong className="font-mono font-bold text-slate-800">{nightPatrolCount}</strong>
+              </div>
+              <div className="flex items-center justify-between px-0.5">
+                <span className="text-slate-400">สแกนรถ:</span>
+                <strong className="font-mono font-bold text-sky-700">{nightVehicleCount}</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ยอดรวมวันนี้ทั้งหมด */}
+        <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[11px]">
+          <span className="text-slate-500">
+            รวมวันนี้: จุดตรวจ <strong className="text-slate-900 font-bold font-mono">{todayPatrolCount}</strong> จุด • สแกนรถ <strong className="text-sky-700 font-bold font-mono">{todayVehicleCount}</strong> คัน
+          </span>
+          <span className="text-emerald-600 font-semibold flex items-center gap-1 text-[10px]">
+            <CheckCircle2 className="w-3.5 h-3.5" /> เวรปกติ
+          </span>
+        </div>
       </footer>
 
       {/* Modal: Shift Handover Report (ส่งไลน์กลุ่ม) */}
