@@ -1,5 +1,11 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  type Firestore,
+} from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getAuth } from "firebase/auth";
 
@@ -15,7 +21,23 @@ const firebaseConfig = {
 
 // Initialize Firebase only once
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-const db = getFirestore(app);
+
+// ฝั่งเบราว์เซอร์: เปิด offline persistence (IndexedDB) เพื่อให้ข้อมูลสแกนที่บันทึกตอนไม่มีสัญญาณ
+// คงอยู่แม้ปิด/รีโหลดแอป และส่งขึ้น cloud อัตโนมัติเมื่อกลับมาออนไลน์
+// ฝั่งเซิร์ฟเวอร์ (API routes) ไม่มี IndexedDB จึงใช้ค่าเริ่มต้น
+function createDb(): Firestore {
+  if (typeof window !== "undefined") {
+    try {
+      return initializeFirestore(app, {
+        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+      });
+    } catch {
+      // initializeFirestore ถูกเรียกไปแล้ว (เช่น hot reload) หรือเบราว์เซอร์ไม่รองรับ
+    }
+  }
+  return getFirestore(app);
+}
+const db = createDb();
 const storage = getStorage(app);
 const auth = getAuth(app);
 
