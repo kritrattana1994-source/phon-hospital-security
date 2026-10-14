@@ -19,7 +19,6 @@ export async function POST(req: NextRequest) {
     const apiKey =
       (clientGeminiKey || "").trim() ||
       process.env.GEMINI_API_KEY ||
-      process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
       "";
 
     const topSquatters = weekendSquatters.slice(0, 10);

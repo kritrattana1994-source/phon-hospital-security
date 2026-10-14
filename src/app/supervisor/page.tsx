@@ -413,13 +413,9 @@ function SupervisorDashboard({ onLogout }: { onLogout: () => void }) {
   const [galleryCheckpointFilter, setGalleryCheckpointFilter] = useState<string>("all");
 
   // Google Drive Webhook Test State
-  const [testDriveLoading, setTestDriveLoading] = useState(false);
-  const [testDriveResult, setTestDriveResult] = useState<{ success: boolean; message: string; url?: string } | null>(null);
   const [copiedScript, setCopiedScript] = useState(false);
 
   // Google Gemini Vision OCR Test State
-  const [testGeminiLoading, setTestGeminiLoading] = useState(false);
-  const [testGeminiResult, setTestGeminiResult] = useState<{ success: boolean; message: string } | null>(null);
   const [showGeminiKey, setShowGeminiKey] = useState(false);
 
   // 90-Day (3-Month) Archival State (นโยบายคงข้อมูลสด 3 เดือน)
@@ -772,6 +768,9 @@ function SupervisorDashboard({ onLogout }: { onLogout: () => void }) {
     try {
       const res = await fetch("/api/archive/cron");
       const data = await res.json();
+      if (res.status === 401) {
+        throw new Error("รันด้วยมือไม่ได้ ระบบนี้รันอัตโนมัติผ่าน Vercel Cron เท่านั้น");
+      }
       if (!res.ok) {
         throw new Error(data.error || "เกิดข้อผิดพลาดในการรัน Cron");
       }
@@ -785,75 +784,6 @@ function SupervisorDashboard({ onLogout }: { onLogout: () => void }) {
       setArchiveError(`เกิดข้อผิดพลาด: ${err.message}`);
     } finally {
       setArchiveLoading(false);
-    }
-  };
-
-  const handleTestDriveUpload = async () => {
-    setTestDriveLoading(true);
-    setTestDriveResult(null);
-    try {
-      const res = await fetch("/api/test-drive-upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          webhookUrl: googleDriveWebhookUrl,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setTestDriveResult({
-          success: true,
-          message: data.message || "อัปโหลดรูปทดสอบเข้า Google Drive สำเร็จ!",
-          url: data.url,
-        });
-      } else {
-        setTestDriveResult({
-          success: false,
-          message: data.error || "เกิดข้อผิดพลาดในการอัปโหลดรูปทดสอบ",
-        });
-      }
-    } catch (err: any) {
-      setTestDriveResult({
-        success: false,
-        message: err.message || "เกิดข้อผิดพลาดในการเชื่อมต่อ",
-      });
-    } finally {
-      setTestDriveLoading(false);
-    }
-  };
-
-  const handleTestGeminiKey = async () => {
-    if (!geminiApiKey || !geminiApiKey.trim()) {
-      alert("กรุณาระบุ Gemini API Key ก่อนกดทดสอบ");
-      return;
-    }
-    setTestGeminiLoading(true);
-    setTestGeminiResult(null);
-    try {
-      const res = await fetch("/api/test-gemini", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey: geminiApiKey.trim() }),
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setTestGeminiResult({
-          success: true,
-          message: data.message || "✅ เชื่อมต่อ Google Gemini Flash API สำเร็จ 100%!",
-        });
-      } else {
-        setTestGeminiResult({
-          success: false,
-          message: data.error || `❌ เชื่อมต่อล้มเหลว (HTTP ${res.status})`,
-        });
-      }
-    } catch (err: any) {
-      setTestGeminiResult({
-        success: false,
-        message: `❌ เกิดข้อผิดพลาดในการเชื่อมต่อ: ${err?.message || err}`,
-      });
-    } finally {
-      setTestGeminiLoading(false);
     }
   };
 
@@ -5114,53 +5044,8 @@ function SupervisorDashboard({ onLogout }: { onLogout: () => void }) {
                         placeholder="https://script.google.com/macros/s/.../exec"
                         className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500 shadow-2xs"
                       />
-                      <button
-                        type="button"
-                        onClick={handleTestDriveUpload}
-                        disabled={testDriveLoading}
-                        className="px-4 py-2 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-700 hover:to-blue-700 text-white font-bold text-xs rounded-xl shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1.5 shrink-0 disabled:opacity-50"
-                      >
-                        {testDriveLoading ? (
-                          <>
-                            <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            <span>กำลังทดสอบ...</span>
-                          </>
-                        ) : (
-                          <>
-                            <UploadCloud className="w-3.5 h-3.5" />
-                            <span>ทดสอบส่งรูป</span>
-                          </>
-                        )}
-                      </button>
                     </div>
                   </div>
-
-                  {testDriveResult && (
-                    <div className={`p-3 rounded-xl border text-xs flex flex-col gap-1.5 ${
-                      testDriveResult.success
-                        ? "bg-emerald-50 border-emerald-200 text-emerald-900"
-                        : "bg-rose-50 border-rose-200 text-rose-900"
-                    }`}>
-                      <div className="flex items-center gap-2 font-bold">
-                        {testDriveResult.success ? (
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                        ) : (
-                          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-                        )}
-                        <span>{testDriveResult.message}</span>
-                      </div>
-                      {testDriveResult.url && (
-                        <a
-                          href={testDriveResult.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-xs text-sky-700 hover:underline font-semibold flex items-center gap-1 pl-6"
-                        >
-                          <ExternalLink className="w-3 h-3" /> คลิกที่นี่เพื่อเปิดดูรูปตัวอย่างใน Google Drive
-                        </a>
-                      )}
-                    </div>
-                  )}
 
                   <div className="text-[11px] text-slate-600 bg-white/80 p-3 rounded-xl border border-sky-100 space-y-1">
                     <p className="font-bold text-slate-800">ขั้นตอนตั้งค่า Apps Script ใน 3 คลิก:</p>
@@ -5229,24 +5114,6 @@ function SupervisorDashboard({ onLogout }: { onLogout: () => void }) {
                       {showGeminiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleTestGeminiKey}
-                    disabled={testGeminiLoading || !geminiApiKey}
-                    className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-sky-600 hover:from-indigo-700 hover:to-sky-700 text-white font-bold text-xs rounded-xl shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1.5 shrink-0 disabled:opacity-50"
-                  >
-                    {testGeminiLoading ? (
-                      <>
-                        <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        <span>กำลังทดสอบ...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Zap className="w-3.5 h-3.5" />
-                        <span>ทดสอบ API Key</span>
-                      </>
-                    )}
-                  </button>
                 </div>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between text-[11px] text-slate-500 gap-1 pt-0.5">
                   <span>* หากไม่ได้ระบุ หรือไม่มีเน็ต ระบบจะสลับไปใช้ Tesseract OCR (Local Engine) ในเครื่องอัตโนมัติ</span>
@@ -5261,20 +5128,6 @@ function SupervisorDashboard({ onLogout }: { onLogout: () => void }) {
                 </div>
               </div>
 
-              {testGeminiResult && (
-                <div className={`p-3 rounded-xl border text-xs flex items-center gap-2 font-bold ${
-                  testGeminiResult.success
-                    ? "bg-emerald-50 border-emerald-200 text-emerald-900"
-                    : "bg-rose-50 border-rose-200 text-rose-900"
-                }`}>
-                  {testGeminiResult.success ? (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  ) : (
-                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-                  )}
-                  <span>{testGeminiResult.message}</span>
-                </div>
-              )}
             </div>
 
             {/* Archival Operation Wizard Panel */}

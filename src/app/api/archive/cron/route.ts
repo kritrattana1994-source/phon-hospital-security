@@ -36,16 +36,12 @@ async function handleCronArchival(req: NextRequest) {
     const authHeader = req.headers.get("authorization");
     const cronSecret = process.env.CRON_SECRET;
     
-    // ถ้ามีการตั้งค่า CRON_SECRET ใน Vercel ให้ตรวจสอบ Token
-    if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-      // ตรวจสอบ fallback header จาก vercel
-      const isVercelCron = req.headers.get("x-vercel-cron") === "1";
-      if (!isVercelCron) {
-        return NextResponse.json(
-          { error: "Unauthorized: Invalid CRON_SECRET" },
-          { status: 401 }
-        );
-      }
+    // ต้องตั้งค่า CRON_SECRET เสมอ (Vercel Cron จะส่ง Authorization: Bearer <CRON_SECRET> ให้อัตโนมัติ)
+    if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+      return NextResponse.json(
+        { error: "Unauthorized: Invalid or missing CRON_SECRET" },
+        { status: 401 }
+      );
     }
 
     const queryCutoff = req.nextUrl?.searchParams?.get("cutoffDays");
