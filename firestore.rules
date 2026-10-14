@@ -1,0 +1,14 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // อนุญาตเฉพาะ collection ที่แอปใช้จริง ที่เหลือปฏิเสธทั้งหมด
+    // หมายเหตุ: แอปยังไม่มีระบบยืนยันตัวตน จึงยังเปิดอ่าน/เขียนใน collection เหล่านี้
+    match /{collection}/{docId} {
+      allow read, write: if collection in [
+        'patrolLogs', 'parkingScans', 'incidents', 'guards', 'checkpoints',
+        'checklistTemplates', 'staffVehicles', 'shiftReports',
+        'dailyAISummaries', 'archiveAuditLogs', 'systemSettings'
+      ];
+    }
+  }
+}
