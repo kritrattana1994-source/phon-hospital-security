@@ -13,13 +13,9 @@ export async function POST(req: NextRequest) {
       chronicOvernight = [],
       abandonedVehicles = [],
       unregisteredStaffSuspects = [],
-      geminiApiKey: clientGeminiKey,
     } = body;
 
-    const apiKey =
-      (clientGeminiKey || "").trim() ||
-      process.env.GEMINI_API_KEY ||
-      "";
+    const apiKey = (process.env.GEMINI_API_KEY || "").trim();
 
     const topSquatters = weekendSquatters.slice(0, 10);
     const topOvernight = chronicOvernight.slice(0, 5);

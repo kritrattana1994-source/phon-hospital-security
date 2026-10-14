@@ -212,7 +212,7 @@ export function findMatchingStaffVehicle(
 
 function VehicleContent() {
   const router = useRouter();
-  const { currentUser, staffVehicles, addParkingScan, parkingScans, googleDriveWebhookUrl, geminiApiKey } = useStore();
+  const { currentUser, staffVehicles, addParkingScan, parkingScans, googleDriveWebhookUrl } = useStore();
 
   // OCR Processing States
   const [isOcrProcessing, setIsOcrProcessing] = useState(false);
@@ -737,8 +737,7 @@ function VehicleContent() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ 
             image: dataUrl,
-            fullImage: fullImageUrl,
-            geminiApiKey: geminiApiKey || undefined
+            fullImage: fullImageUrl
           }),
           signal: controller.signal,
         });
@@ -766,8 +765,7 @@ function VehicleContent() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ 
-              image: fullImageUrl,
-              geminiApiKey: geminiApiKey || undefined
+              image: fullImageUrl
             }),
             signal: controller2.signal,
           });
@@ -910,8 +908,7 @@ function VehicleContent() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               image: nextItem.thumbnailUrl,
-              fullImage: nextItem.fullDataUrl,
-              geminiApiKey: geminiApiKey || undefined,
+              fullImage: nextItem.fullDataUrl
             }),
             signal: controller.signal,
           });
@@ -938,8 +935,7 @@ function VehicleContent() {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                image: nextItem.fullDataUrl,
-                geminiApiKey: geminiApiKey || undefined,
+                image: nextItem.fullDataUrl
               }),
               signal: controller2.signal,
             });
@@ -1039,7 +1035,7 @@ function VehicleContent() {
     };
 
     runQueueWorker();
-  }, [ocrQueue, staffVehicles, geminiApiKey]);
+  }, [ocrQueue, staffVehicles]);
 
   // ล้างรายการที่เสร็จสิ้นแล้วอัตโนมัติหลัง 4.5 วินาที
   useEffect(() => {

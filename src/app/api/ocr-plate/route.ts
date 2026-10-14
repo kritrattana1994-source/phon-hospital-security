@@ -2,9 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { createWorker, PSM } from "tesseract.js";
 import fs from "fs";
 import path from "path";
-import { fetchGeminiApiKeyFromCloud } from "@/lib/firebaseService";
-
-let cachedCloudApiKey: string = "";
 
 function getLocalTessdataDir(): string | null {
   const candidates = [
@@ -227,7 +224,7 @@ export async function POST(req: NextRequest) {
   let worker: any = null;
   try {
     const body = await req.json();
-    const { image, fullImage, geminiApiKey: clientKey } = body;
+    const { image, fullImage } = body;
 
     if (!image && !fullImage) {
       return NextResponse.json(
@@ -236,22 +233,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1. ดึง Gemini API Key (จาก client, env หรือ Firestore systemSettings อัตโนมัติ)
-    let apiKey = (
-      clientKey ||
-      process.env.GEMINI_API_KEY ||
-      cachedCloudApiKey ||
-      ""
-    ).trim();
-
-    if (!apiKey) {
-      try {
-        apiKey = await fetchGeminiApiKeyFromCloud();
-        if (apiKey) cachedCloudApiKey = apiKey;
-      } catch (cloudErr) {
-        console.warn("Could not fetch gemini key from cloud:", cloudErr);
-      }
-    }
+    // 1. ดึง Gemini API Key จากตัวแปรสภาพแวดล้อมฝั่งเซิร์ฟเวอร์เท่านั้น (GEMINI_API_KEY)
+    const apiKey = (process.env.GEMINI_API_KEY || "").trim();
 
     if (apiKey) {
       // 1.1 วิเคราะห์จากภาพเป้าหมายหลัก (โซนตัดกรอบเล็งเป้า)

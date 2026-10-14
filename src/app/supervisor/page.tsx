@@ -346,8 +346,6 @@ function SupervisorDashboard({ onLogout }: { onLogout: () => void }) {
     deleteBuilding,
     googleDriveWebhookUrl,
     setGoogleDriveWebhookUrl,
-    geminiApiKey,
-    setGeminiApiKey,
     dailyAISummaries,
     addDailyAISummary,
     cleanDuplicatePatrolLogs,
@@ -416,7 +414,6 @@ function SupervisorDashboard({ onLogout }: { onLogout: () => void }) {
   const [copiedScript, setCopiedScript] = useState(false);
 
   // Google Gemini Vision OCR Test State
-  const [showGeminiKey, setShowGeminiKey] = useState(false);
 
   // 90-Day (3-Month) Archival State (นโยบายคงข้อมูลสด 3 เดือน)
   const [archiveCutoffDays, setArchiveCutoffDays] = useState<number>(90);
@@ -1567,7 +1564,6 @@ function SupervisorDashboard({ onLogout }: { onLogout: () => void }) {
           chronicOvernight: parkingAnalytics90d.chronicOvernight,
           abandonedVehicles: parkingAnalytics90d.abandonedVehicles,
           unregisteredStaffSuspects: parkingAnalytics90d.unregisteredStaffSuspects,
-          geminiApiKey,
         }),
       });
 
@@ -5092,40 +5088,25 @@ function SupervisorDashboard({ onLogout }: { onLogout: () => void }) {
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="block text-[11px] font-bold text-slate-700">
-                  รหัสเชื่อมต่อบริการ (Google Gemini API Key):
-                </label>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <div className="relative flex-1">
-                    <input
-                      type={showGeminiKey ? "text" : "password"}
-                      value={geminiApiKey || ""}
-                      onChange={(e) => setGeminiApiKey(e.target.value.trim())}
-                      placeholder="AQ... หรือ AIzaSy..."
-                      className="w-full p-2.5 pr-10 bg-white border border-slate-200 rounded-xl text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500 shadow-2xs"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowGeminiKey(!showGeminiKey)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
-                      title={showGeminiKey ? "ซ่อนรหัส" : "แสดงรหัส"}
-                    >
-                      {showGeminiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between text-[11px] text-slate-500 gap-1 pt-0.5">
-                  <span>* หากไม่ได้ระบุ หรือไม่มีเน็ต ระบบจะสลับไปใช้ Tesseract OCR (Local Engine) ในเครื่องอัตโนมัติ</span>
+              <div className="p-3.5 bg-sky-50 border border-sky-200 rounded-2xl text-xs text-slate-700 space-y-1.5">
+                <p className="font-bold text-slate-900">🔒 ตั้งค่ารหัสเชื่อมต่อ (API Key) ที่ฝั่งเซิร์ฟเวอร์</p>
+                <p>
+                  ระบบไม่รับรหัส Gemini API Key จากหน้านี้แล้ว เพื่อความปลอดภัย ให้ผู้ดูแลระบบตั้งค่าที่
+                  <strong> Vercel → Project → Settings → Environment Variables</strong> ชื่อ
+                  <code className="mx-1 px-1.5 py-0.5 bg-white border border-sky-200 rounded font-mono">GEMINI_API_KEY</code>
+                  แล้วกด Redeploy
+                </p>
+                <p className="text-[11px] text-slate-500">
+                  * หากไม่ได้ตั้งค่า หรือไม่มีเน็ต ระบบจะสลับไปใช้ Tesseract OCR (Local Engine) ในเครื่องอัตโนมัติ •{" "}
                   <a
                     href="https://aistudio.google.com/app/apikey"
                     target="_blank"
                     rel="noreferrer"
-                    className="text-sky-600 hover:underline font-semibold inline-flex items-center gap-1 shrink-0"
+                    className="text-sky-600 hover:underline font-semibold inline-flex items-center gap-1"
                   >
-                    <ExternalLink className="w-3 h-3" /> รับ API Key ฟรี (aistudio.google.com)
+                    <ExternalLink className="w-3 h-3" /> รับ API Key (aistudio.google.com)
                   </a>
-                </div>
+                </p>
               </div>
 
             </div>

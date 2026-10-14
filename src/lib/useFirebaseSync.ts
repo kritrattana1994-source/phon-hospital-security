@@ -10,7 +10,6 @@ import {
   deleteCheckpointFromCloud,
   saveIncidentToCloud, 
   saveGoogleDriveWebhookToCloud, 
-  saveGeminiApiKeyToCloud,
   saveGuardToCloud,
   deleteGuardFromCloud,
   saveAllGuardsToCloud
@@ -243,28 +242,6 @@ export function useFirebaseSync() {
       console.warn("Drive config sync notice:", err.message);
     });
 
-    // 11. Real-time Listener: Google Gemini 1.5 Flash Vision Config
-    const unsubGeminiConfig = onSnapshot(doc(db, "systemSettings", "gemini"), (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.data();
-        if (data && typeof data.apiKey === "string" && data.apiKey.trim()) {
-          useStore.setState({ geminiApiKey: data.apiKey.trim() });
-        } else {
-          const localKey = useStore.getState().geminiApiKey;
-          if (localKey && localKey.trim()) {
-            saveGeminiApiKeyToCloud(localKey.trim());
-          }
-        }
-      } else {
-        const localKey = useStore.getState().geminiApiKey;
-        if (localKey && localKey.trim()) {
-          saveGeminiApiKeyToCloud(localKey.trim());
-        }
-      }
-    }, (err) => {
-      console.warn("Gemini config sync notice:", err.message);
-    });
-
     // 12. Real-time Listener: Guards (ซิงค์รายชื่อและรหัส PIN ของ รปภ. ทุกเครื่องสดทันที)
     const unsubGuards = onSnapshot(collection(db, "guards"), (snapshot) => {
       setIsConnected(true);
@@ -302,7 +279,6 @@ export function useFirebaseSync() {
       unsubShiftReports();
       unsubDailyAI();
       unsubDriveConfig();
-      unsubGeminiConfig();
       unsubGuards();
     };
   }, []);
