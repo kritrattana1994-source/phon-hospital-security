@@ -1186,7 +1186,7 @@ function SupervisorDashboard({ onLogout }: { onLogout: () => void }) {
   };
 
   const handleResetRounds = () => {
-    if (confirm("ต้องการคืนค่ามาตรฐานรอบตรวจ รพ.พล (10 รอบ: กลางวันทุก 3 ชม., กลางคืนทุก 2 ชม.) ใช่หรือไม่?")) {
+    if (confirm("ต้องการคืนค่ามาตรฐานรอบตรวจ รพ.พล (12 รอบ: ทุก 2 ชม. ตลอด 24 ชม.) ใช่หรือไม่?")) {
       resetPatrolRoundsToDefault();
       setShowRoundsConfigModal(false);
     }
@@ -1718,7 +1718,7 @@ function SupervisorDashboard({ onLogout }: { onLogout: () => void }) {
         <div className="max-w-7xl mx-auto flex gap-2 overflow-x-auto py-2">
           {[
             { id: "overview", label: "ภาพรวม & KPI", icon: Award },
-            { id: "rounds", label: `⏰ รอบตรวจ & KPI (${(patrolRounds && patrolRounds.length) || 10} รอบ)`, icon: Clock },
+            { id: "rounds", label: `⏰ รอบตรวจ & KPI (${(patrolRounds && patrolRounds.length) || 12} รอบ)`, icon: Clock },
             { id: "checkpoints", label: `จัดการจุดตรวจ (${checkpoints.length})`, icon: CheckSquare },
             { id: "staff", label: `จัดการพนักงาน รปภ. (${onlyGuards.length})`, icon: Users },
             { id: "vehicles", label: `รถบุคลากร (${staffVehicles.length})`, icon: Car },
@@ -2061,7 +2061,7 @@ function SupervisorDashboard({ onLogout }: { onLogout: () => void }) {
                       เปรียบเทียบผลงานรายกะ (3 กะ รพ.พล)
                     </h3>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
-                      รอบตรวจ 10 รอบ
+                      รอบตรวจ 12 รอบ
                     </span>
                   </div>
                   <p className="text-xs text-slate-500 mt-0.5">
@@ -2257,7 +2257,7 @@ function SupervisorDashboard({ onLogout }: { onLogout: () => void }) {
                     รายงานสรุปการสแกนตรวจรถทุกคันใน รพ. (รายวัน & รายรอบตรวจ)
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    ตรวจสอบจำนวนรถที่สแกนตรวจในแต่ละรอบเวลา (10 รอบ) • แยกประเภทรถบุคลากร vs รถภายนอก
+                    ตรวจสอบจำนวนรถที่สแกนตรวจในแต่ละรอบเวลา (12 รอบ) • แยกประเภทรถบุคลากร vs รถภายนอก
                   </p>
                 </div>
 
@@ -2483,7 +2483,7 @@ function SupervisorDashboard({ onLogout }: { onLogout: () => void }) {
                       Hospital Patrol Schedule & KPIs
                     </span>
                     <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-0.5 rounded-full">
-                      10 รอบตรวจ / วัน
+                      12 รอบตรวจ / วัน
                     </span>
                   </div>
                   <h2 className="text-xl font-black mt-2 text-white flex items-center gap-2">
@@ -2491,7 +2491,7 @@ function SupervisorDashboard({ onLogout }: { onLogout: () => void }) {
                     ระบบบริหารจัดการรอบเดินตรวจ & KPI ประจำกะ (รพ.พล)
                   </h2>
                   <p className="text-xs text-sky-200/80 mt-1 max-w-3xl leading-relaxed">
-                    แบ่งช่วง 12 ชม./12 ชม. (กลางวัน 08:00 - 20:00 น. ทุก 3 ชม. • กลางคืน 20:00 - 08:00 น. ทุก 2 ชม.) สอดคล้อง 3 กะ รพ.พล • เกณฑ์เวลาตรวจเสร็จสิ้นใน 1 ชม. แรก • GPS Geofence 30 ม. • ถ่ายรูปยืนยันทุกจุด
+                    แบ่งช่วง 12 ชม./12 ชม. (กลางวัน 08:00 - 20:00 น. ทุก 2 ชม. • กลางคืน 20:00 - 08:00 น. ทุก 2 ชม.) สอดคล้อง 3 กะ รพ.พล • เกณฑ์เวลาตรวจเสร็จสิ้นใน 1 ชม. แรก • GPS Geofence 30 ม. • ถ่ายรูปยืนยันทุกจุด
                   </p>
                 </div>
 
@@ -2515,8 +2515,8 @@ function SupervisorDashboard({ onLogout }: { onLogout: () => void }) {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5 pt-4 border-t border-white/10 text-xs">
                 <div className="bg-white/5 rounded-2xl p-3 border border-white/10">
                   <span className="text-sky-300 text-[11px] block">☀️ กลางวัน (08:00 - 20:00)</span>
-                  <strong className="text-white text-base">ทุก 3 ชั่วโมง</strong>
-                  <span className="text-slate-400 text-[10px] block mt-0.5">4 รอบ (กะเช้า & กะบ่าย)</span>
+                  <strong className="text-white text-base">ทุก 2 ชั่วโมง</strong>
+                  <span className="text-slate-400 text-[10px] block mt-0.5">6 รอบ (กะเช้า & กะบ่าย)</span>
                 </div>
                 <div className="bg-white/5 rounded-2xl p-3 border border-white/10">
                   <span className="text-indigo-300 text-[11px] block">🌙 กลางคืน (20:00 - 08:00)</span>
@@ -2646,7 +2646,7 @@ function SupervisorDashboard({ onLogout }: { onLogout: () => void }) {
                 <div>
                   <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2">
                     <Clock className="w-5 h-5 text-sky-600" />
-                    ตารางมอนิเตอร์ 10 รอบตรวจประจำวัน (Daily Patrol Rounds)
+                    ตารางมอนิเตอร์ 12 รอบตรวจประจำวัน (Daily Patrol Rounds)
                   </h3>
                   <p className="text-xs text-slate-500">
                     แสดงสถานะการตรวจจริงแบบเรียลไทม์ ตรวจสอบการตรวจตรงเวลาภายใน 1 ชั่วโมงแรก
@@ -6979,7 +6979,7 @@ function SupervisorDashboard({ onLogout }: { onLogout: () => void }) {
                     กำหนดรอบการเดินตรวจและความถี่ (Patrol Rounds Config)
                   </h3>
                   <p className="text-xs text-slate-500">
-                    กำหนดช่วงเวลาตรวจและเส้นตาย 1 ชม. แรก (กลางวันทุก 3 ชม. / กลางคืนทุก 2 ชม.)
+                    กำหนดช่วงเวลาตรวจและเส้นตาย 1 ชม. แรก (ทุก 2 ชม. ตลอด 24 ชม.)
                   </p>
                 </div>
               </div>
@@ -6995,10 +6995,10 @@ function SupervisorDashboard({ onLogout }: { onLogout: () => void }) {
             <div className="flex-1 overflow-y-auto py-4 space-y-3">
               <div className="p-3 bg-sky-50 rounded-2xl border border-sky-100 text-xs text-sky-800 space-y-1">
                 <p className="font-bold flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-sky-600" /> นโยบาย 10 รอบตรวจ รพ.พล
+                  <CheckCircle2 className="w-4 h-4 text-sky-600" /> นโยบาย 12 รอบตรวจ รพ.พล
                 </p>
                 <p className="text-[11px] text-sky-700">
-                  • กลางวัน (08:00 - 20:00): ทุก 3 ชั่วโมง (4 รอบ: 08:00, 11:00, 14:00, 17:00)<br />
+                  • กลางวัน (08:00 - 20:00): ทุก 2 ชั่วโมง (6 รอบ: 08:00, 10:00, 12:00, 14:00, 16:00, 18:00)<br />
                   • กลางคืน (20:00 - 08:00): ทุก 2 ชั่วโมง (6 รอบ: 20:00, 22:00, 00:00, 02:00, 04:00, 06:00)<br />
                   • กฎ 1 ชม. แรก: ระบบจะบันทึกสถานะตรงเวลาเมื่อสแกนครบก่อนเวลา Deadline
                 </p>
@@ -7115,7 +7115,7 @@ function SupervisorDashboard({ onLogout }: { onLogout: () => void }) {
                 onClick={handleResetRounds}
                 className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center gap-2 active:scale-95 transition-all"
               >
-                <RefreshCw className="w-4 h-4 text-slate-500" /> คืนค่า 10 รอบ รพ.พล
+                <RefreshCw className="w-4 h-4 text-slate-500" /> คืนค่า 12 รอบ รพ.พล
               </button>
 
               <div className="flex items-center gap-2 w-full sm:w-auto justify-end">

@@ -8,7 +8,7 @@ export interface PatrolRound {
   deadlineTime: string;     // "09:00" (1 ชม. แรกตามกฎทอง)
   period: "day" | "night";  // "day" (12 ชม. 08:00-20:00) | "night" (12 ชม. 20:00-08:00)
   shift: "morning" | "afternoon" | "night"; // 3 กะ รพ.พล
-  frequencyHours: number;   // 3 หรือ 2
+  frequencyHours: number;   // ปัจจุบัน 2 ชม. ทุกรอบ (รองรับ 3 สำหรับค่าที่เคยบันทึกไว้)
   isActive: boolean;
 }
 
@@ -32,128 +32,30 @@ export interface ShiftReportLog {
 }
 
 /**
- * 10 รอบตรวจมาตรฐานของ รพ.พล:
- * - กลางวัน 08:00 - 20:00 น. ตรวจทุก 3 ชั่วโมง (4 รอบ)
- * - กลางคืน 20:00 - 08:00 น. ตรวจทุก 2 ชั่วโมง (6 รอบ)
+ * 12 รอบตรวจมาตรฐานของ รพ.พล: ตรวจทุก 2 ชั่วโมงตลอด 24 ชม.
+ * - กลางวัน 08:00 - 20:00 น. (6 รอบ) / กลางคืน 20:00 - 08:00 น. (6 รอบ)
  * - กฎทอง 1 ชม. แรก: ต้องเดินตรวจให้เสร็จภายใน 1 ชม. หลังเวลาเริ่มรอบ
  */
-export const defaultPatrolRounds: PatrolRound[] = [
-  // ☀️ กะเช้า (08:00 - 16:00 น.)
-  {
-    id: "R01",
-    name: "รอบที่ 1 (08:00 - 11:00)",
-    startTime: "08:00",
-    endTime: "11:00",
-    deadlineTime: "09:00",
-    period: "day",
-    shift: "morning",
-    frequencyHours: 3,
-    isActive: true,
-  },
-  {
-    id: "R02",
-    name: "รอบที่ 2 (11:00 - 14:00)",
-    startTime: "11:00",
-    endTime: "14:00",
-    deadlineTime: "12:00",
-    period: "day",
-    shift: "morning",
-    frequencyHours: 3,
-    isActive: true,
-  },
-  {
-    id: "R03",
-    name: "รอบที่ 3 (14:00 - 17:00)",
-    startTime: "14:00",
-    endTime: "17:00",
-    deadlineTime: "15:00",
-    period: "day",
-    shift: "morning",
-    frequencyHours: 3,
-    isActive: true,
-  },
+const roundStarts = [8, 10, 12, 14, 16, 18, 20, 22, 0, 2, 4, 6];
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const hhmm = (h: number) => `${pad2(h % 24)}:00`;
+const hhmmEnd = (h: number) => (h === 0 ? "24:00" : hhmm(h));
 
-  // ⛅ กะบ่าย (16:00 - 24:00 น.)
-  {
-    id: "R04",
-    name: "รอบที่ 4 (17:00 - 20:00)",
-    startTime: "17:00",
-    endTime: "20:00",
-    deadlineTime: "18:00",
-    period: "day",
-    shift: "afternoon",
-    frequencyHours: 3,
-    isActive: true,
-  },
-  {
-    id: "R05",
-    name: "รอบที่ 5 (20:00 - 22:00)",
-    startTime: "20:00",
-    endTime: "22:00",
-    deadlineTime: "21:00",
-    period: "night",
-    shift: "afternoon",
+export const defaultPatrolRounds: PatrolRound[] = roundStarts.map((h, i) => {
+  const start = hhmm(h);
+  const end = hhmmEnd(h + 2);
+  return {
+    id: `R${pad2(i + 1)}`,
+    name: `รอบที่ ${i + 1} (${start} - ${end})`,
+    startTime: start,
+    endTime: end,
+    deadlineTime: hhmm(h + 1),
+    period: h >= 8 && h < 20 ? "day" : "night",
+    shift: h >= 8 && h < 16 ? "morning" : h >= 16 ? "afternoon" : "night",
     frequencyHours: 2,
     isActive: true,
-  },
-  {
-    id: "R06",
-    name: "รอบที่ 6 (22:00 - 24:00)",
-    startTime: "22:00",
-    endTime: "24:00",
-    deadlineTime: "23:00",
-    period: "night",
-    shift: "afternoon",
-    frequencyHours: 2,
-    isActive: true,
-  },
-
-  // 🌙 กะดึก (24:00 - 08:00 น.)
-  {
-    id: "R07",
-    name: "รอบที่ 7 (00:00 - 02:00)",
-    startTime: "00:00",
-    endTime: "02:00",
-    deadlineTime: "01:00",
-    period: "night",
-    shift: "night",
-    frequencyHours: 2,
-    isActive: true,
-  },
-  {
-    id: "R08",
-    name: "รอบที่ 8 (02:00 - 04:00)",
-    startTime: "02:00",
-    endTime: "04:00",
-    deadlineTime: "03:00",
-    period: "night",
-    shift: "night",
-    frequencyHours: 2,
-    isActive: true,
-  },
-  {
-    id: "R09",
-    name: "รอบที่ 9 (04:00 - 06:00)",
-    startTime: "04:00",
-    endTime: "06:00",
-    deadlineTime: "05:00",
-    period: "night",
-    shift: "night",
-    frequencyHours: 2,
-    isActive: true,
-  },
-  {
-    id: "R10",
-    name: "รอบที่ 10 (06:00 - 08:00)",
-    startTime: "06:00",
-    endTime: "08:00",
-    deadlineTime: "07:00",
-    period: "night",
-    shift: "night",
-    frequencyHours: 2,
-    isActive: true,
-  },
-];
+  };
+});
 
 export const hospitalShifts = [
   { id: "morning" as const, name: "กะเช้า", timeRange: "08:00 - 16:00 น.", handoverTime: "16:00" },

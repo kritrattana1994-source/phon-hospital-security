@@ -1068,6 +1068,13 @@ export const useStore = create<AppState>()(
               useStore.setState({ incidents: cleanIncidents });
             }
           }
+          // Migrate untouched legacy 10-round schedule (3h day rounds) to the 12-round 2h schedule
+          if (
+            Array.isArray(state.patrolRounds) &&
+            state.patrolRounds.some((r) => r.id === "R01" && r.endTime === "11:00")
+          ) {
+            useStore.setState({ patrolRounds: defaultPatrolRounds });
+          }
           // Ensure supervisor requires PIN 9999 every session
           useStore.setState({ supervisorUser: null });
         }
