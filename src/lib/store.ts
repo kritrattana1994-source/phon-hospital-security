@@ -935,6 +935,20 @@ export const useStore = create<AppState>()(
     }),
     {
       name: 'smart-hospital-security-v5',
+      version: 1,
+      // v1: เปลี่ยนตารางรอบตรวจจาก 10 รอบ (กลางวันทุก 3 ชม.) เป็น 12 รอบ ทุก 2 ชม.
+      // ใช้ migrate แทน onRehydrateStorage เพราะ useStore ยังไม่ถูกสร้างตอน hydrate แบบ sync
+      migrate: (persistedState: unknown, version: number) => {
+        const state = (persistedState || {}) as { patrolRounds?: PatrolRound[] };
+        if (
+          version < 1 &&
+          Array.isArray(state.patrolRounds) &&
+          state.patrolRounds.some((r) => r.id === 'R01' && r.endTime === '11:00')
+        ) {
+          state.patrolRounds = defaultPatrolRounds;
+        }
+        return state as never;
+      },
       storage: createJSONStorage(() => ({
         getItem: (name: string): string | null => {
           if (typeof window === 'undefined') return null;
@@ -1058,13 +1072,6 @@ export const useStore = create<AppState>()(
             if (cleanIncidents.length !== state.incidents.length) {
               useStore.setState({ incidents: cleanIncidents });
             }
-          }
-          // Migrate untouched legacy 10-round schedule (3h day rounds) to the 12-round 2h schedule
-          if (
-            Array.isArray(state.patrolRounds) &&
-            state.patrolRounds.some((r) => r.id === "R01" && r.endTime === "11:00")
-          ) {
-            useStore.setState({ patrolRounds: defaultPatrolRounds });
           }
           // Ensure supervisor requires PIN 9999 every session
           useStore.setState({ supervisorUser: null });
