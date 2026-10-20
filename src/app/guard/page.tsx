@@ -392,7 +392,7 @@ export default function GuardPage() {
               <span className="text-[11px] font-bold tracking-wider uppercase text-slate-400">
                 งานตรวจการณ์ลาดตระเวน
               </span>
-              <span className="text-[11px] font-semibold text-sky-600">7 จุดตรวจ</span>
+              <span className="text-[11px] font-semibold text-sky-600">{checkpoints.length} จุดตรวจ</span>
             </div>
 
             {/* Card 1: เดินตรวจ 7 จุด */}
@@ -434,7 +434,7 @@ export default function GuardPage() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="font-bold text-slate-900 text-[15px]">
-                        แผนผังเส้นทางลาดตระเวน 7 จุด
+                        แผนผังเส้นทางลาดตระเวน {checkpoints.length} จุด
                       </h3>
                       <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-bold">
                         แผนที่ดาวเทียม

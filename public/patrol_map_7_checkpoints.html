@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>แผนที่จุดตรวจความปลอดภัย 7 จุด (Google Maps Satellite Live) - โรงพยาบาลพล</title>
+  <title>แผนที่จุดตรวจความปลอดภัย 11 จุด (Google Maps Satellite Live) - โรงพยาบาลพล</title>
   <!-- Google Fonts: Prompt & Sarabun -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1054,7 +1054,7 @@
       <img src="./phon_hospital_logo.png" alt="Phon Hospital Logo" />
       <div class="brand-quick-text">
         <h2>โรงพยาบาลพล • ฝ่ายบริหารจัดการความปลอดภัย</h2>
-        <p>Google Maps Satellite Security Patrol Map • ระบบตรวจการณ์ 7 จุดตรวจ</p>
+        <p>Google Maps Satellite Security Patrol Map • ระบบตรวจการณ์ 11 จุดตรวจ</p>
       </div>
     </div>
     <div class="btn-group">
@@ -1069,7 +1069,7 @@
       <div class="header-left">
         <img class="hospital-logo-main" src="./phon_hospital_logo.png" alt="โรงพยาบาลพล" />
         <div class="header-titles">
-          <h1>แผนที่ภาพถ่ายดาวเทียม จุดตรวจความปลอดภัย 7 จุด</h1>
+          <h1>แผนที่ภาพถ่ายดาวเทียม จุดตรวจความปลอดภัย 11 จุด</h1>
           <div class="subtitle">
             <span>โรงพยาบาลพล</span>
             <span>•</span>
@@ -1093,10 +1093,10 @@
       <div class="kpi-card c-green">
         <div class="kpi-header">
           <span class="kpi-icon">📍</span>
-          <span class="kpi-badge">7 CHECKPOINTS</span>
+          <span class="kpi-badge">11 CHECKPOINTS</span>
         </div>
-        <div class="kpi-val">7 จุดตรวจ</div>
-        <div class="kpi-desc">ครอบคลุมทางเข้า, โถง OPD, ER, คลังยา, ตึกผู้ป่วยใน, สถานี O2, ยานพาหนะ</div>
+        <div class="kpi-val">11 จุดตรวจ</div>
+        <div class="kpi-desc">ครอบคลุมทางเข้า, โถง OPD, ER, คลังยา, ตึกผู้ป่วยใน, สถานี O2, ยานพาหนะ, ดรีมเวิลด์, ห้องคลอด, OPD ใหม่</div>
       </div>
 
       <div class="kpi-card c-blue">
@@ -1140,7 +1140,7 @@
       <!-- Checkpoint Selector & Information Toolbar -->
       <div class="pin-editor-bar">
         <div class="editor-header">
-          <span class="editor-title">📍 เลือกจุดตรวจเพื่อดูรูปถ่ายสถานที่จริง (01 - 07):</span>
+          <span class="editor-title">📍 เลือกจุดตรวจเพื่อดูรูปถ่ายสถานที่จริง (01 - 11):</span>
         </div>
 
         <div class="editor-hint" id="moveHint">
@@ -1157,6 +1157,10 @@
             <button type="button" class="cp-pill" data-cp="05" onclick="selectCheckpoint('05')"><span class="dot" style="background:#d97706"></span>05 หน้าห้องเครื่องสำรองไฟฟ้า (OPD ใหม่)</button>
             <button type="button" class="cp-pill" data-cp="06" onclick="selectCheckpoint('06')"><span class="dot" style="background:#0891b2"></span>06 หน้าห้อง งานยานพาหนะ</button>
             <button type="button" class="cp-pill" data-cp="07" onclick="selectCheckpoint('07')"><span class="dot" style="background:#4f46e5"></span>07 หน้าอาคารโอสถศาลา</button>
+            <button type="button" class="cp-pill" data-cp="08" onclick="selectCheckpoint('08')"><span class="dot" style="background:#be185d"></span>08 งานพยาบาลผู้ป่วยหลังคลอด (ดรีมเวิลด์)</button>
+            <button type="button" class="cp-pill" data-cp="09" onclick="selectCheckpoint('09')"><span class="dot" style="background:#0d9488"></span>09 งานพยาบาลผู้ป่วยตึกพิเศษชั้น2</button>
+            <button type="button" class="cp-pill" data-cp="10" onclick="selectCheckpoint('10')"><span class="dot" style="background:#c2410c"></span>10 ห้องผ่าตัดและห้องคลอด (OPD ใหม่)</button>
+            <button type="button" class="cp-pill" data-cp="11" onclick="selectCheckpoint('11')"><span class="dot" style="background:#1d4ed8"></span>11 อาคารผู้ป่วยนอก (หลังใหม่)</button>
           </div>
         </div>
 
@@ -1204,7 +1208,7 @@
       </div>
       <div class="photo-modal-nav">
         <button type="button" class="btn-modal-nav" onclick="navPhotoModal(-1)">◀ จุดก่อนหน้า</button>
-        <span id="modalCounter" class="modal-counter">จุด 2 จาก 7</span>
+        <span id="modalCounter" class="modal-counter">จุด 2 จาก 11</span>
         <button type="button" class="btn-modal-nav" onclick="navPhotoModal(1)">จุดถัดไป ▶</button>
       </div>
     </div>
@@ -1219,7 +1223,11 @@
       { num: '04', name: 'ตึกหญิง', building: 'ตึกหญิง', floor: 'ชั้น 1', lat: 15.8166671, lng: 102.608697, color: '#7c3aed' },
       { num: '05', name: 'หน้าห้องเครื่องสำรองไฟฟ้า', building: 'อาคาร OPD ใหม่', floor: 'ชั้น 1', lat: 15.8163985, lng: 102.6097491, color: '#d97706' },
       { num: '06', name: 'หน้าห้อง งานยานพาหนะ', building: 'อาคารงานยานพาหนะ', floor: 'ชั้น 1', lat: 15.8170281, lng: 102.6098412, color: '#0891b2' },
-      { num: '07', name: 'หน้าอาคารโอสถศาลา', building: 'หน้าอาคารโอสถศาลา', floor: 'ชั้น 1', lat: 15.8166813, lng: 102.6091408, color: '#4f46e5' }
+      { num: '07', name: 'หน้าอาคารโอสถศาลา', building: 'หน้าอาคารโอสถศาลา', floor: 'ชั้น 1', lat: 15.8166813, lng: 102.6091408, color: '#4f46e5' },
+      { num: '08', name: 'งานพยาบาลผู้ป่วยหลังคลอด', building: 'อาคารผู้ป่วยดรีมเวิลด์', floor: 'ชั้น 1', lat: 15.81601, lng: 102.60900, color: '#be185d' },
+      { num: '09', name: 'งานพยาบาลผู้ป่วยตึกพิเศษชั้น2', building: 'อาคารผู้ป่วยดรีมเวิลด์', floor: 'ชั้น 2', lat: 15.81600, lng: 102.60902, color: '#0d9488' },
+      { num: '10', name: 'ห้องผ่าตัดและห้องคลอด', building: 'อาคาร OPD ใหม่', floor: 'ชั้น 3', lat: 15.81625, lng: 102.60962, color: '#c2410c' },
+      { num: '11', name: 'อาคารผู้ป่วยนอก (หลังใหม่)', building: 'อาคาร OPD ใหม่', floor: 'ชั้น 1', lat: 15.81615, lng: 102.60954, color: '#1d4ed8' }
     ];
 
     let leafletMap = null;
@@ -1379,7 +1387,7 @@
 
     function updateRouteLine() {
       if (!leafletMap) return;
-      const order = ['01', '02', '03', '04', '05', '06', '07', '01'];
+      const order = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '01'];
       const latlngs = order.map(num => {
         if (markersMap[num]) return markersMap[num].getLatLng();
         const cp = realCheckpointsData.find(c => c.num === num);

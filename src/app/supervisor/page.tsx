@@ -3404,9 +3404,9 @@ function SupervisorDashboard({ onLogout }: { onLogout: () => void }) {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="px-4 py-2.5 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl flex items-center gap-2 active:scale-95 transition-all shadow-xs no-underline"
-                  title="เปิดแผนที่และอินโฟกราฟิกจุดตรวจทั้ง 7 จุด (A4 / Interactive Map)"
+                  title="เปิดแผนที่และอินโฟกราฟิกจุดตรวจทั้งหมด (A4 / Interactive Map)"
                 >
-                  <MapPin className="w-4 h-4" /> แผนที่อินโฟกราฟิก 7 จุดตรวจ
+                  <MapPin className="w-4 h-4" /> แผนที่อินโฟกราฟิก {checkpoints.length} จุดตรวจ
                 </a>
                 <button
                   onClick={() => setShowManageBuildingsModal(true)}
