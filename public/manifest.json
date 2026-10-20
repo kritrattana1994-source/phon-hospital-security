@@ -4,8 +4,8 @@
   "description": "ระบบบริหารจัดการ รปภ. และลาดตระเวนโรงพยาบาล",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#020617",
-  "theme_color": "#020617",
+  "background_color": "#eefaf2",
+  "theme_color": "#34c759",
   "icons": [
     {
       "src": "/icon.svg",

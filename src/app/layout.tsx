@@ -17,7 +17,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#0284c7",
+  themeColor: "#34c759",
 };
 
 import LineInAppBrowserNotice from "@/components/LineInAppBrowserNotice";
@@ -35,7 +35,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Sarabun:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,600&display=swap" rel="stylesheet" />
       </head>
-      <body className="antialiased bg-[#f0f6fa] text-slate-800 min-h-screen font-['Sarabun',sans-serif]">
+      <body className="antialiased text-slate-800 min-h-screen font-['Sarabun',sans-serif]">
         <FirebaseSyncProvider>
           <LineInAppBrowserNotice />
           {children}

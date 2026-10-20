@@ -1,8 +1,60 @@
 @import url('https://fonts.googleapis.com/css2?family=Sarabun:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,600&display=swap');
 @import "tailwindcss";
 
+/* ==========================================================
+   ธีม iOS Glass — เขียว / ขาว
+   ปรับสีหลัก (sky / blue / indigo) ให้เป็นโทนเขียว iOS ทั้งระบบ
+   โดยไม่ต้องแก้ class ในแต่ละหน้า (สีแดง/เหลืองเพื่อสถานะยังคงเดิม)
+   ========================================================== */
+@theme {
+  --color-sky-50: #f2fbf5;
+  --color-sky-100: #dff6e6;
+  --color-sky-200: #bcebcb;
+  --color-sky-300: #8bdba5;
+  --color-sky-400: #55c97c;
+  --color-sky-500: #34c759;
+  --color-sky-600: #249a46;
+  --color-sky-700: #1c7a39;
+  --color-sky-800: #195f30;
+  --color-sky-900: #154d29;
+  --color-sky-950: #072b16;
+
+  --color-blue-50: #f2fbf5;
+  --color-blue-100: #dff6e6;
+  --color-blue-200: #bcebcb;
+  --color-blue-300: #8bdba5;
+  --color-blue-400: #55c97c;
+  --color-blue-500: #30b455;
+  --color-blue-600: #22964a;
+  --color-blue-700: #1b7a3d;
+  --color-blue-800: #186034;
+  --color-blue-900: #144d2b;
+  --color-blue-950: #072b16;
+
+  --color-indigo-50: #effaf3;
+  --color-indigo-100: #d8f3e2;
+  --color-indigo-200: #b4e7c7;
+  --color-indigo-300: #84d6a4;
+  --color-indigo-400: #4fc07c;
+  --color-indigo-500: #2fa862;
+  --color-indigo-600: #1f8a4f;
+  --color-indigo-700: #1a6e42;
+  --color-indigo-800: #175937;
+  --color-indigo-900: #134a2f;
+  --color-indigo-950: #062a1a;
+}
+
 :root {
-  --background: #f0f6fa;
+  --glass-bg: rgba(255, 255, 255, 0.62);
+  --glass-bg-strong: rgba(255, 255, 255, 0.78);
+  --glass-border: rgba(255, 255, 255, 0.75);
+  --glass-shadow: 0 8px 32px rgba(21, 94, 52, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --glass-blur: blur(22px) saturate(180%);
+  --ios-green: #34c759;
+}
+
+:root {
+  --background: #eefaf2;
   --foreground: #0f172a;
   --font-sarabun: 'Sarabun', sans-serif;
 }
@@ -10,7 +62,100 @@
 body {
   color: var(--foreground);
   background-color: var(--background);
+  background-image:
+    radial-gradient(60rem 40rem at 10% -10%, rgba(52, 199, 89, 0.28), transparent 60%),
+    radial-gradient(50rem 36rem at 100% 0%, rgba(167, 243, 195, 0.55), transparent 60%),
+    radial-gradient(48rem 40rem at 50% 110%, rgba(52, 199, 89, 0.20), transparent 60%),
+    linear-gradient(180deg, #f7fdf9 0%, #ecf9f1 100%);
+  background-attachment: fixed;
   font-family: 'Sarabun', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
+}
+
+/* ---------- หน้าเพจ: ให้พื้นหลังไล่เฉดเขียวมองทะลุได้ ---------- */
+.bg-\[\#f0f6fa\] {
+  background-color: transparent;
+}
+
+/* ---------- การ์ด/แผงสีขาว -> กระจกฝ้า (Frosted glass) ---------- */
+.bg-white {
+  background-color: var(--glass-bg);
+  border-color: var(--glass-border);
+}
+.bg-white.rounded-2xl,
+.bg-white.rounded-3xl,
+.bg-white.rounded-xl,
+.bg-white.rounded-\[2rem\] {
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow);
+}
+.bg-white\/95,
+.bg-white\/90,
+.bg-white\/80 {
+  background-color: var(--glass-bg-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+
+/* ช่องกรอก/พื้นหลังเทาอ่อน -> กระจกโปร่งใส */
+.bg-slate-50 {
+  background-color: rgba(255, 255, 255, 0.5);
+}
+.bg-slate-100 {
+  background-color: rgba(236, 246, 240, 0.75);
+}
+input.bg-white, select.bg-white, textarea.bg-white,
+input.bg-slate-50, select.bg-slate-50, textarea.bg-slate-50 {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: inset 0 1px 2px rgba(21, 94, 52, 0.06);
+}
+
+/* แผงสีเข้ม -> กระจกเขียวเข้ม */
+.bg-slate-900,
+.bg-slate-950 {
+  background-color: rgba(11, 61, 38, 0.86);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+.bg-slate-800 {
+  background-color: rgba(18, 82, 52, 0.84);
+}
+.bg-slate-900\/60,
+.bg-slate-900\/85,
+.bg-slate-800\/80 {
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+
+/* ปุ่ม/ชิปไล่เฉดสี -> เขียว iOS แบบมันวาว */
+button[class*="bg-gradient-to"],
+a[class*="bg-gradient-to"] {
+  box-shadow: 0 6px 18px rgba(52, 199, 89, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+/* เส้นขอบ/วงแหวนโฟกัสแบบ iOS */
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--ios-green) !important;
+  box-shadow: 0 0 0 4px rgba(52, 199, 89, 0.22) !important;
+}
+
+/* แถบเลื่อนบางแบบ iOS */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(52, 199, 89, 0.45) transparent;
+}
+
+/* ตอนพิมพ์ (Print) ไม่ใช้กระจก */
+@media print {
+  body { background: #fff !important; }
+  .bg-white, .bg-white\/95, .bg-white\/90, .bg-white\/80 {
+    background-color: #fff !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    box-shadow: none !important;
+  }
 }
