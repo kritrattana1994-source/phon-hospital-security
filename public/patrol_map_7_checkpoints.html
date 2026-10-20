@@ -1469,6 +1469,14 @@
           if (e && e.originalEvent) {
             L.DomEvent.stopPropagation(e);
           }
+          // Ctrl + คลิกทับหมุด/ป้ายชื่อ: ย้ายหมุดที่กำลังเลือกไปตำแหน่งเมาส์ (ไม่เปลี่ยนจุดที่เลือก)
+          const isCtrl = e && e.originalEvent && (e.originalEvent.ctrlKey || e.originalEvent.metaKey);
+          if (isCtrl && activeCpNum && markersMap[activeCpNum]) {
+            const ll = leafletMap.mouseEventToLatLng(e.originalEvent);
+            markersMap[activeCpNum].setLatLng(ll);
+            saveVisualCoordinate(activeCpNum, ll.lat, ll.lng);
+            return;
+          }
           selectCheckpoint(cp.num);
         });
 
